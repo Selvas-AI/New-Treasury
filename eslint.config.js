@@ -20,6 +20,8 @@ export default tseslint.config(
     },
     rules: {
       '@typescript-eslint/no-unused-vars': 'warn',
+      // 비동기 data-fetching 훅 패턴 허용 (useEffect → void asyncFetch())
+      'react-hooks/set-state-in-effect': 'warn',
     },
   },
 )
