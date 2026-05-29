@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { fmtKRW, normDate, calcReturn, isBusinessDay } from './format'
+import { fmtKRW, normDate, calcReturn } from './format'
 
 describe('fmtKRW', () => {
   it('억 단위 포맷', () => {
