@@ -8,6 +8,7 @@ export default defineConfig({
     tailwindcss(),
   ],
   base: '/New-Treasury/',
+  server: { port: 5175 },
   test: {
     globals: true,
     environment: 'jsdom',
