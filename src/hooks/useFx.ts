@@ -1,7 +1,6 @@
 import { useState, useCallback } from 'react'
+import { fetchExchangeRates } from './useGas'
 import type { FxRate, FxCode } from '../types'
-
-const GAS_URL = import.meta.env.VITE_GAS_API_URL as string | undefined
 
 /** JPY는 100단위 고시 */
 const FX_UNITS: Record<FxCode, number> = {
@@ -21,16 +20,10 @@ export function useFx(): {
   const [error, setError] = useState<string | null>(null)
 
   const fetchRates = useCallback(async () => {
-    if (!GAS_URL) {
-      setError('VITE_GAS_API_URL이 설정되지 않았습니다.')
-      return
-    }
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`${GAS_URL}?action=getExchangeRates`)
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const json = (await res.json()) as Record<string, number>
+      const json = await fetchExchangeRates()
       const parsed: FxRate[] = (Object.keys(FX_UNITS) as FxCode[]).map(code => ({
         code,
         rate: json[code] ?? 0,
