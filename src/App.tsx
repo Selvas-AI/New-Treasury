@@ -10,7 +10,9 @@ import EquityPage from './pages/EquityPage'
 import HistoryPage from './pages/HistoryPage'
 import IssueHistoryPage from './pages/IssueHistoryPage'
 import FxPage from './pages/FxPage'
-import PlaceholderPage from './pages/PlaceholderPage'
+import MyCodePage from './pages/admin/MyCodePage'
+import UsersPage from './pages/admin/UsersPage'
+import DataPage from './pages/admin/DataPage'
 
 /**
  * 라우팅 구조
@@ -76,9 +78,9 @@ export default function App() {
             <Route path="/fx/:currency" element={<FxPage />} />
 
             {/* 관리 */}
-            <Route path="/admin/mycode"  element={<PlaceholderPage title="코드 변경"   step="Step 18" />} />
-            <Route path="/admin/users"   element={<PlaceholderPage title="사용자 관리" step="Step 18" />} />
-            <Route path="/admin/data"    element={<PlaceholderPage title="데이터 관리" step="Step 18" />} />
+            <Route path="/admin/mycode" element={<MyCodePage />} />
+            <Route path="/admin/users"  element={<UsersPage />} />
+            <Route path="/admin/data"   element={<DataPage />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
