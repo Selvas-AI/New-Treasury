@@ -1,33 +1,34 @@
 /**
- * GAS Web App API 헬퍼 (Code.gs v3 대응)
+ * GAS Web App API 헬퍼 (Code.gs v3 기준)
  * - 주가 조회: ticker=108860
  * - 채권 시세:  type=bond&isinCd=KR1030023165
  * - 환율 조회: type=fx
+ *
+ * ※ GAS Web App은 항상 HTTP 200 반환 — 에러는 응답 body의 success:false 로 판별
  */
 
 const GAS_URL = import.meta.env.VITE_GAS_API_URL as string | undefined
-const TIMEOUT_MS = 8000
+const TIMEOUT_MS = 10000
 
 export interface StockPriceResult {
   code: string
   price: number
-  date: string       // YYYY-MM-DD
-  change?: number    // 전일 대비 등락 (원)
-  changePct?: number // 등락률 (%)
+  date: string
+  change?: number
+  changePct?: number  // 등락률 (%)
 }
 
 export interface BondPriceResult {
   isin: string
-  price: number   // 기준가 (÷10 = 1좌당)
+  price: number
   date: string
 }
 
-// GAS 응답 raw 타입
 interface GasStockRaw {
   success: boolean
   price: number
   change: number | null
-  changeRate: number | null   // GAS는 changePct 대신 changeRate
+  changeRate: number | null
   date: string
   symbol: string
   error?: string
@@ -78,7 +79,7 @@ async function gasGet<T>(params: Record<string, string>): Promise<T> {
   }
 }
 
-/** 주가 단건 조회 — GAS: ticker=108860 */
+/** 주가 단건 조회 — GAS v3: ticker=108860 */
 export async function fetchStockPrice(code: string): Promise<StockPriceResult> {
   const raw = await gasGet<GasStockRaw>({ ticker: code })
   if (!raw.success) throw new Error(raw.error ?? '주가 조회 실패')
@@ -87,24 +88,20 @@ export async function fetchStockPrice(code: string): Promise<StockPriceResult> {
     price:     raw.price,
     date:      raw.date,
     change:    raw.change    ?? undefined,
-    changePct: raw.changeRate ?? undefined,  // GAS: changeRate → React: changePct
+    changePct: raw.changeRate ?? undefined,
   }
 }
 
-/** 채권 기준가 조회 — GAS: type=bond&isinCd=... */
+/** 채권 기준가 조회 — GAS v3: type=bond&isinCd=... */
 export async function fetchBondPrice(isin: string, basDt?: string): Promise<BondPriceResult> {
   const params: Record<string, string> = { type: 'bond', isinCd: isin }
   if (basDt) params.basDt = basDt
   const raw = await gasGet<GasBondRaw>(params)
   if (!raw.success) throw new Error(raw.error ?? '채권 시세 조회 실패')
-  return {
-    isin:  raw.isinCd ?? isin,
-    price: raw.price,
-    date:  raw.date,
-  }
+  return { isin: raw.isinCd ?? isin, price: raw.price, date: raw.date }
 }
 
-/** 환율 조회 — GAS: type=fx / 응답: { success, rates: { USD, EUR, ... } } */
+/** 환율 조회 — GAS v3: type=fx → { success, rates: { USD, EUR, ... } } */
 export async function fetchExchangeRates(): Promise<Record<string, number>> {
   const raw = await gasGet<GasFxRaw>({ type: 'fx' })
   if (!raw.success) throw new Error(raw.error ?? '환율 조회 실패')

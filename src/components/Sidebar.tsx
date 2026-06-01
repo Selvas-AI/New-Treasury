@@ -41,8 +41,11 @@ export default function Sidebar({ collapsed, onCollapse, onNavClick }: Props) {
   const { openCount } = useIssueCount()
   const fx = useFx()
 
-  // 마운트 시 환율 자동 로드
-  useEffect(() => { void fx.fetchRates() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  // 마운트 시 환율 자동 로드 — 주가 3건 GAS 요청 완료 후 호출되도록 3초 지연
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void fx.fetchRates() }, 3000)
+    return () => window.clearTimeout(timer)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const w = collapsed ? 'w-14' : 'w-56'
 
@@ -123,33 +126,18 @@ export default function Sidebar({ collapsed, onCollapse, onNavClick }: Props) {
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs text-gray-500 uppercase tracking-wider">실시간 환율</span>
               {fx.loading ? (
-                <span className="text-xs text-gray-600 animate-pulse">조회 중</span>
+                <span className="text-xs text-gray-600 animate-pulse">조회 중…</span>
               ) : (
                 <button
                   onClick={() => void fx.fetchRates()}
                   className="text-xs text-gray-600 hover:text-gray-400 transition-colors"
                   title="환율 새로고침"
-                >
-                  ↺
-                </button>
+                >↺</button>
               )}
             </div>
 
-            {fx.error ? (
-              /* GAS 미연결 시 스켈레톤 */
-              <div className="space-y-1.5">
-                {FX_CODES.map(code => (
-                  <div key={code} className="flex justify-between items-center">
-                    <span className="text-xs text-gray-600">{code}</span>
-                    <div className="h-2.5 w-16 bg-gray-800 rounded animate-pulse" />
-                  </div>
-                ))}
-                <p className="text-xs text-gray-700 mt-1 truncate" title={fx.error}>
-                  ⚠️ GAS 미연결
-                </p>
-              </div>
-            ) : fx.rates.length === 0 ? (
-              /* 로딩 중 스켈레톤 */
+            {(fx.loading && fx.rates.length === 0) ? (
+              /* 초기 로딩 스켈레톤 */
               <div className="space-y-1.5">
                 {FX_CODES.map(code => (
                   <div key={code} className="flex justify-between items-center">
@@ -158,23 +146,41 @@ export default function Sidebar({ collapsed, onCollapse, onNavClick }: Props) {
                   </div>
                 ))}
               </div>
-            ) : (
+            ) : fx.rates.length > 0 ? (
               /* 환율 표시 */
               <div className="space-y-1">
                 {FX_CODES.map(code => {
-                  const rate = fx.rates.find(r => r.code === code)
+                  const r = fx.rates.find(r => r.code === code)
+                  const label = code === 'JPY' ? '100JPY' : code
+                  const display = r?.rate
+                    ? `${(code === 'JPY' ? r.rate * 100 : r.rate).toLocaleString('ko-KR', { maximumFractionDigits: 2 })}원`
+                    : '—'
                   return (
                     <div key={code} className="flex justify-between items-center">
-                      <span className="text-xs text-gray-500">{code}</span>
-                      <span className="text-xs font-medium text-gray-300 tabular-nums">
-                        {rate?.rate
-                          ? `${rate.rate.toLocaleString()}원`
-                          : '—'
-                        }
-                      </span>
+                      <span className="text-xs text-gray-500">{label}</span>
+                      <span className="text-xs font-medium text-gray-300 tabular-nums">{display}</span>
                     </div>
                   )
                 })}
+                {fx.error && (
+                  <p className="text-xs text-yellow-700 mt-1">⚠ 일부 미조회</p>
+                )}
+              </div>
+            ) : (
+              /* 에러 (rates 없음) */
+              <div className="space-y-1.5">
+                {FX_CODES.map(code => (
+                  <div key={code} className="flex justify-between items-center">
+                    <span className="text-xs text-gray-600">{code}</span>
+                    <span className="text-xs text-gray-700">—</span>
+                  </div>
+                ))}
+                <button
+                  onClick={() => void fx.fetchRates()}
+                  className="text-xs text-gray-600 hover:text-gray-400 mt-1 w-full text-left"
+                >
+                  ↺ 재시도
+                </button>
               </div>
             )}
           </div>
