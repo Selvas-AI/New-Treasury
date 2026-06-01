@@ -13,6 +13,9 @@ interface EquityWithReturn extends EquityRecord {
 interface Props {
   equities: EquityWithReturn[]
   historyOf: (name: string) => EquityRecord[]
+  activeKey?: string | null
+  onHover?: (key: string | null) => void
+  onFocus?: (key: string | null) => void
 }
 
 type Period = 14 | 30 | 90
@@ -22,7 +25,7 @@ const PERIODS: { label: string; value: Period }[] = [
   { label: '90일', value: 90 },
 ]
 
-export default function EquityCard({ equities, historyOf }: Props) {
+export default function EquityCard({ equities, historyOf, activeKey, onHover, onFocus }: Props) {
   const [filter, setFilter] = useState<string>('all')
   const [chartPeriod, setChartPeriod] = useState<Period>(30)
 
@@ -67,12 +70,20 @@ export default function EquityCard({ equities, historyOf }: Props) {
         </div>
       </div>
 
-      {/* 종목 목록 */}
+      {/* 종목 목록 — 고정 높이 + 내부 스크롤 */}
       {displayed.length > 0 && (
-        <div className="space-y-2 mb-3">
-          {displayed.map(eq => (
+        <div className="space-y-1 mb-3 max-h-36 overflow-y-auto pr-0.5">
+          {displayed.map(eq => {
+            const eqKey = `equity_${eq.name}`
+            const isActive = activeKey === eqKey
+            return (
             <div key={eq.name}
-              className="flex items-center justify-between py-1.5 border-b border-gray-50 last:border-0">
+              onMouseEnter={() => onHover?.(eqKey)}
+              onMouseLeave={() => onHover?.(null)}
+              onClick={() => onFocus?.(isActive ? null : eqKey)}
+              className={`flex items-center justify-between py-1.5 border-b border-gray-50 last:border-0 rounded px-1 cursor-pointer transition-colors ${
+                isActive ? 'bg-amber-50 border-amber-200' : 'hover:bg-gray-50'
+              }`}>
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5">
                   <span className="text-sm font-medium text-gray-800 truncate">{eq.name}</span>
@@ -91,7 +102,7 @@ export default function EquityCard({ equities, historyOf }: Props) {
                 )}
               </div>
             </div>
-          ))}
+          )})}
         </div>
       )}
 

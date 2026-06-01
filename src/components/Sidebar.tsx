@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
+import { useIssueCount } from '../contexts/issueCount'
 
 interface NavItem {
   to: string
@@ -32,6 +33,7 @@ interface Props {
 
 export default function Sidebar({ collapsed, onCollapse, onNavClick }: Props) {
   const { user } = useAuth()
+  const { openCount } = useIssueCount()
   const w = collapsed ? 'w-14' : 'w-56'
 
   function linkClass({ isActive }: { isActive: boolean }) {
@@ -71,7 +73,13 @@ export default function Sidebar({ collapsed, onCollapse, onNavClick }: Props) {
             title={collapsed ? item.label : undefined}
           >
             <span className="w-5 shrink-0 text-center text-base leading-none">{item.icon}</span>
-            {!collapsed && <span className="truncate">{item.label}</span>}
+            {!collapsed && <span className="flex-1 truncate">{item.label}</span>}
+            {/* 이슈 이력 메뉴에 미조치 카운트 배지 */}
+            {item.to === '/issue-history' && openCount > 0 && (
+              <span className={`shrink-0 text-xs font-bold px-1.5 py-0.5 rounded-full bg-red-500 text-white ${collapsed ? 'ml-0' : 'ml-auto'}`}>
+                {openCount}
+              </span>
+            )}
           </NavLink>
         ))}
 

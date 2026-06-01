@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import AuthProvider from './contexts/AuthContext'
+import IssueCountProvider from './contexts/IssueCountProvider'
 import Layout from './components/Layout'
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
@@ -29,6 +30,7 @@ import DataPage from './pages/admin/DataPage'
 export default function App() {
   return (
     <AuthProvider>
+      <IssueCountProvider>
       <BrowserRouter basename="/New-Treasury">
         <Routes>
           <Route path="/login" element={<LoginPage />} />
@@ -86,6 +88,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </BrowserRouter>
+      </IssueCountProvider>
     </AuthProvider>
   )
 }
