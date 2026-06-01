@@ -19,7 +19,6 @@ export default function DashboardPage() {
   const { setOpenCount } = useIssueCount()
   const db = useDashboard()
 
-  // ─── 크로스 하이라이트 상태 ─────────────────────────────
   const [hoverKey, setHoverKey] = useState<string | null>(null)
   const [fixedKey, setFixedKey] = useState<string | null>(null)
   const activeKey = fixedKey ?? hoverKey
@@ -27,18 +26,15 @@ export default function DashboardPage() {
   const handleHover = useCallback((key: string | null) => setHoverKey(key), [])
   const handleFocus = useCallback((key: string | null) => setFixedKey(key), [])
 
-  // 이슈 오픈 카운트 → 사이드바 배지 업데이트
   useEffect(() => {
     setOpenCount(db.detectedIssues.filter(i => i.status !== 'done').length)
   }, [db.detectedIssues, setOpenCount])
 
-  // URL 파라미터 법인 전환
   useEffect(() => {
     if (!company || user?.role === 'company') return
     if (VALID_COMPANIES.includes(company as Company)) setCurrentCompany(company as Company)
   }, [company, user?.role, setCurrentCompany])
 
-  // 이슈 상태 변경
   async function handleStatusChange(_key: string, _id: string, status: IssueStatus) {
     const issue = db.detectedIssues.find(i => i.key === _key)
     if (!issue || !currentCompany || !user) return
@@ -54,7 +50,6 @@ export default function DashboardPage() {
     })
   }
 
-  // 운전자금 패널 하이라이트
   const isOperatingActive = activeKey === 'input_daily'
 
   if (db.loading) {
@@ -82,55 +77,67 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* KPI 카드 행 */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <KpiCard label="가용자금 합계" value={db.kpi.availableCash} color="blue"
-          sub={`운전 ${fmtKRW(db.kpi.operatingCash)} + 가용운용 ${fmtKRW(db.kpi.investCash)}`} />
-        <KpiCard label="순현금 포지션" value={db.kpi.netCashPosition}
-          color={db.kpi.netCashPosition >= 0 ? 'green' : 'red'}
-          sub={`가용 ${fmtKRW(db.kpi.availableCash)} − 차입 ${fmtKRW(db.kpi.totalLoan)}`} />
-        <KpiCard label="불가용 자산" value={db.kpi.unavailableAssets} color="gray" sub="매각·비상장" />
-      </div>
+      {/* ── 메인 레이아웃: 좌 8fr / 우 3fr ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-[8fr_3fr] gap-4 items-start">
 
-      {/* 메인 2열 레이아웃 */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* ════ 좌측 (8fr) ════ */}
+        <div className="space-y-4 min-w-0">
 
-        {/* ── 왼쪽 2/3 ── */}
-        <div className="lg:col-span-2 space-y-4">
+          {/* KPI 3행: 3fr / 3fr / 2fr */}
+          <div className="grid gap-3" style={{ gridTemplateColumns: '3fr 3fr 2fr' }}>
+            <KpiCard
+              label="가용자금 합계"
+              value={db.kpi.availableCash}
+              color="blue"
+              sub={`운전 ${fmtKRW(db.kpi.operatingCash)} + 가용운용 ${fmtKRW(db.kpi.investCash)}`}
+            />
+            <KpiCard
+              label="순현금 포지션"
+              value={db.kpi.netCashPosition}
+              color={db.kpi.netCashPosition >= 0 ? 'green' : 'red'}
+              sub={`가용 ${fmtKRW(db.kpi.availableCash)} − 차입 ${fmtKRW(db.kpi.totalLoan)}`}
+            />
+            <KpiCard
+              label="불가용 자산"
+              value={db.kpi.unavailableAssets}
+              color="gray"
+              sub="매각·비상장"
+            />
+          </div>
 
-          {/* 자금흐름 + 이슈 */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <WaterfallCard kpi={db.kpi} />
-            <IssueCard
-              issues={db.detectedIssues}
+          {/* 자금 흐름 */}
+          <WaterfallCard kpi={db.kpi} />
+
+          {/* 하단: 현금흐름 추이 + 지분/장기투자 나란히 */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+            <CashflowChart
+              dailyRecords={db.allDailyData}
+              investments={db.allInvestData}
+              loans={db.loans}
+            />
+            <EquityCard
+              equities={db.equityReturns}
+              historyOf={db.equityHistoryOf}
               activeKey={activeKey}
-              onStatusChange={handleStatusChange}
               onHover={handleHover}
               onFocus={handleFocus}
             />
           </div>
+        </div>
 
-          {/* 현금흐름 추이 */}
-          <CashflowChart
-            dailyRecords={db.allDailyData}
-            investments={db.allInvestData}
-            loans={db.loans}
-          />
+        {/* ════ 우측 (3fr) ════ */}
+        <div className="space-y-4 min-w-0">
 
-          {/* 지분/장기투자 */}
-          <EquityCard
-            equities={db.equityReturns}
-            historyOf={db.equityHistoryOf}
+          {/* 이슈 확인 */}
+          <IssueCard
+            issues={db.detectedIssues}
             activeKey={activeKey}
+            onStatusChange={handleStatusChange}
             onHover={handleHover}
             onFocus={handleFocus}
           />
-        </div>
 
-        {/* ── 오른쪽 1/3 상세 패널 ── */}
-        <div className="space-y-4">
-
-          {/* 운전자금 상세 — input_daily 이슈와 연결 */}
+          {/* 운전자금 상세 */}
           {db.latestDaily && (
             <div
               onMouseEnter={() => handleHover('input_daily')}
@@ -149,8 +156,7 @@ export default function DashboardPage() {
                 </h3>
                 <span className="text-xs text-gray-400">{db.latestDaily.writer} 입력</span>
               </div>
-              {/* 고정 높이 + 내부 스크롤 */}
-              <div className="space-y-1.5 max-h-40 overflow-y-auto">
+              <div className="space-y-1.5">
                 {[
                   { label: '보통예금 / CMA', value: db.latestDaily.krw_demand },
                   { label: '국책자금',        value: db.latestDaily.krw_govt  },
@@ -170,13 +176,13 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* 운용자금 상세 — 고정 높이 */}
+          {/* 운용자금 상세 */}
           <div className="bg-white rounded-xl shadow p-4">
             <h3 className="text-xs font-semibold text-gray-600 mb-3">운용자금 상세</h3>
             {db.latestInvests.filter(i => i.product !== '국채').length === 0 ? (
               <p className="text-xs text-gray-400 text-center py-2">없음</p>
             ) : (
-              <div className="space-y-1.5 max-h-40 overflow-y-auto pr-0.5">
+              <div className="space-y-1.5">
                 {db.latestInvests.filter(i => i.product !== '국채').map(inv => (
                   <div key={inv.id} className="flex justify-between text-xs">
                     <span className="text-gray-500 truncate mr-2">{inv.bank}</span>
@@ -187,20 +193,18 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {/* 차입금 상세 — loan_* 이슈와 연결 + 고정 높이 */}
+          {/* 차입금 상세 */}
           <div className="bg-white rounded-xl shadow p-4">
             <h3 className="text-xs font-semibold text-gray-600 mb-3">차입금 상세</h3>
             {db.loans.filter(l => l.active).length === 0 ? (
               <p className="text-xs text-gray-400 text-center py-2">없음</p>
             ) : (
-              <div className="space-y-2 max-h-52 overflow-y-auto pr-0.5">
+              <div className="space-y-2">
                 {db.loans.filter(l => l.active).map(loan => {
                   const dday     = calcDday(loan.maturity)
                   const loanKey  = `loan_${loan.id}`
                   const isActive = activeKey === loanKey
-                  // 연결된 이슈 수
                   const linkedIssues = db.detectedIssues.filter(i => i.key === loanKey)
-
                   return (
                     <div
                       key={loan.id}
@@ -208,15 +212,12 @@ export default function DashboardPage() {
                       onMouseLeave={() => handleHover(null)}
                       onClick={e => { e.stopPropagation(); handleFocus(isActive ? null : loanKey) }}
                       className={`text-xs p-2 rounded-lg cursor-pointer transition-all ${
-                        isActive
-                          ? 'bg-blue-50 ring-1 ring-blue-300'
-                          : 'hover:bg-gray-50'
+                        isActive ? 'bg-blue-50 ring-1 ring-blue-300' : 'hover:bg-gray-50'
                       }`}
                     >
                       <div className="flex justify-between">
                         <span className="text-gray-600 font-medium">{loan.lender}</span>
                         <div className="flex items-center gap-1.5">
-                          {/* hover 시 연결 이슈 배지 */}
                           {isActive && linkedIssues.length > 0 && (
                             <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">
                               ⚠️ 이슈 {linkedIssues.length}건

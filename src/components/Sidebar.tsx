@@ -1,6 +1,9 @@
+import { useEffect } from 'react'
 import { NavLink } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useIssueCount } from '../contexts/issueCount'
+import { useFx } from '../hooks/useFx'
+import type { FxCode } from '../types'
 
 interface NavItem {
   to: string
@@ -25,6 +28,8 @@ const ADMIN_ITEMS: NavItem[] = [
   { to: '/admin/data',    label: '데이터 관리', icon: '🗄️' },
 ]
 
+const FX_CODES: FxCode[] = ['USD', 'EUR', 'JPY', 'GBP', 'CNY']
+
 interface Props {
   collapsed: boolean
   onCollapse: () => void
@@ -34,6 +39,11 @@ interface Props {
 export default function Sidebar({ collapsed, onCollapse, onNavClick }: Props) {
   const { user } = useAuth()
   const { openCount } = useIssueCount()
+  const fx = useFx()
+
+  // 마운트 시 환율 자동 로드
+  useEffect(() => { void fx.fetchRates() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   const w = collapsed ? 'w-14' : 'w-56'
 
   function linkClass({ isActive }: { isActive: boolean }) {
@@ -43,9 +53,8 @@ export default function Sidebar({ collapsed, onCollapse, onNavClick }: Props) {
   }
 
   return (
-    <aside
-      className={`${w} h-full bg-gray-900 text-gray-300 flex flex-col transition-all duration-200 overflow-hidden`}
-    >
+    <aside className={`${w} h-full bg-gray-900 text-gray-300 flex flex-col transition-all duration-200 overflow-hidden`}>
+
       {/* 헤더 + 접기 버튼 */}
       <div className="flex items-center justify-between px-3 py-4 border-b border-gray-700 shrink-0">
         {!collapsed && (
@@ -74,7 +83,6 @@ export default function Sidebar({ collapsed, onCollapse, onNavClick }: Props) {
           >
             <span className="w-5 shrink-0 text-center text-base leading-none">{item.icon}</span>
             {!collapsed && <span className="flex-1 truncate">{item.label}</span>}
-            {/* 이슈 이력 메뉴에 미조치 카운트 배지 */}
             {item.to === '/issue-history' && openCount > 0 && (
               <span className={`shrink-0 text-xs font-bold px-1.5 py-0.5 rounded-full bg-red-500 text-white ${collapsed ? 'ml-0' : 'ml-auto'}`}>
                 {openCount}
@@ -107,6 +115,77 @@ export default function Sidebar({ collapsed, onCollapse, onNavClick }: Props) {
           </>
         )}
       </nav>
+
+      {/* ── 하단: 실시간 환율 ── */}
+      <div className="border-t border-gray-700 shrink-0">
+        {!collapsed ? (
+          <div className="px-3 py-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs text-gray-500 uppercase tracking-wider">실시간 환율</span>
+              {fx.loading ? (
+                <span className="text-xs text-gray-600 animate-pulse">조회 중</span>
+              ) : (
+                <button
+                  onClick={() => void fx.fetchRates()}
+                  className="text-xs text-gray-600 hover:text-gray-400 transition-colors"
+                  title="환율 새로고침"
+                >
+                  ↺
+                </button>
+              )}
+            </div>
+
+            {fx.error ? (
+              /* GAS 미연결 시 스켈레톤 */
+              <div className="space-y-1.5">
+                {FX_CODES.map(code => (
+                  <div key={code} className="flex justify-between items-center">
+                    <span className="text-xs text-gray-600">{code}</span>
+                    <div className="h-2.5 w-16 bg-gray-800 rounded animate-pulse" />
+                  </div>
+                ))}
+                <p className="text-xs text-gray-700 mt-1 truncate" title={fx.error}>
+                  ⚠️ GAS 미연결
+                </p>
+              </div>
+            ) : fx.rates.length === 0 ? (
+              /* 로딩 중 스켈레톤 */
+              <div className="space-y-1.5">
+                {FX_CODES.map(code => (
+                  <div key={code} className="flex justify-between items-center">
+                    <span className="text-xs text-gray-600">{code}</span>
+                    <div className="h-2.5 w-16 bg-gray-800 rounded animate-pulse" />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              /* 환율 표시 */
+              <div className="space-y-1">
+                {FX_CODES.map(code => {
+                  const rate = fx.rates.find(r => r.code === code)
+                  return (
+                    <div key={code} className="flex justify-between items-center">
+                      <span className="text-xs text-gray-500">{code}</span>
+                      <span className="text-xs font-medium text-gray-300 tabular-nums">
+                        {rate?.rate
+                          ? `${rate.rate.toLocaleString()}원`
+                          : '—'
+                        }
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        ) : (
+          /* 접힌 상태: 💱 아이콘만 */
+          <div className="flex justify-center py-3">
+            <span className="text-gray-600 text-base" title="실시간 환율">💱</span>
+          </div>
+        )}
+      </div>
+
     </aside>
   )
 }

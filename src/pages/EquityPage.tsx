@@ -6,6 +6,8 @@ import { useInvestments, getLatestBonds } from '../hooks/useInvestments'
 import { fmtKRW, fmtReturn, returnBadgeClass, calcReturn, calcBondValue } from '../lib/format'
 import EquityHistoryPanel from '../components/equity/EquityHistoryPanel'
 import BondHistoryPanel from '../components/equity/BondHistoryPanel'
+import NewEquityForm from '../components/equity/NewEquityForm'
+import NewBondForm from '../components/equity/NewBondForm'
 import type { Company } from '../types'
 
 const VALID_COMPANIES: Company[] = ['셀바스에이아이', '셀바스헬스케어', '메디아나']
@@ -98,6 +100,11 @@ export default function EquityPage() {
         {/* ─── 지분(주식) 탭 ─── */}
         {tab === 'stock' && (
           <div>
+            <NewEquityForm
+              company={currentCompany ?? ''}
+              onSave={eq.save}
+              isEditable={isEditable}
+            />
             {eq.loading ? (
               <p className="text-sm text-gray-400 text-center py-8">로딩 중...</p>
             ) : stocks.length === 0 ? (
@@ -150,6 +157,11 @@ export default function EquityPage() {
         {/* ─── 국채/채권 탭 ─── */}
         {tab === 'bond' && (
           <div>
+            <NewBondForm
+              company={currentCompany ?? ''}
+              onSave={inv.save}
+              isEditable={isEditable}
+            />
             {inv.loading ? (
               <p className="text-sm text-gray-400 text-center py-8">로딩 중...</p>
             ) : bonds.length === 0 ? (
@@ -211,6 +223,12 @@ export default function EquityPage() {
         {/* ─── 비상장/기타 탭 ─── */}
         {tab === 'unlisted' && (
           <div>
+            <NewEquityForm
+              company={currentCompany ?? ''}
+              fixedMarket="비상장"
+              onSave={eq.save}
+              isEditable={isEditable}
+            />
             {eq.loading ? (
               <p className="text-sm text-gray-400 text-center py-8">로딩 중...</p>
             ) : unlisted.length === 0 ? (
