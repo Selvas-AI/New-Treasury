@@ -203,10 +203,13 @@ export function useDashboard() {
     kpi,
     waterfall,
     latestDaily,
+    allDailyData: daily.data,      // ← 전체 운전자금 이력 (차트용)
     latestInvests,
+    allInvestData: invest.data,    // ← 전체 운용자금 데이터
     loans: loans.data,
     detectedIssues,
     equityReturns,
+    equityHistoryOf: equities.historyOf,  // ← 지분 종목별 이력 (스파크라인용)
     issues,
     refetchAll: () => {
       void daily.refetch()

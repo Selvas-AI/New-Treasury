@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid,
+  Tooltip, ResponsiveContainer, Legend, ReferenceLine,
 } from 'recharts'
 import { fmtKRW, fmtDateShort, calcBondValue } from '../../lib/format'
 import { getLatestInvestments } from '../../hooks/useInvestments'
@@ -20,36 +21,23 @@ const PERIODS: { label: string; value: Period }[] = [
   { label: '1년',  value: 365 },
 ]
 
-interface ChartPoint {
-  date: string
-  dateLabel: string
-  operating: number
-  invest: number
-  loan: number
-}
-
 export default function CashflowChart({ dailyRecords, investments, loans }: Props) {
   const [period, setPeriod] = useState<Period>(30)
 
-  const chartData = useMemo<ChartPoint[]>(() => {
+  const chartData = useMemo(() => {
     const cutoff = new Date()
     cutoff.setDate(cutoff.getDate() - period)
     const cutoffStr = cutoff.toISOString().slice(0, 10)
 
-    // 기간 내 날짜 집합
-    const dailyInRange = dailyRecords
+    const inRange = dailyRecords
       .filter(d => d.date >= cutoffStr)
       .sort((a, b) => a.date.localeCompare(b.date))
 
-    return dailyInRange.map(d => {
+    return inRange.map(d => {
       const operating = (d.krw_demand || 0) + (d.krw_govt || 0) + (d.krw_mmda || 0) + (d.fx_krw || 0)
 
-      // 해당 날짜 기준 운용자금 최신 1건 (날짜 이하 레코드만 필터)
-      const investsUpToDate = investments.filter(i => {
-        const startDate = i.start || i.priceDate || ''
-        return startDate <= d.date
-      })
-      const latest = getLatestInvestments(investsUpToDate)
+      const investsUpTo = investments.filter(i => (i.start || i.priceDate || '') <= d.date)
+      const latest = getLatestInvestments(investsUpTo)
       const invest = latest.reduce((s, i) => {
         const v = i.product === '국채' && i.bondQty && i.bondPrice
           ? calcBondValue(i.bondQty, i.bondPrice)
@@ -60,11 +48,10 @@ export default function CashflowChart({ dailyRecords, investments, loans }: Prop
       const loan = loans.reduce((s, l) => s + (l.amount || 0), 0)
 
       return {
-        date: d.date,
         dateLabel: fmtDateShort(d.date),
-        operating: Math.round(operating / 1_0000),   // 만원 단위
-        invest:    Math.round(invest    / 1_0000),
-        loan:      Math.round(loan      / 1_0000),
+        opM:   Math.round(operating / 1_0000),
+        invM:  Math.round(invest    / 1_0000),
+        loanM: Math.round(loan      / 1_0000),
       }
     })
   }, [dailyRecords, investments, loans, period])
@@ -75,59 +62,41 @@ export default function CashflowChart({ dailyRecords, investments, loans }: Prop
         <h3 className="text-sm font-semibold text-gray-600">현금흐름 추이</h3>
         <div className="flex gap-1">
           {PERIODS.map(p => (
-            <button
-              key={p.value}
-              onClick={() => setPeriod(p.value)}
+            <button key={p.value} onClick={() => setPeriod(p.value)}
               className={`text-xs px-2.5 py-1 rounded-md transition-colors ${
-                period === p.value
-                  ? 'bg-blue-600 text-white'
-                  : 'text-gray-500 hover:bg-gray-100'
-              }`}
-            >
+                period === p.value ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-100'
+              }`}>
               {p.label}
             </button>
           ))}
         </div>
       </div>
 
-      {chartData.length === 0 ? (
-        <div className="h-48 flex items-center justify-center text-sm text-gray-400">
-          데이터가 없습니다
+      {chartData.length < 2 ? (
+        <div className="h-44 flex items-center justify-center text-sm text-gray-400">
+          {chartData.length === 0 ? '데이터가 없습니다' : '데이터가 부족합니다 (최소 2일 필요)'}
         </div>
       ) : (
-        <ResponsiveContainer width="100%" height={220}>
-          <AreaChart data={chartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-            <defs>
-              <linearGradient id="gOp"  x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%"  stopColor="#3b82f6" stopOpacity={0.2} />
-                <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-              </linearGradient>
-              <linearGradient id="gInv" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%"  stopColor="#10b981" stopOpacity={0.2} />
-                <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-              </linearGradient>
-              <linearGradient id="gLoan" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%"  stopColor="#ef4444" stopOpacity={0.2} />
-                <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+        <ResponsiveContainer width="100%" height={180}>
+          <BarChart data={chartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }} barGap={2}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
             <XAxis dataKey="dateLabel" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
             <YAxis
               tick={{ fontSize: 10 }}
               tickFormatter={v => `${(v / 10000).toFixed(0)}억`}
-              width={45}
+              width={42}
             />
             <Tooltip
               formatter={(v) => fmtKRW(Number(v) * 1_0000)}
               labelStyle={{ fontSize: 12 }}
               contentStyle={{ fontSize: 12 }}
             />
-            <Legend iconType="circle" wrapperStyle={{ fontSize: 12 }} />
-            <Area type="monotone" dataKey="operating" name="운전자금" stroke="#3b82f6" fill="url(#gOp)"   strokeWidth={2} dot={false} />
-            <Area type="monotone" dataKey="invest"    name="운용자금" stroke="#10b981" fill="url(#gInv)"  strokeWidth={2} dot={false} />
-            <Area type="monotone" dataKey="loan"      name="차입금"   stroke="#ef4444" fill="url(#gLoan)" strokeWidth={2} dot={false} />
-          </AreaChart>
+            <Legend iconType="circle" wrapperStyle={{ fontSize: 11 }} />
+            <ReferenceLine y={0} stroke="#e5e7eb" />
+            <Bar dataKey="opM"   name="운전자금" fill="#3b82f6" radius={[2, 2, 0, 0]} maxBarSize={20} />
+            <Bar dataKey="invM"  name="운용자금" fill="#10b981" radius={[2, 2, 0, 0]} maxBarSize={20} />
+            <Bar dataKey="loanM" name="차입금"   fill="#f87171" radius={[2, 2, 0, 0]} maxBarSize={20} />
+          </BarChart>
         </ResponsiveContainer>
       )}
     </div>
