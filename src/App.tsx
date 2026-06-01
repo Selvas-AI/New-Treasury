@@ -6,6 +6,7 @@ import DashboardPage from './pages/DashboardPage'
 import InputPage from './pages/InputPage'
 import InvestPage from './pages/InvestPage'
 import LoansPage from './pages/LoansPage'
+import EquityPage from './pages/EquityPage'
 import PlaceholderPage from './pages/PlaceholderPage'
 
 /**
@@ -50,15 +51,13 @@ export default function App() {
             <Route path="/loans/:company"     element={<LoansPage />} />
             <Route path="/loans/:company/:id" element={<LoansPage />} />
 
-            {/* 지분투자 */}
-            <Route path="/equity"                    element={<PlaceholderPage title="지분/장기투자"       step="Step 14" />} />
-            <Route path="/equity/:company"           element={<PlaceholderPage title="지분/장기투자"       step="Step 14" />} />
-            <Route path="/equity/:company/:name"     element={<PlaceholderPage title="지분 종목 상세"      step="Step 14" />} />
-
-            {/* 국채/채권 (investments 테이블, product='국채') */}
-            <Route path="/bonds"                    element={<PlaceholderPage title="국채/채권"       step="Step 14" />} />
-            <Route path="/bonds/:company"           element={<PlaceholderPage title="국채/채권"       step="Step 14" />} />
-            <Route path="/bonds/:company/:isin"     element={<PlaceholderPage title="국채 ISIN 상세"  step="Step 14" />} />
+            {/* 지분투자 + 국채 */}
+            <Route path="/equity"              element={<EquityPage />} />
+            <Route path="/equity/:company"     element={<EquityPage />} />
+            <Route path="/equity/:company/:name" element={<EquityPage />} />
+            <Route path="/bonds"               element={<EquityPage />} />
+            <Route path="/bonds/:company"      element={<EquityPage />} />
+            <Route path="/bonds/:company/:isin" element={<EquityPage />} />
 
             {/* 자금변동이력 */}
             <Route path="/history"                       element={<PlaceholderPage title="자금 변동 이력"  step="Step 15" />} />
