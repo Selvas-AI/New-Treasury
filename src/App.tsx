@@ -9,6 +9,7 @@ import LoansPage from './pages/LoansPage'
 import EquityPage from './pages/EquityPage'
 import HistoryPage from './pages/HistoryPage'
 import IssueHistoryPage from './pages/IssueHistoryPage'
+import FxPage from './pages/FxPage'
 import PlaceholderPage from './pages/PlaceholderPage'
 
 /**
@@ -71,8 +72,8 @@ export default function App() {
             <Route path="/issue-history/:issueKey" element={<IssueHistoryPage />} />
 
             {/* 환율 */}
-            <Route path="/fx"                element={<PlaceholderPage title="환율 현황"  step="Step 17" />} />
-            <Route path="/fx/:currency"      element={<PlaceholderPage title="환율 상세"  step="Step 17" />} />
+            <Route path="/fx"           element={<FxPage />} />
+            <Route path="/fx/:currency" element={<FxPage />} />
 
             {/* 관리 */}
             <Route path="/admin/mycode"  element={<PlaceholderPage title="코드 변경"   step="Step 18" />} />
