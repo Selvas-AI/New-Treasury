@@ -319,6 +319,32 @@ makeIssueKey(type, id?)          // loan_{uuid} | equity_{name} | input_daily
 
 ---
 
+## 13-1. 문서 구조 (2026-06-01 추가)
+
+전체 컴포넌트·페이지·훅별 상세 문서가 `docs/` 폴더에 정리되어 있습니다.
+
+```
+docs/
+├── INDEX.md                          ← 전체 문서 인덱스 (변경 포인트 빠른 참조)
+├── SELVAS_TREASURY_CONTEXT.md        ← 기존 HTML 시스템
+├── SELVAS_TREASURY_REACT_CONTEXT.md  ← 이 문서
+├── ROUTING_DEEPLINK_SPEC.md          ← URL 딥링크 명세
+├── components/
+│   ├── dashboard/   ← KpiCard / WaterfallCard / IssueCard / CashflowChart / EquityCard
+│   ├── equity/      ← EquityHistoryPanel / BondHistoryPanel
+│   └── layout/      ← Layout / Sidebar / TopBar
+├── pages/
+│   ├── DashboardPage / InputPage / InvestPage / LoansPage
+│   ├── EquityPage / HistoryPage / IssueHistoryPage / FxPage
+│   └── admin/ (MyCodePage / UsersPage / DataPage)
+└── hooks/
+    └── README.md    ← 전체 훅 API 레퍼런스
+```
+
+> **빠른 참조**: `docs/INDEX.md`의 "주요 변경 포인트" 표 활용
+
+---
+
 ## 14. 세션 시작 체크리스트 (공통)
 
 ```bash
