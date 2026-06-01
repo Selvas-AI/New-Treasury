@@ -7,6 +7,7 @@ import InputPage from './pages/InputPage'
 import InvestPage from './pages/InvestPage'
 import LoansPage from './pages/LoansPage'
 import EquityPage from './pages/EquityPage'
+import HistoryPage from './pages/HistoryPage'
 import PlaceholderPage from './pages/PlaceholderPage'
 
 /**
@@ -60,9 +61,9 @@ export default function App() {
             <Route path="/bonds/:company/:isin" element={<EquityPage />} />
 
             {/* 자금변동이력 */}
-            <Route path="/history"                       element={<PlaceholderPage title="자금 변동 이력"  step="Step 15" />} />
-            <Route path="/history/:company"              element={<PlaceholderPage title="자금 변동 이력"  step="Step 15" />} />
-            <Route path="/history/:company/:from/:to"    element={<PlaceholderPage title="자금 변동 이력"  step="Step 15" />} />
+            <Route path="/history"                    element={<HistoryPage />} />
+            <Route path="/history/:company"           element={<HistoryPage />} />
+            <Route path="/history/:company/:from/:to" element={<HistoryPage />} />
 
             {/* 이슈이력 */}
             <Route path="/issue-history"              element={<PlaceholderPage title="이슈 이력"  step="Step 16" />} />
