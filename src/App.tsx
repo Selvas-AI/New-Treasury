@@ -3,6 +3,7 @@ import AuthProvider from './contexts/AuthContext'
 import Layout from './components/Layout'
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
+import InputPage from './pages/InputPage'
 import PlaceholderPage from './pages/PlaceholderPage'
 
 /**
@@ -33,9 +34,9 @@ export default function App() {
             <Route path="/dashboard/:company"  element={<DashboardPage />} />
 
             {/* 운전자금 */}
-            <Route path="/input"                     element={<PlaceholderPage title="운전자금 입력"  step="Step 11" />} />
-            <Route path="/input/:company"            element={<PlaceholderPage title="운전자금 입력"  step="Step 11" />} />
-            <Route path="/input/:company/:date"      element={<PlaceholderPage title="운전자금 입력"  step="Step 11" />} />
+            <Route path="/input"                element={<InputPage />} />
+            <Route path="/input/:company"       element={<InputPage />} />
+            <Route path="/input/:company/:date" element={<InputPage />} />
 
             {/* 운용자금 */}
             <Route path="/invest"              element={<PlaceholderPage title="운용자금"       step="Step 12" />} />
