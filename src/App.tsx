@@ -4,6 +4,7 @@ import Layout from './components/Layout'
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
 import InputPage from './pages/InputPage'
+import InvestPage from './pages/InvestPage'
 import PlaceholderPage from './pages/PlaceholderPage'
 
 /**
@@ -39,9 +40,9 @@ export default function App() {
             <Route path="/input/:company/:date" element={<InputPage />} />
 
             {/* 운용자금 */}
-            <Route path="/invest"              element={<PlaceholderPage title="운용자금"       step="Step 12" />} />
-            <Route path="/invest/:company"     element={<PlaceholderPage title="운용자금"       step="Step 12" />} />
-            <Route path="/invest/:company/:id" element={<PlaceholderPage title="운용자금 상세"  step="Step 12" />} />
+            <Route path="/invest"              element={<InvestPage />} />
+            <Route path="/invest/:company"     element={<InvestPage />} />
+            <Route path="/invest/:company/:id" element={<InvestPage />} />
 
             {/* 차입금 */}
             <Route path="/loans"              element={<PlaceholderPage title="차입금"       step="Step 13" />} />
