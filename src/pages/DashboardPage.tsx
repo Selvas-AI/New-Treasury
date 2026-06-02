@@ -129,151 +129,168 @@ export default function DashboardPage() {
         </div>
 
         {/* ════ 우측 패널 (3fr) ════
-             모바일: 자연스럽게 아래 쌓임
-             PC: h-full로 좌측 8fr과 동일 높이 → 마지막 카드(차입금)가 flex-1로 하단 채움
+             · lg:self-stretch  → 좌측(8fr) 높이에 맞게 자동 늘어남
+             · flex flex-col    → 내부 카드들을 세로 flex로 배치
+             · 데이터 있는 카드: lg:flex-1 lg:min-h-[200px] (공간 확장)
+             · 데이터 없는 카드: lg:flex-none (컴팩트 Empty State)
         ════ */}
-        {/* lg:self-stretch: grid row 높이(= 좌측 8fr 높이)에 맞게 우측을 늘림 → 하단 라인 일치 */}
         <div className="flex flex-col gap-3 min-w-0 lg:self-stretch">
 
-          {/* ── 이슈 확인 ──
-               PC: flex-[2] 비율로 균등 분배
-               모바일: IssueCard 내부 max-h가 높이 제어 */}
-          <div className="lg:flex-[2_2_0] lg:min-h-0">
-            <IssueCard
-              issues={db.detectedIssues}
-              activeKey={activeKey}
-              onStatusChange={handleStatusChange}
-              onHover={handleHover}
-              onFocus={handleFocus}
-            />
-          </div>
+          {/* ── 이슈 확인 ── */}
+          <IssueCard
+            issues={db.detectedIssues}
+            activeKey={activeKey}
+            onStatusChange={handleStatusChange}
+            onHover={handleHover}
+            onFocus={handleFocus}
+            className={db.detectedIssues.length > 0
+              ? 'lg:flex-1 lg:min-h-[200px]'
+              : 'lg:flex-none'}
+          />
 
           {/* ── 운전자금 상세 ── */}
-          <div
-            onMouseEnter={() => handleHover('input_daily')}
-            onMouseLeave={() => handleHover(null)}
-            onClick={() => handleFocus(isOperatingActive ? null : 'input_daily')}
-            className={`bg-white rounded-xl shadow flex flex-col overflow-hidden cursor-pointer transition-all lg:flex-[3_3_0] lg:min-h-0 ${isOperatingActive ? 'ring-2 ring-red-400 shadow-md' : 'hover:shadow-sm'}`}
-          >
-            {/* 헤더 */}
-            <div className="shrink-0 flex items-center justify-between px-4 pt-3.5 pb-2.5 border-b border-gray-100">
-              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
-                운전자금 상세
-                {isOperatingActive && (
-                  <span className="normal-case text-[10px] text-red-500 font-medium bg-red-50 px-1.5 py-0.5 rounded-full">⚠ 미입력</span>
-                )}
-              </h3>
-              {db.latestDaily && (
-                <span className="text-[10px] text-gray-400">{db.latestDaily.writer}</span>
-              )}
-            </div>
-            {/* 바디 */}
-            <div className="custom-scrollbar overflow-y-auto min-h-0 px-4 py-2
-                            max-h-44 lg:flex-1 lg:max-h-none">
-              {db.latestDaily ? (
-                <div className="divide-y divide-gray-50">
-                  {[
-                    { label: '보통예금 / CMA', value: db.latestDaily.krw_demand },
-                    { label: '국책자금',        value: db.latestDaily.krw_govt  },
-                    { label: '증권 예수금',     value: db.latestDaily.krw_mmda  },
-                    { label: '외화 (원화환산)', value: db.latestDaily.fx_krw    },
-                  ].map(r => (
-                    <div key={r.label} className="flex justify-between items-center py-2">
-                      <span className="text-[11px] text-gray-400">{r.label}</span>
-                      <span className="text-xs tabular-nums font-semibold text-gray-700">{fmtKRW(r.value)}</span>
-                    </div>
-                  ))}
-                  <div className="flex justify-between items-center py-2">
-                    <span className="text-xs font-semibold text-gray-600">합계</span>
-                    <span className="text-sm font-bold text-blue-600 tabular-nums">{fmtKRW(db.kpi.operatingCash)}</span>
-                  </div>
+          {(() => {
+            const hasData = !!db.latestDaily
+            return (
+              <div
+                onMouseEnter={() => handleHover('input_daily')}
+                onMouseLeave={() => handleHover(null)}
+                onClick={() => handleFocus(isOperatingActive ? null : 'input_daily')}
+                className={`bg-white rounded-xl shadow flex flex-col overflow-hidden cursor-pointer transition-all ${isOperatingActive ? 'ring-2 ring-red-400 shadow-md' : 'hover:shadow-sm'} ${hasData ? 'lg:flex-1 lg:min-h-[200px]' : 'lg:flex-none'}`}
+              >
+                {/* 헤더 — 항상 고정 */}
+                <div className="shrink-0 flex items-center justify-between px-4 pt-3.5 pb-2.5 border-b border-gray-100">
+                  <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
+                    운전자금 상세
+                    {isOperatingActive && (
+                      <span className="normal-case text-[10px] text-red-500 font-medium bg-red-50 px-1.5 py-0.5 rounded-full">⚠ 미입력</span>
+                    )}
+                  </h3>
+                  {db.latestDaily && (
+                    <span className="text-[10px] text-gray-400">{db.latestDaily.writer}</span>
+                  )}
                 </div>
-              ) : (
-                <p className="text-xs text-gray-400 text-center py-4">데이터 없음</p>
-              )}
-            </div>
-          </div>
+
+                {!hasData ? (
+                  /* Empty State */
+                  <div className="flex flex-col items-center justify-center gap-1.5 py-5 px-4">
+                    <span className="text-xl">💰</span>
+                    <p className="text-xs text-gray-400">오늘 운전자금 데이터가 없습니다</p>
+                  </div>
+                ) : (
+                  /* 데이터 있음 — flex-1 스크롤 영역 */
+                  <div className="custom-scrollbar overflow-y-auto flex-1 min-h-0 px-4 py-2">
+                    <div className="divide-y divide-gray-50">
+                      {[
+                        { label: '보통예금 / CMA', value: db.latestDaily!.krw_demand },
+                        { label: '국책자금',        value: db.latestDaily!.krw_govt  },
+                        { label: '증권 예수금',     value: db.latestDaily!.krw_mmda  },
+                        { label: '외화 (원화환산)', value: db.latestDaily!.fx_krw    },
+                      ].map(r => (
+                        <div key={r.label} className="flex justify-between items-center py-2">
+                          <span className="text-[11px] text-gray-400">{r.label}</span>
+                          <span className="text-xs tabular-nums font-semibold text-gray-700">{fmtKRW(r.value)}</span>
+                        </div>
+                      ))}
+                      <div className="flex justify-between items-center py-2">
+                        <span className="text-xs font-semibold text-gray-600">합계</span>
+                        <span className="text-sm font-bold text-blue-600 tabular-nums">{fmtKRW(db.kpi.operatingCash)}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })()}
 
           {/* ── 운용자금 상세 ── */}
-          <div className="bg-white rounded-xl shadow flex flex-col overflow-hidden
-                          lg:flex-[3_3_0] lg:min-h-0">
-            <div className="shrink-0 px-4 pt-3.5 pb-2.5 border-b border-gray-100">
-              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">운용자금 상세</h3>
-            </div>
-            <div className="custom-scrollbar overflow-y-auto min-h-0 px-4 py-2
-                            max-h-44 lg:flex-1 lg:max-h-none">
-              {db.latestInvests.filter(i => i.product !== '국채').length === 0 ? (
-                <p className="text-xs text-gray-400 text-center py-4">없음</p>
-              ) : (
-                <div className="divide-y divide-gray-50">
-                  {db.latestInvests.filter(i => i.product !== '국채').map(inv => (
-                    <div key={inv.id} className="flex justify-between items-center py-2">
-                      <span className="text-[11px] text-gray-400 truncate mr-2">{inv.bank}</span>
-                      <span className="text-xs tabular-nums font-semibold text-gray-700 shrink-0">{fmtKRW(inv.amount)}</span>
-                    </div>
-                  ))}
+          {(() => {
+            const items = db.latestInvests.filter(i => i.product !== '국채')
+            const hasData = items.length > 0
+            return (
+              <div className={`bg-white rounded-xl shadow flex flex-col overflow-hidden ${hasData ? 'lg:flex-1 lg:min-h-[200px]' : 'lg:flex-none'}`}>
+                <div className="shrink-0 px-4 pt-3.5 pb-2.5 border-b border-gray-100">
+                  <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">운용자금 상세</h3>
                 </div>
-              )}
-            </div>
-          </div>
-
-          {/* ── 차입금 상세 — flex-1: 남은 공간 채워 우측 하단 라인을 좌측과 일치 ── */}
-          <div className="bg-white rounded-xl shadow flex flex-col overflow-hidden lg:flex-1 lg:min-h-0">
-            <div className="shrink-0 px-4 pt-3.5 pb-2.5 border-b border-gray-100">
-              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">차입금 상세</h3>
-            </div>
-            <div className="custom-scrollbar overflow-y-auto min-h-0 px-4 py-2
-                            max-h-44 lg:flex-1 lg:max-h-none">
-              {db.loans.filter(l => l.active).length === 0 ? (
-                <p className="text-xs text-gray-400 text-center py-4">없음</p>
-              ) : (
-                <div className="space-y-0">
-                  {db.loans.filter(l => l.active).map(loan => {
-                    const dday       = calcDday(loan.maturity)
-                    const loanKey    = `loan_${loan.id}`
-                    const isActive   = activeKey === loanKey
-                    const linkedIssues = db.detectedIssues.filter(i => i.key === loanKey)
-                    return (
-                      <div
-                        key={loan.id}
-                        onMouseEnter={() => handleHover(loanKey)}
-                        onMouseLeave={() => handleHover(null)}
-                        onClick={e => { e.stopPropagation(); handleFocus(isActive ? null : loanKey) }}
-                        className={`px-2 py-2.5 rounded-lg cursor-pointer transition-all border ${
-                          isActive ? 'bg-blue-50 border-blue-200' : 'border-transparent hover:bg-gray-50'
-                        }`}
-                      >
-                        {/* 1행: 기관명 + 금액 */}
-                        <div className="flex justify-between items-center">
-                          <span className="text-xs font-semibold text-gray-700">{loan.lender}</span>
-                          <div className="flex items-center gap-1.5">
-                            {isActive && linkedIssues.length > 0 && (
-                              <span className="text-[10px] bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded-full font-medium">
-                                ⚠ 이슈
-                              </span>
-                            )}
-                            <span className="text-xs tabular-nums font-semibold text-gray-700">{fmtKRW(loan.amount)}</span>
-                          </div>
-                        </div>
-                        {/* 2행: 금리·만기·D-day */}
-                        <div className="flex justify-between items-center mt-0.5">
-                          <span className="text-[10px] text-gray-400">{loan.rate}% · {loan.maturity}</span>
-                          <span className={`text-[10px] font-semibold ${
-                            dday <= 30 ? 'text-red-500' : dday <= 90 ? 'text-amber-500' : 'text-gray-400'
-                          }`}>D-{dday}</span>
-                        </div>
-                      </div>
-                    )
-                  })}
-                  {/* 합계 행 */}
-                  <div className="flex justify-between items-center border-t border-gray-100 pt-2 mt-1 px-2">
-                    <span className="text-xs font-semibold text-gray-600">합계</span>
-                    <span className="text-sm font-bold text-red-500 tabular-nums">{fmtKRW(db.kpi.totalLoan)}</span>
+                {!hasData ? (
+                  <div className="flex flex-col items-center justify-center gap-1.5 py-5 px-4">
+                    <span className="text-xl">📈</span>
+                    <p className="text-xs text-gray-400">운용 중인 자금이 없습니다</p>
                   </div>
+                ) : (
+                  <div className="custom-scrollbar overflow-y-auto flex-1 min-h-0 px-4 py-2">
+                    <div className="divide-y divide-gray-50">
+                      {items.map(inv => (
+                        <div key={inv.id} className="flex justify-between items-center py-2">
+                          <span className="text-[11px] text-gray-400 truncate mr-2">{inv.bank}</span>
+                          <span className="text-xs tabular-nums font-semibold text-gray-700 shrink-0">{fmtKRW(inv.amount)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })()}
+
+          {/* ── 차입금 상세 ── */}
+          {(() => {
+            const activeLoans = db.loans.filter(l => l.active)
+            const hasData = activeLoans.length > 0
+            return (
+              <div className={`bg-white rounded-xl shadow flex flex-col overflow-hidden ${hasData ? 'lg:flex-1 lg:min-h-[200px]' : 'lg:flex-none'}`}>
+                <div className="shrink-0 px-4 pt-3.5 pb-2.5 border-b border-gray-100">
+                  <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">차입금 상세</h3>
                 </div>
-              )}
-            </div>
-          </div>
+                {!hasData ? (
+                  <div className="flex flex-col items-center justify-center gap-1.5 py-5 px-4">
+                    <span className="text-xl">🏦</span>
+                    <p className="text-xs text-gray-400">활성 차입금이 없습니다</p>
+                  </div>
+                ) : (
+                  <div className="custom-scrollbar overflow-y-auto flex-1 min-h-0 px-4 py-2">
+                    <div className="space-y-0">
+                      {activeLoans.map(loan => {
+                        const dday       = calcDday(loan.maturity)
+                        const loanKey    = `loan_${loan.id}`
+                        const isActive   = activeKey === loanKey
+                        const linked     = db.detectedIssues.filter(i => i.key === loanKey)
+                        return (
+                          <div
+                            key={loan.id}
+                            onMouseEnter={() => handleHover(loanKey)}
+                            onMouseLeave={() => handleHover(null)}
+                            onClick={e => { e.stopPropagation(); handleFocus(isActive ? null : loanKey) }}
+                            className={`px-2 py-2.5 rounded-lg cursor-pointer transition-all border ${
+                              isActive ? 'bg-blue-50 border-blue-200' : 'border-transparent hover:bg-gray-50'
+                            }`}
+                          >
+                            <div className="flex justify-between items-center">
+                              <span className="text-xs font-semibold text-gray-700">{loan.lender}</span>
+                              <div className="flex items-center gap-1.5">
+                                {isActive && linked.length > 0 && (
+                                  <span className="text-[10px] bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded-full font-medium">⚠ 이슈</span>
+                                )}
+                                <span className="text-xs tabular-nums font-semibold text-gray-700">{fmtKRW(loan.amount)}</span>
+                              </div>
+                            </div>
+                            <div className="flex justify-between items-center mt-0.5">
+                              <span className="text-[10px] text-gray-400">{loan.rate}% · {loan.maturity}</span>
+                              <span className={`text-[10px] font-semibold ${dday <= 30 ? 'text-red-500' : dday <= 90 ? 'text-amber-500' : 'text-gray-400'}`}>D-{dday}</span>
+                            </div>
+                          </div>
+                        )
+                      })}
+                      <div className="flex justify-between items-center border-t border-gray-100 pt-2 mt-1 px-2">
+                        <span className="text-xs font-semibold text-gray-600">합계</span>
+                        <span className="text-sm font-bold text-red-500 tabular-nums">{fmtKRW(db.kpi.totalLoan)}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })()}
 
         </div>
       </div>
