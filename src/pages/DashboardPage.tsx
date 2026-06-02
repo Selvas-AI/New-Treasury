@@ -147,50 +147,48 @@ export default function DashboardPage() {
             />
           </div>
 
-          {/* ── 운전자금 상세 ──
-               헤더는 항상 고정, 바디만 스크롤
-               모바일: max-h-56 직접 제한 / PC: lg:flex-1 로 전환 */}
+          {/* ── 운전자금 상세 ── */}
           <div
             onMouseEnter={() => handleHover('input_daily')}
             onMouseLeave={() => handleHover(null)}
             onClick={() => handleFocus(isOperatingActive ? null : 'input_daily')}
             className={`bg-white rounded-xl shadow flex flex-col overflow-hidden cursor-pointer transition-all lg:flex-[3_3_0] lg:min-h-0 ${isOperatingActive ? 'ring-2 ring-red-400 shadow-md' : 'hover:shadow-sm'}`}
           >
-            {/* 헤더 — 항상 상단 고정 */}
-            <div className="shrink-0 flex items-center justify-between px-4 pt-3 pb-2 border-b border-gray-100">
-              <h3 className="text-xs font-semibold text-gray-600 flex items-center gap-1.5">
+            {/* 헤더 */}
+            <div className="shrink-0 flex items-center justify-between px-4 pt-3.5 pb-2.5 border-b border-gray-100">
+              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
                 운전자금 상세
                 {isOperatingActive && (
-                  <span className="text-xs text-red-500 font-medium">⚠️ 미입력 이슈</span>
+                  <span className="normal-case text-[10px] text-red-500 font-medium bg-red-50 px-1.5 py-0.5 rounded-full">⚠ 미입력</span>
                 )}
               </h3>
               {db.latestDaily && (
-                <span className="text-xs text-gray-400">{db.latestDaily.writer} 입력</span>
+                <span className="text-[10px] text-gray-400">{db.latestDaily.writer}</span>
               )}
             </div>
-            {/* 바디 — 모바일: max-h-44 / PC: flex-1 */}
-            <div className="overflow-y-auto min-h-0 px-4 py-3
+            {/* 바디 */}
+            <div className="custom-scrollbar overflow-y-auto min-h-0 px-4 py-2
                             max-h-44 lg:flex-1 lg:max-h-none">
               {db.latestDaily ? (
-                <div className="space-y-1.5">
+                <div className="divide-y divide-gray-50">
                   {[
                     { label: '보통예금 / CMA', value: db.latestDaily.krw_demand },
                     { label: '국책자금',        value: db.latestDaily.krw_govt  },
                     { label: '증권 예수금',     value: db.latestDaily.krw_mmda  },
                     { label: '외화 (원화환산)', value: db.latestDaily.fx_krw    },
                   ].map(r => (
-                    <div key={r.label} className="flex justify-between text-xs">
-                      <span className="text-gray-500">{r.label}</span>
-                      <span className="tabular-nums font-medium text-gray-700">{fmtKRW(r.value)}</span>
+                    <div key={r.label} className="flex justify-between items-center py-2">
+                      <span className="text-[11px] text-gray-400">{r.label}</span>
+                      <span className="text-xs tabular-nums font-semibold text-gray-700">{fmtKRW(r.value)}</span>
                     </div>
                   ))}
-                  <div className="flex justify-between text-sm font-bold border-t border-gray-100 pt-1.5 mt-1">
-                    <span className="text-gray-700">합계</span>
-                    <span className="text-blue-700 tabular-nums">{fmtKRW(db.kpi.operatingCash)}</span>
+                  <div className="flex justify-between items-center py-2">
+                    <span className="text-xs font-semibold text-gray-600">합계</span>
+                    <span className="text-sm font-bold text-blue-600 tabular-nums">{fmtKRW(db.kpi.operatingCash)}</span>
                   </div>
                 </div>
               ) : (
-                <p className="text-xs text-gray-400 text-center py-2">데이터 없음</p>
+                <p className="text-xs text-gray-400 text-center py-4">데이터 없음</p>
               )}
             </div>
           </div>
@@ -198,19 +196,19 @@ export default function DashboardPage() {
           {/* ── 운용자금 상세 ── */}
           <div className="bg-white rounded-xl shadow flex flex-col overflow-hidden
                           lg:flex-[3_3_0] lg:min-h-0">
-            <div className="shrink-0 px-4 pt-3 pb-2 border-b border-gray-100">
-              <h3 className="text-xs font-semibold text-gray-600">운용자금 상세</h3>
+            <div className="shrink-0 px-4 pt-3.5 pb-2.5 border-b border-gray-100">
+              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">운용자금 상세</h3>
             </div>
-            <div className="overflow-y-auto min-h-0 px-4 py-3
+            <div className="custom-scrollbar overflow-y-auto min-h-0 px-4 py-2
                             max-h-44 lg:flex-1 lg:max-h-none">
               {db.latestInvests.filter(i => i.product !== '국채').length === 0 ? (
-                <p className="text-xs text-gray-400 text-center py-2">없음</p>
+                <p className="text-xs text-gray-400 text-center py-4">없음</p>
               ) : (
-                <div className="space-y-1.5">
+                <div className="divide-y divide-gray-50">
                   {db.latestInvests.filter(i => i.product !== '국채').map(inv => (
-                    <div key={inv.id} className="flex justify-between text-xs">
-                      <span className="text-gray-500 truncate mr-2">{inv.bank}</span>
-                      <span className="tabular-nums font-medium text-gray-700 shrink-0">{fmtKRW(inv.amount)}</span>
+                    <div key={inv.id} className="flex justify-between items-center py-2">
+                      <span className="text-[11px] text-gray-400 truncate mr-2">{inv.bank}</span>
+                      <span className="text-xs tabular-nums font-semibold text-gray-700 shrink-0">{fmtKRW(inv.amount)}</span>
                     </div>
                   ))}
                 </div>
@@ -221,15 +219,15 @@ export default function DashboardPage() {
           {/* ── 차입금 상세 ── */}
           <div className="bg-white rounded-xl shadow flex flex-col overflow-hidden
                           lg:flex-[3_3_0] lg:min-h-0">
-            <div className="shrink-0 px-4 pt-3 pb-2 border-b border-gray-100">
-              <h3 className="text-xs font-semibold text-gray-600">차입금 상세</h3>
+            <div className="shrink-0 px-4 pt-3.5 pb-2.5 border-b border-gray-100">
+              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">차입금 상세</h3>
             </div>
-            <div className="overflow-y-auto min-h-0 px-4 py-3
+            <div className="custom-scrollbar overflow-y-auto min-h-0 px-4 py-2
                             max-h-44 lg:flex-1 lg:max-h-none">
               {db.loans.filter(l => l.active).length === 0 ? (
-                <p className="text-xs text-gray-400 text-center py-2">없음</p>
+                <p className="text-xs text-gray-400 text-center py-4">없음</p>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-0">
                   {db.loans.filter(l => l.active).map(loan => {
                     const dday       = calcDday(loan.maturity)
                     const loanKey    = `loan_${loan.id}`
@@ -241,33 +239,36 @@ export default function DashboardPage() {
                         onMouseEnter={() => handleHover(loanKey)}
                         onMouseLeave={() => handleHover(null)}
                         onClick={e => { e.stopPropagation(); handleFocus(isActive ? null : loanKey) }}
-                        className={`text-xs p-2 rounded-lg cursor-pointer transition-all ${
-                          isActive ? 'bg-blue-50 ring-1 ring-blue-300' : 'hover:bg-gray-50'
+                        className={`px-2 py-2.5 rounded-lg cursor-pointer transition-all border ${
+                          isActive ? 'bg-blue-50 border-blue-200' : 'border-transparent hover:bg-gray-50'
                         }`}
                       >
-                        <div className="flex justify-between">
-                          <span className="text-gray-600 font-medium">{loan.lender}</span>
+                        {/* 1행: 기관명 + 금액 */}
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs font-semibold text-gray-700">{loan.lender}</span>
                           <div className="flex items-center gap-1.5">
                             {isActive && linkedIssues.length > 0 && (
-                              <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">
-                                ⚠️ 이슈 {linkedIssues.length}건
+                              <span className="text-[10px] bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded-full font-medium">
+                                ⚠ 이슈
                               </span>
                             )}
-                            <span className="tabular-nums font-medium text-gray-800">{fmtKRW(loan.amount)}</span>
+                            <span className="text-xs tabular-nums font-semibold text-gray-700">{fmtKRW(loan.amount)}</span>
                           </div>
                         </div>
-                        <div className="flex justify-between text-gray-400 mt-0.5">
-                          <span>{loan.rate}% · {loan.maturity}</span>
-                          <span className={`font-medium ${
+                        {/* 2행: 금리·만기·D-day */}
+                        <div className="flex justify-between items-center mt-0.5">
+                          <span className="text-[10px] text-gray-400">{loan.rate}% · {loan.maturity}</span>
+                          <span className={`text-[10px] font-semibold ${
                             dday <= 30 ? 'text-red-500' : dday <= 90 ? 'text-amber-500' : 'text-gray-400'
                           }`}>D-{dday}</span>
                         </div>
                       </div>
                     )
                   })}
-                  <div className="flex justify-between text-sm font-bold border-t border-gray-100 pt-1.5">
-                    <span className="text-gray-700">합계</span>
-                    <span className="text-red-600 tabular-nums">{fmtKRW(db.kpi.totalLoan)}</span>
+                  {/* 합계 행 */}
+                  <div className="flex justify-between items-center border-t border-gray-100 pt-2 mt-1 px-2">
+                    <span className="text-xs font-semibold text-gray-600">합계</span>
+                    <span className="text-sm font-bold text-red-500 tabular-nums">{fmtKRW(db.kpi.totalLoan)}</span>
                   </div>
                 </div>
               )}
