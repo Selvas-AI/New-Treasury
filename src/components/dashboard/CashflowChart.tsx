@@ -57,13 +57,16 @@ export default function CashflowChart({ dailyRecords, investments, loans }: Prop
   }, [dailyRecords, investments, loans, period])
 
   return (
-    <div className="bg-white rounded-xl shadow p-5">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-semibold text-gray-600">현금흐름 추이</h3>
-        <div className="flex gap-1">
+    // flex flex-col h-full: 그리드 stretch로 EquityCard와 동일 높이 유지
+    <div className="bg-white rounded-xl shadow p-4 flex flex-col h-full">
+
+      {/* 헤더 — shrink-0으로 고정 */}
+      <div className="shrink-0 flex items-center justify-between mb-3">
+        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">현금흐름 추이</h3>
+        <div className="flex gap-0.5">
           {PERIODS.map(p => (
             <button key={p.value} onClick={() => setPeriod(p.value)}
-              className={`text-xs px-2.5 py-1 rounded-md transition-colors ${
+              className={`text-xs px-2 py-1 rounded-md transition-colors ${
                 period === p.value ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-100'
               }`}>
               {p.label}
@@ -72,33 +75,54 @@ export default function CashflowChart({ dailyRecords, investments, loans }: Prop
         </div>
       </div>
 
-      {chartData.length < 2 ? (
-        <div className="h-44 flex items-center justify-center text-sm text-gray-400">
-          {chartData.length === 0 ? '데이터가 없습니다' : '데이터가 부족합니다 (최소 2일 필요)'}
-        </div>
-      ) : (
-        <ResponsiveContainer width="100%" height={180}>
-          <BarChart data={chartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }} barGap={2}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-            <XAxis dataKey="dateLabel" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
-            <YAxis
-              tick={{ fontSize: 10 }}
-              tickFormatter={v => `${(v / 10000).toFixed(0)}억`}
-              width={42}
-            />
-            <Tooltip
-              formatter={(v) => fmtKRW(Number(v) * 1_0000)}
-              labelStyle={{ fontSize: 12 }}
-              contentStyle={{ fontSize: 12 }}
-            />
-            <Legend iconType="circle" wrapperStyle={{ fontSize: 11 }} />
-            <ReferenceLine y={0} stroke="#e5e7eb" />
-            <Bar dataKey="opM"   name="운전자금" fill="#3b82f6" radius={[2, 2, 0, 0]} maxBarSize={20} />
-            <Bar dataKey="invM"  name="운용자금" fill="#10b981" radius={[2, 2, 0, 0]} maxBarSize={20} />
-            <Bar dataKey="loanM" name="차입금"   fill="#f87171" radius={[2, 2, 0, 0]} maxBarSize={20} />
-          </BarChart>
-        </ResponsiveContainer>
-      )}
+      {/* 차트 영역 — flex-1 min-h-0: 카드 남은 높이를 꽉 채움 */}
+      <div className="flex-1 min-h-0">
+        {chartData.length < 2 ? (
+          <div className="h-full flex items-center justify-center text-sm text-gray-400">
+            {chartData.length === 0 ? '데이터가 없습니다' : '데이터가 부족합니다 (최소 2일 필요)'}
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart
+              data={chartData}
+              margin={{ top: 5, right: 5, left: -20, bottom: 0 }}
+              barGap={1}
+              barCategoryGap="20%"
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+              <XAxis
+                dataKey="dateLabel"
+                tick={{ fontSize: 9 }}
+                interval="preserveStartEnd"
+                tickLine={false}
+                axisLine={false}
+              />
+              <YAxis
+                tick={{ fontSize: 9 }}
+                tickFormatter={v => `${(v / 10000).toFixed(0)}억`}
+                width={36}
+                tickLine={false}
+                axisLine={false}
+              />
+              <Tooltip
+                formatter={(v) => fmtKRW(Number(v) * 1_0000)}
+                labelStyle={{ fontSize: 11 }}
+                contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid #e5e7eb' }}
+                cursor={{ fill: 'rgba(0,0,0,0.04)' }}
+              />
+              <Legend
+                iconType="circle"
+                iconSize={7}
+                wrapperStyle={{ fontSize: 10, paddingTop: 4 }}
+              />
+              <ReferenceLine y={0} stroke="#e5e7eb" />
+              <Bar dataKey="opM"   name="운전자금" fill="#3b82f6" radius={[2, 2, 0, 0]} maxBarSize={28} />
+              <Bar dataKey="invM"  name="운용자금" fill="#10b981" radius={[2, 2, 0, 0]} maxBarSize={28} />
+              <Bar dataKey="loanM" name="차입금"   fill="#f87171" radius={[2, 2, 0, 0]} maxBarSize={28} />
+            </BarChart>
+          </ResponsiveContainer>
+        )}
+      </div>
     </div>
   )
 }

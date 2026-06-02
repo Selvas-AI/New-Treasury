@@ -83,10 +83,10 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-[8fr_3fr] gap-4">
 
         {/* ════ 좌측 메인 (8fr) ════ */}
-        <div className="space-y-4 min-w-0">
+        <div className="flex flex-col gap-4 min-w-0">
 
-          {/* KPI 행: 모바일 1열 → sm 이상 3열 */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {/* KPI 행 — shrink-0: flex-1 하단 그리드가 늘어날 때 압축되지 않도록 고정 */}
+          <div className="shrink-0 grid grid-cols-1 sm:grid-cols-3 gap-3">
             <KpiCard
               label="가용자금 합계"
               value={db.kpi.availableCash}
@@ -107,11 +107,12 @@ export default function DashboardPage() {
             />
           </div>
 
-          {/* 자금 흐름 */}
-          <WaterfallCard kpi={db.kpi} />
+          {/* 자금 흐름 — shrink-0: 고정 */}
+          <div className="shrink-0"><WaterfallCard kpi={db.kpi} /></div>
 
-          {/* 하단: 현금흐름 추이 + 지분/장기투자 — 모바일 1열 / md 이상 2열 */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* 하단: 현금흐름 추이 + 지분/장기투자 — 모바일 1열 / md 이상 2열
+               flex-1: 좌측 열의 남은 세로 공간을 이 행이 채워 하단 라인을 맞춤 */}
+          <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-2 gap-4">
             <CashflowChart
               dailyRecords={db.allDailyData}
               investments={db.allInvestData}
@@ -128,11 +129,11 @@ export default function DashboardPage() {
         </div>
 
         {/* ════ 우측 패널 (3fr) ════
-             모바일: 자연스럽게 아래 쌓임 (height auto)
-             PC: sticky + 뷰포트 고정 높이 → flex 분배
+             모바일: 자연스럽게 아래 쌓임
+             PC: h-full로 좌측 8fr과 동일 높이 → 마지막 카드(차입금)가 flex-1로 하단 채움
         ════ */}
-        <div className="flex flex-col gap-3 min-w-0
-                        lg:sticky lg:top-4 lg:h-[calc(100vh-7rem)] lg:self-start">
+        {/* lg:self-stretch: grid row 높이(= 좌측 8fr 높이)에 맞게 우측을 늘림 → 하단 라인 일치 */}
+        <div className="flex flex-col gap-3 min-w-0 lg:self-stretch">
 
           {/* ── 이슈 확인 ──
                PC: flex-[2] 비율로 균등 분배
@@ -216,9 +217,8 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* ── 차입금 상세 ── */}
-          <div className="bg-white rounded-xl shadow flex flex-col overflow-hidden
-                          lg:flex-[3_3_0] lg:min-h-0">
+          {/* ── 차입금 상세 — flex-1: 남은 공간 채워 우측 하단 라인을 좌측과 일치 ── */}
+          <div className="bg-white rounded-xl shadow flex flex-col overflow-hidden lg:flex-1 lg:min-h-0">
             <div className="shrink-0 px-4 pt-3.5 pb-2.5 border-b border-gray-100">
               <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">차입금 상세</h3>
             </div>
