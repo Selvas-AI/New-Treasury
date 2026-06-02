@@ -41,8 +41,8 @@ export default function TopBar({ onMenuClick }: Props) {
         )}
       </div>
 
-      {/* 중앙: 주가 전광판 */}
-      <div className="flex-1 min-w-0 hidden sm:flex items-center overflow-hidden">
+      {/* 중앙: 주가 전광판 — 고정 너비 */}
+      <div className="w-72 shrink-0 hidden sm:flex items-center overflow-hidden">
         <div className="w-px h-4 bg-gray-200 shrink-0 mr-2" />
 
         {loading && !hasPrices ? (
