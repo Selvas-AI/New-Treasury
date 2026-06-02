@@ -39,8 +39,9 @@ export default function IssueCard({ issues, activeKey, onStatusChange, onHover, 
   const { currentCompany } = useAuth()
 
   return (
-    <div className="bg-white rounded-xl shadow p-5 flex flex-col">
-      <div className="flex items-center justify-between mb-3 shrink-0">
+    <div className="bg-white rounded-xl shadow flex flex-col lg:h-full">
+      {/* 헤더 — 항상 상단 고정 */}
+      <div className="shrink-0 flex items-center justify-between px-5 pt-4 pb-3 border-b border-gray-100">
         <h3 className="text-sm font-semibold text-gray-600">이슈 확인</h3>
         {issues.length > 0 && (
           <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
@@ -49,8 +50,9 @@ export default function IssueCard({ issues, activeKey, onStatusChange, onHover, 
         )}
       </div>
 
-      {/* 고정 높이 + 내부 스크롤 */}
-      <div className="overflow-y-auto max-h-72 space-y-2 pr-0.5">
+      {/* 바디 — 모바일: max-h-60 / PC: flex-1 min-h-0 */}
+      <div className="overflow-y-auto px-5 py-3 space-y-2 pr-0.5
+                      max-h-60 lg:flex-1 lg:min-h-0 lg:max-h-none">
         {issues.length === 0 ? (
           <p className="text-sm text-gray-400 text-center py-6">확인이 필요한 이슈가 없습니다 ✓</p>
         ) : (

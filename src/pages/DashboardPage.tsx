@@ -70,21 +70,23 @@ export default function DashboardPage() {
           {db.latestDaily && (
             <span className="text-xs text-gray-400">{db.latestDaily.date} 기준</span>
           )}
-          <button onClick={db.refetchAll}
-            className="text-xs text-blue-600 border border-blue-200 px-2.5 py-1 rounded-md hover:bg-blue-50 transition-colors">
+          <button
+            onClick={db.refetchAll}
+            className="text-xs text-blue-600 border border-blue-200 px-2.5 py-1 rounded-md hover:bg-blue-50 transition-colors"
+          >
             새로고침
           </button>
         </div>
       </div>
 
-      {/* ── 메인 레이아웃: 좌 8fr / 우 3fr ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-[8fr_3fr] gap-4 items-start">
+      {/* ── 메인 레이아웃: 모바일 1열 / PC lg:8fr+3fr ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-[8fr_3fr] gap-4">
 
-        {/* ════ 좌측 (8fr) ════ */}
+        {/* ════ 좌측 메인 (8fr) ════ */}
         <div className="space-y-4 min-w-0">
 
-          {/* KPI 3행: 3fr / 3fr / 2fr */}
-          <div className="grid gap-3" style={{ gridTemplateColumns: '3fr 3fr 2fr' }}>
+          {/* KPI 행: 모바일 1열 → sm 이상 3열 */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <KpiCard
               label="가용자금 합계"
               value={db.kpi.availableCash}
@@ -108,8 +110,8 @@ export default function DashboardPage() {
           {/* 자금 흐름 */}
           <WaterfallCard kpi={db.kpi} />
 
-          {/* 하단: 현금흐름 추이 + 지분/장기투자 나란히 */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+          {/* 하단: 현금흐름 추이 + 지분/장기투자 — 모바일 1열 / md 이상 2열 */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <CashflowChart
               dailyRecords={db.allDailyData}
               investments={db.allInvestData}
@@ -125,122 +127,151 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* ════ 우측 (3fr) ════ */}
-        <div className="space-y-4 min-w-0">
+        {/* ════ 우측 패널 (3fr) ════
+             모바일: 자연스럽게 아래 쌓임 (height auto)
+             PC: sticky + 뷰포트 고정 높이 → flex 분배
+        ════ */}
+        <div className="flex flex-col gap-3 min-w-0
+                        lg:sticky lg:top-4 lg:h-[calc(100vh-7rem)] lg:self-start">
 
-          {/* 이슈 확인 */}
-          <IssueCard
-            issues={db.detectedIssues}
-            activeKey={activeKey}
-            onStatusChange={handleStatusChange}
-            onHover={handleHover}
-            onFocus={handleFocus}
-          />
-
-          {/* 운전자금 상세 */}
-          {db.latestDaily && (
-            <div
-              onMouseEnter={() => handleHover('input_daily')}
-              onMouseLeave={() => handleHover(null)}
-              onClick={() => handleFocus(isOperatingActive ? null : 'input_daily')}
-              className={`bg-white rounded-xl shadow p-4 cursor-pointer transition-all ${
-                isOperatingActive ? 'ring-2 ring-red-400 shadow-md' : 'hover:shadow-sm'
-              }`}
-            >
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-xs font-semibold text-gray-600 flex items-center gap-1.5">
-                  운전자금 상세
-                  {isOperatingActive && (
-                    <span className="text-xs text-red-500 font-medium">⚠️ 미입력 이슈</span>
-                  )}
-                </h3>
-                <span className="text-xs text-gray-400">{db.latestDaily.writer} 입력</span>
-              </div>
-              <div className="space-y-1.5">
-                {[
-                  { label: '보통예금 / CMA', value: db.latestDaily.krw_demand },
-                  { label: '국책자금',        value: db.latestDaily.krw_govt  },
-                  { label: '증권 예수금',     value: db.latestDaily.krw_mmda  },
-                  { label: '외화 (원화환산)', value: db.latestDaily.fx_krw    },
-                ].map(r => (
-                  <div key={r.label} className="flex justify-between text-xs">
-                    <span className="text-gray-500">{r.label}</span>
-                    <span className="tabular-nums font-medium text-gray-700">{fmtKRW(r.value)}</span>
-                  </div>
-                ))}
-                <div className="flex justify-between text-sm font-bold border-t border-gray-100 pt-1.5 mt-1">
-                  <span className="text-gray-700">합계</span>
-                  <span className="text-blue-700 tabular-nums">{fmtKRW(db.kpi.operatingCash)}</span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* 운용자금 상세 */}
-          <div className="bg-white rounded-xl shadow p-4">
-            <h3 className="text-xs font-semibold text-gray-600 mb-3">운용자금 상세</h3>
-            {db.latestInvests.filter(i => i.product !== '국채').length === 0 ? (
-              <p className="text-xs text-gray-400 text-center py-2">없음</p>
-            ) : (
-              <div className="space-y-1.5">
-                {db.latestInvests.filter(i => i.product !== '국채').map(inv => (
-                  <div key={inv.id} className="flex justify-between text-xs">
-                    <span className="text-gray-500 truncate mr-2">{inv.bank}</span>
-                    <span className="tabular-nums font-medium text-gray-700 shrink-0">{fmtKRW(inv.amount)}</span>
-                  </div>
-                ))}
-              </div>
-            )}
+          {/* ── 이슈 확인 ──
+               PC: flex-[2] 비율로 균등 분배
+               모바일: IssueCard 내부 max-h가 높이 제어 */}
+          <div className="lg:flex-[2_2_0] lg:min-h-0">
+            <IssueCard
+              issues={db.detectedIssues}
+              activeKey={activeKey}
+              onStatusChange={handleStatusChange}
+              onHover={handleHover}
+              onFocus={handleFocus}
+            />
           </div>
 
-          {/* 차입금 상세 */}
-          <div className="bg-white rounded-xl shadow p-4">
-            <h3 className="text-xs font-semibold text-gray-600 mb-3">차입금 상세</h3>
-            {db.loans.filter(l => l.active).length === 0 ? (
-              <p className="text-xs text-gray-400 text-center py-2">없음</p>
-            ) : (
-              <div className="space-y-2">
-                {db.loans.filter(l => l.active).map(loan => {
-                  const dday     = calcDday(loan.maturity)
-                  const loanKey  = `loan_${loan.id}`
-                  const isActive = activeKey === loanKey
-                  const linkedIssues = db.detectedIssues.filter(i => i.key === loanKey)
-                  return (
-                    <div
-                      key={loan.id}
-                      onMouseEnter={() => handleHover(loanKey)}
-                      onMouseLeave={() => handleHover(null)}
-                      onClick={e => { e.stopPropagation(); handleFocus(isActive ? null : loanKey) }}
-                      className={`text-xs p-2 rounded-lg cursor-pointer transition-all ${
-                        isActive ? 'bg-blue-50 ring-1 ring-blue-300' : 'hover:bg-gray-50'
-                      }`}
-                    >
-                      <div className="flex justify-between">
-                        <span className="text-gray-600 font-medium">{loan.lender}</span>
-                        <div className="flex items-center gap-1.5">
-                          {isActive && linkedIssues.length > 0 && (
-                            <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">
-                              ⚠️ 이슈 {linkedIssues.length}건
-                            </span>
-                          )}
-                          <span className="tabular-nums font-medium text-gray-800">{fmtKRW(loan.amount)}</span>
+          {/* ── 운전자금 상세 ──
+               헤더는 항상 고정, 바디만 스크롤
+               모바일: max-h-56 직접 제한 / PC: lg:flex-1 로 전환 */}
+          <div
+            onMouseEnter={() => handleHover('input_daily')}
+            onMouseLeave={() => handleHover(null)}
+            onClick={() => handleFocus(isOperatingActive ? null : 'input_daily')}
+            className={`bg-white rounded-xl shadow flex flex-col overflow-hidden cursor-pointer transition-all lg:flex-[3_3_0] lg:min-h-0 ${isOperatingActive ? 'ring-2 ring-red-400 shadow-md' : 'hover:shadow-sm'}`}
+          >
+            {/* 헤더 — 항상 상단 고정 */}
+            <div className="shrink-0 flex items-center justify-between px-4 pt-3 pb-2 border-b border-gray-100">
+              <h3 className="text-xs font-semibold text-gray-600 flex items-center gap-1.5">
+                운전자금 상세
+                {isOperatingActive && (
+                  <span className="text-xs text-red-500 font-medium">⚠️ 미입력 이슈</span>
+                )}
+              </h3>
+              {db.latestDaily && (
+                <span className="text-xs text-gray-400">{db.latestDaily.writer} 입력</span>
+              )}
+            </div>
+            {/* 바디 — 모바일: max-h-44 / PC: flex-1 */}
+            <div className="overflow-y-auto min-h-0 px-4 py-3
+                            max-h-44 lg:flex-1 lg:max-h-none">
+              {db.latestDaily ? (
+                <div className="space-y-1.5">
+                  {[
+                    { label: '보통예금 / CMA', value: db.latestDaily.krw_demand },
+                    { label: '국책자금',        value: db.latestDaily.krw_govt  },
+                    { label: '증권 예수금',     value: db.latestDaily.krw_mmda  },
+                    { label: '외화 (원화환산)', value: db.latestDaily.fx_krw    },
+                  ].map(r => (
+                    <div key={r.label} className="flex justify-between text-xs">
+                      <span className="text-gray-500">{r.label}</span>
+                      <span className="tabular-nums font-medium text-gray-700">{fmtKRW(r.value)}</span>
+                    </div>
+                  ))}
+                  <div className="flex justify-between text-sm font-bold border-t border-gray-100 pt-1.5 mt-1">
+                    <span className="text-gray-700">합계</span>
+                    <span className="text-blue-700 tabular-nums">{fmtKRW(db.kpi.operatingCash)}</span>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-gray-400 text-center py-2">데이터 없음</p>
+              )}
+            </div>
+          </div>
+
+          {/* ── 운용자금 상세 ── */}
+          <div className="bg-white rounded-xl shadow flex flex-col overflow-hidden
+                          lg:flex-[3_3_0] lg:min-h-0">
+            <div className="shrink-0 px-4 pt-3 pb-2 border-b border-gray-100">
+              <h3 className="text-xs font-semibold text-gray-600">운용자금 상세</h3>
+            </div>
+            <div className="overflow-y-auto min-h-0 px-4 py-3
+                            max-h-44 lg:flex-1 lg:max-h-none">
+              {db.latestInvests.filter(i => i.product !== '국채').length === 0 ? (
+                <p className="text-xs text-gray-400 text-center py-2">없음</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {db.latestInvests.filter(i => i.product !== '국채').map(inv => (
+                    <div key={inv.id} className="flex justify-between text-xs">
+                      <span className="text-gray-500 truncate mr-2">{inv.bank}</span>
+                      <span className="tabular-nums font-medium text-gray-700 shrink-0">{fmtKRW(inv.amount)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ── 차입금 상세 ── */}
+          <div className="bg-white rounded-xl shadow flex flex-col overflow-hidden
+                          lg:flex-[3_3_0] lg:min-h-0">
+            <div className="shrink-0 px-4 pt-3 pb-2 border-b border-gray-100">
+              <h3 className="text-xs font-semibold text-gray-600">차입금 상세</h3>
+            </div>
+            <div className="overflow-y-auto min-h-0 px-4 py-3
+                            max-h-44 lg:flex-1 lg:max-h-none">
+              {db.loans.filter(l => l.active).length === 0 ? (
+                <p className="text-xs text-gray-400 text-center py-2">없음</p>
+              ) : (
+                <div className="space-y-2">
+                  {db.loans.filter(l => l.active).map(loan => {
+                    const dday       = calcDday(loan.maturity)
+                    const loanKey    = `loan_${loan.id}`
+                    const isActive   = activeKey === loanKey
+                    const linkedIssues = db.detectedIssues.filter(i => i.key === loanKey)
+                    return (
+                      <div
+                        key={loan.id}
+                        onMouseEnter={() => handleHover(loanKey)}
+                        onMouseLeave={() => handleHover(null)}
+                        onClick={e => { e.stopPropagation(); handleFocus(isActive ? null : loanKey) }}
+                        className={`text-xs p-2 rounded-lg cursor-pointer transition-all ${
+                          isActive ? 'bg-blue-50 ring-1 ring-blue-300' : 'hover:bg-gray-50'
+                        }`}
+                      >
+                        <div className="flex justify-between">
+                          <span className="text-gray-600 font-medium">{loan.lender}</span>
+                          <div className="flex items-center gap-1.5">
+                            {isActive && linkedIssues.length > 0 && (
+                              <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">
+                                ⚠️ 이슈 {linkedIssues.length}건
+                              </span>
+                            )}
+                            <span className="tabular-nums font-medium text-gray-800">{fmtKRW(loan.amount)}</span>
+                          </div>
+                        </div>
+                        <div className="flex justify-between text-gray-400 mt-0.5">
+                          <span>{loan.rate}% · {loan.maturity}</span>
+                          <span className={`font-medium ${
+                            dday <= 30 ? 'text-red-500' : dday <= 90 ? 'text-amber-500' : 'text-gray-400'
+                          }`}>D-{dday}</span>
                         </div>
                       </div>
-                      <div className="flex justify-between text-gray-400 mt-0.5">
-                        <span>{loan.rate}% · {loan.maturity}</span>
-                        <span className={`font-medium ${
-                          dday <= 30 ? 'text-red-500' : dday <= 90 ? 'text-amber-500' : 'text-gray-400'
-                        }`}>D-{dday}</span>
-                      </div>
-                    </div>
-                  )
-                })}
-                <div className="flex justify-between text-sm font-bold border-t border-gray-100 pt-1.5">
-                  <span className="text-gray-700">합계</span>
-                  <span className="text-red-600 tabular-nums">{fmtKRW(db.kpi.totalLoan)}</span>
+                    )
+                  })}
+                  <div className="flex justify-between text-sm font-bold border-t border-gray-100 pt-1.5">
+                    <span className="text-gray-700">합계</span>
+                    <span className="text-red-600 tabular-nums">{fmtKRW(db.kpi.totalLoan)}</span>
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
         </div>
