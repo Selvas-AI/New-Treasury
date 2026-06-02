@@ -248,6 +248,15 @@ basename: `/New-Treasury`
 2. **변경 이력 기록**: 새롭게 파악된 이슈나 중요한 구조적 변경사항은 `docs/CHANGELOG.md` 또는 적절한 신규 문서를 생성해 기록한다.
 3. **TODO 체크**: `docs/TODO.md`에 있는 항목을 완료했다면 해당 체크박스를 `[x]`로 업데이트한다.
 
+### 🔒 대시보드 컴포넌트 하네스 검증 규칙
+
+`src/pages/DashboardPage.tsx` 및 하위 카드 컴포넌트(`WaterfallCard`, `IssueCard`, `CashflowChart`, `EquityCard`, 우측 상세 패널 등)를 **수정할 때는 반드시** `docs/pages/DashboardPage.md`의 **"고정 높이 및 내부 스크롤 규칙(§3)"을 준수**해야 한다.
+
+- ✅ 카드 높이는 고정 (`flex-1 min-h-0` 또는 `h-*` 명시)
+- ✅ 콘텐츠 초과 시 카드 내부에 `overflow-y: auto` 적용
+- ❌ 콘텐츠 양에 따라 카드 높이가 동적으로 늘어나는 코드 금지
+- ❌ 우측 상세 패널 카드에 `h-auto` / `min-h-*` 없이 `overflow: visible` 사용 금지
+
 ---
 
 ## 14. 개발 시 체크리스트
