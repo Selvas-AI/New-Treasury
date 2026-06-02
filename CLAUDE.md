@@ -1,6 +1,6 @@
 # CLAUDE.md — Selvas Treasury (New-Treasury)
 > 신규 세션 시작 시 이 파일을 먼저 읽어 컨텍스트를 복원하세요.
-> 최종 업데이트: 2026-06-01 (S-1/S-4 커밋 완료)
+> 최종 업데이트: 2026-06-02
 
 ---
 
@@ -240,7 +240,17 @@ basename: `/New-Treasury`
 
 ---
 
-## 13. 개발 시 체크리스트
+## 13. 개발 및 문서화 규칙 (Documentation Rule)
+
+코드 수정 또는 기능 추가 시 **작업 완료 직전** 반드시 아래 규칙을 따른다.
+
+1. **관련 docs 갱신**: 수정된 기능에 해당하는 `docs/` 내 MD 파일(`SELVAS_TREASURY_CONTEXT.md`, 컴포넌트별 문서 등)을 최신 상태로 업데이트한다.
+2. **변경 이력 기록**: 새롭게 파악된 이슈나 중요한 구조적 변경사항은 `docs/CHANGELOG.md` 또는 적절한 신규 문서를 생성해 기록한다.
+3. **TODO 체크**: `docs/TODO.md`에 있는 항목을 완료했다면 해당 체크박스를 `[x]`로 업데이트한다.
+
+---
+
+## 14. 개발 시 체크리스트
 
 새 세션에서 작업 시작 전:
 - [ ] `pnpm dev` 로 개발 서버 기동 확인 (port 5175)
@@ -250,7 +260,7 @@ basename: `/New-Treasury`
 
 ---
 
-## 14. 참고 문서 (docs/ 폴더)
+## 15. 참고 문서 (docs/ 폴더)
 
 | 문서 | 내용 |
 |------|------|
@@ -259,3 +269,4 @@ basename: `/New-Treasury`
 | `docs/ROUTING_DEEPLINK_SPEC.md` | 딥링크 URL 명세 |
 | `docs/hooks/README.md` | 모든 커스텀 훅 API 레퍼런스 |
 | `docs/INDEX.md` | 문서 전체 인덱스 |
+| `docs/TODO.md` | 기능 구현 TODO (우선순위별 체크리스트) |
