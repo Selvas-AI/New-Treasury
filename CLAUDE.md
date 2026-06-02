@@ -250,12 +250,23 @@ basename: `/New-Treasury`
 
 ### 🔒 대시보드 컴포넌트 하네스 검증 규칙
 
-`src/pages/DashboardPage.tsx` 및 하위 카드 컴포넌트(`WaterfallCard`, `IssueCard`, `CashflowChart`, `EquityCard`, 우측 상세 패널 등)를 **수정할 때는 반드시** `docs/pages/DashboardPage.md`의 **"고정 높이 및 내부 스크롤 규칙(§3)"을 준수**해야 한다.
+`src/pages/DashboardPage.tsx` 및 하위 카드 컴포넌트를 수정할 때는 반드시
+`docs/pages/DashboardPage.md`에 명시된 **"모바일/PC 반응형 그리드 규칙(§2)"** 과
+**"카드 내부 스크롤 규칙(§3)"** 을 준수하여,
+어떤 해상도에서도 UI가 깨지거나 카드가 비정상적으로 길어지지 않도록 구현해야 한다.
 
-- ✅ 카드 높이는 고정 (`flex-1 min-h-0` 또는 `h-*` 명시)
-- ✅ 콘텐츠 초과 시 카드 내부에 `overflow-y: auto` 적용
+**반응형 그리드 체크리스트**:
+- ✅ 모바일(`< lg`): 전체 1열 수직 스택, 카드 순서 논리적 배치
+- ✅ PC(`lg` 이상): 좌측 메인 `8fr` + 우측 패널 `3fr` 2열 분리
+- ✅ KPI 행: `grid-cols-1 sm:grid-cols-3` 반응형 적용
+- ❌ 특정 해상도에서 카드가 겹치거나 넘치는 고정 픽셀 폭 사용 금지
+
+**카드 높이·스크롤 체크리스트**:
+- ✅ 우측 상세 카드 3개: `flex-1 min-h-0` (PC) + `max-h-64 lg:max-h-none` (모바일 제한)
+- ✅ 카드 콘텐츠 영역: `overflow-y-auto min-h-0` 필수 적용
+- ✅ 우측 패널 전체: `lg:h-[calc(100vh-8rem)]`으로 뷰포트에 고정
 - ❌ 콘텐츠 양에 따라 카드 높이가 동적으로 늘어나는 코드 금지
-- ❌ 우측 상세 패널 카드에 `h-auto` / `min-h-*` 없이 `overflow: visible` 사용 금지
+- ❌ `min-h-0` 누락 시 overflow가 동작하지 않음 — 반드시 명시
 
 ---
 
