@@ -1,6 +1,6 @@
 # Selvas Treasury — 문서 인덱스
 
-> 최종 업데이트: 2026-06-01
+> 최종 업데이트: 2026-06-04
 
 ---
 
@@ -29,8 +29,11 @@
 | 문서 | 파일 | 설명 |
 |------|------|------|
 | [KpiCard.md](./components/dashboard/KpiCard.md) | `src/components/dashboard/KpiCard.tsx` | KPI 수치 카드 |
-| [WaterfallCard.md](./components/dashboard/WaterfallCard.md) | `src/components/dashboard/WaterfallCard.tsx` | 수평 바 + 도넛 차트 |
-| [IssueCard.md](./components/dashboard/IssueCard.md) | `src/components/dashboard/IssueCard.tsx` | 이슈 감지 카드 |
+| [WaterfallCard.md](./components/dashboard/WaterfallCard.md) | `src/components/dashboard/WaterfallCard.tsx` | 자금흐름 수평 바 (클릭 가능) |
+| [AssetCompositionCard.md](./components/dashboard/AssetCompositionCard.md) | `src/components/dashboard/AssetCompositionCard.tsx` | 자산구성 도넛 차트 (**신규**) |
+| [FlowDetailDrawer.md](./components/dashboard/FlowDetailDrawer.md) | `src/components/dashboard/FlowDetailDrawer.tsx` | 자금흐름 항목 상세 팝업 (**신규**) |
+| [IssueDrawer.md](./components/dashboard/IssueDrawer.md) | `src/components/dashboard/IssueDrawer.tsx` | 이슈 목록 팝업 (**신규**) |
+| [IssueCard.md](./components/dashboard/IssueCard.md) | `src/components/dashboard/IssueCard.tsx` | ~~우측 패널 이슈 카드~~ (미사용, IssueDrawer로 전환) |
 | [CashflowChart.md](./components/dashboard/CashflowChart.md) | `src/components/dashboard/CashflowChart.tsx` | 기간별 Bar 차트 |
 | [EquityCard.md](./components/dashboard/EquityCard.md) | `src/components/dashboard/EquityCard.tsx` | 지분 목록 + 추이 차트 |
 
@@ -62,6 +65,14 @@
 | [MyCodePage.md](./pages/admin/MyCodePage.md) | `/admin/mycode` | `access_codes` |
 | [UsersPage.md](./pages/admin/UsersPage.md) | `/admin/users` | `access_codes` |
 | [DataPage.md](./pages/admin/DataPage.md) | `/admin/data` | 전체 테이블 집계 |
+
+---
+
+## DB 스키마
+
+| 문서 | 설명 |
+|------|------|
+| [supabase_schema.md](./supabase_schema.md) | 전체 테이블 스키마 DDL 및 설계 의도 |
 
 ---
 

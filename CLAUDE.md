@@ -28,13 +28,17 @@
 
 ```
 React 19.2.6 + TypeScript + Vite 8
-Tailwind CSS v4  (@tailwindcss/vite 플러그인, NOT postcss)
-Recharts         (차트)
-react-router-dom v7  (BrowserRouter, basename="/New-Treasury")
+Tailwind CSS v4       (@tailwindcss/vite 플러그인, NOT postcss)
+Recharts              (차트)
+react-router-dom v7   (BrowserRouter, basename="/New-Treasury")
 @supabase/supabase-js
-zustand          (설치됨, 아직 미사용)
-@tabler/icons-react (설치됨, 현재 이모지 사용 중)
+@tanstack/react-table (테이블 헤드리스 UI — NotionTable 내부 사용)
+zustand               (설치됨, 아직 미사용)
+@tabler/icons-react   (설치됨, 현재 이모지 사용 중)
 ```
+
+> **`vite.config.ts`에 `resolve.dedupe: ['react','react-dom']` 필수** — pnpm 환경에서
+> `@tanstack/react-table` 등 외부 라이브러리가 React를 중복 로딩하면 "Invalid hook call" 런타임 에러 발생.
 
 ---
 
@@ -54,7 +58,9 @@ src/
 ├── components/
 │   ├── Layout.tsx          ← Sidebar + TopBar + Outlet
 │   ├── Sidebar.tsx         ← 접기/모바일 + 하단 실시간 환율
-│   └── TopBar.tsx          ← 법인 선택 + 주가 티커 + 로그아웃
+│   ├── TopBar.tsx          ← 법인 선택 + 주가 티커 + 로그아웃
+│   └── common/
+│       └── NotionTable.tsx ← 공통 노션형 테이블 (컬럼 토글·정렬·Supabase 저장)
 ├── components/dashboard/
 │   ├── KpiCard.tsx
 │   ├── WaterfallCard.tsx   ← 자금흐름 수평바 + 도넛 차트
@@ -77,6 +83,7 @@ src/
 │   ├── useDashboard.ts     ← 대시보드 집계 훅
 │   ├── useGas.ts           ← GAS 공통 fetch 헬퍼 (timeout/HTML감지)
 │   ├── useStockTicker.ts   ← 3개 법인 주가 5분 폴링 (TopBar 티커)
+│   ├── useTableSettings.ts ← NotionTable 뷰 설정 Supabase read/upsert
 │   └── useDashboardLayout.ts ← DnD 레이아웃 훅 (현재 미사용)
 ├── pages/
 │   ├── DashboardPage.tsx   ← 통합 상황판 (이번 세션 레이아웃 재설계)
@@ -97,32 +104,61 @@ VITE_GAS_API_URL=https://script.google.com/macros/s/AKfycbwZ.../exec
 
 ---
 
-## 7. 이번 세션(2026-06-01)에서 완료된 작업
+## 7. 세션별 완료 작업 이력
 
-### Task 1: 지분/장기투자 신규 종목 등록 폼
+### 2026-06-01 세션
+
+#### Task 1: 지분/장기투자 신규 종목 등록 폼
 - `NewEquityForm.tsx` — KOSPI/KOSDAQ/비상장 신규 종목 등록
 - `NewBondForm.tsx` — 국채/채권 신규 등록 (ISIN + 기준가 조회)
 - `EquityPage.tsx` — 각 탭 상단에 신규 등록 버튼 연결
 
-### Task 2: 통합 상황판 레이아웃 재설계
-- **새 레이아웃** (`DashboardPage.tsx`):
-  ```
-  [KPI 3fr | KPI 3fr | KPI 2fr]   ← 좌 8fr
-  [WaterfallCard        8fr    ]   우 3fr: IssueCard
-  [CashflowChart | EquityCard  ]       → 운전자금 상세
-                                       → 운용자금 상세
-                                       → 차입금 상세
-  ```
-- 외부 그리드: `lg:grid-cols-[8fr_3fr]`
-- KPI 비율: `style={{gridTemplateColumns:'3fr 3fr 2fr'}}`
-- 하단 좌측: `grid-cols-2` (CashflowChart + EquityCard 나란히)
+#### Task 2: 통합 상황판 레이아웃 재설계 (8fr+3fr 2컬럼)
 - DnD(`react-grid-layout`) 도입 시도 → **롤백** (필요시 재도입 검토)
 
-### Task 3: GAS/시세 연동 기반 구현
+#### Task 3: GAS/시세 연동 기반 구현
 - `useGas.ts` — timeout(8s) + HTML응답 감지 + abort 처리
 - `useStockTicker.ts` — 5분 폴링, GAS 실패시 `price:0` mock 유지
 - `TopBar.tsx` — 주가 티커 영역 추가 (GAS 미연결시 스켈레톤)
 - `Sidebar.tsx` — 하단 실시간 환율 섹션 추가 (자동 로드)
+
+---
+
+### 2026-06-04 세션 (Updateplan_260604 기반 대시보드 재설계)
+
+#### Task 1: KPI 카드 전체 너비 이동
+- KPI 3개 카드를 `8fr` 좌측 그리드 내부 → **전체 너비(full-width)** 로 이동
+- 불가용 자산 카드 우측이 페이지 끝에 닿도록 구현
+- `DashboardPage.tsx` 수정
+
+#### Task 2: 이슈 전광판 ticker (헤더 인라인 A안)
+- 헤더에 이슈 ticker 추가: TREASURY Dashboard ↔ 날짜/새로고침 사이
+- 우→좌 CSS 애니메이션 (`issue-scroll` @keyframes, `src/index.css`)
+- ticker 클릭 시 `IssueDrawer` 팝업 열기
+- 이슈 없으면 빈 `flex-1` div로 날짜 오른쪽 정렬 유지
+
+#### Task 3: WaterfallCard / AssetCompositionCard 분리
+- 기존 `WaterfallCard` (자금흐름 + 도넛 차트 통합) → 두 카드로 분리
+  - `WaterfallCard.tsx`: 자금흐름 바 차트 (클릭 핸들러 추가)
+  - `AssetCompositionCard.tsx`: 도넛 차트 + 범례 + 원화/외화 비율 (신규)
+- 레이아웃: `sm:grid-cols-[3fr_1fr]` 나란히 배치
+
+#### Task 4: FlowDetailDrawer — 자금흐름 항목 클릭 상세 팝업
+- `FlowDetailDrawer.tsx` (신규): 자금흐름 항목 클릭 시 플로팅 패널 표시
+- 항목별 상세: 운전자금·운용자금·차입금·외화·순현금·불가용
+- 불가용 상세: 지분(비상장·매각제한) 종목별 + 운용/국채 불가용 개별 목록 + 수익률
+- 기존 우측 패널 상세 카드(운전/운용/차입) → 팝업으로 전환
+
+#### Task 5: IssueDrawer — 이슈 목록 팝업
+- `IssueDrawer.tsx` (신규): 이슈 확인 팝업 패널
+- 헤더 ticker 클릭 → `IssueDrawer` 열기
+- 이슈 상태 변경(미조치/검토중/완료), 바로가기 링크, 전체 이력 이동 지원
+- 기존 우측 패널 `IssueCard` 고정 카드 제거
+
+#### Task 6: 레이아웃 단순화
+- 기존 `lg:grid-cols-[8fr_3fr]` 2컬럼 그리드 → **단일 컬럼** 구조로 변경
+- 우측 패널(이슈확인·운전자금·운용자금·차입금 상세) 완전 제거
+- 상세 정보는 모두 팝업 드로어로 전환
 
 ---
 
@@ -150,7 +186,76 @@ GAS 응답 형식:
 
 ---
 
-## 9. ⚠️ 중요 시행착오 & 금지사항
+## 9. 🗂️ NotionTable 개발 표준 (신규 페이지 필수 적용)
+
+새로운 데이터 목록 페이지·컴포넌트를 개발할 때는 raw `<table>` 대신 **반드시 `NotionTable`을 사용**한다.
+
+### 적용 현황
+
+| 페이지/컴포넌트 | tableId | 상태 |
+|---|---|---|
+| `LoansPage.tsx` (차입 중) | `loans_active` | ✅ 적용 완료 |
+| `LoansPage.tsx` (상환 완료) | `loans_inactive` | ✅ 적용 완료 |
+| `InvestPage.tsx` (운용 중) | `invest_active` | ✅ 적용 완료 |
+| `InvestPage.tsx` (만기/종료) | `invest_inactive` | ✅ 적용 완료 |
+| `HistoryPage.tsx` (표 뷰) | `history_table` | ✅ 적용 완료 |
+| `EquityHistoryPanel.tsx` | `equity_history` | ✅ 적용 완료 |
+| `BondHistoryPanel.tsx` | `bond_history` | ✅ 적용 완료 |
+
+### 신규 페이지 적용 체크리스트
+
+```tsx
+// 1. import
+import { NotionTable, type ColumnDef } from '../components/common/NotionTable'
+
+// 2. 타입 정의된 컬럼 배열 작성
+const columns: ColumnDef<MyRecord, unknown>[] = [
+  { accessorKey: 'field',  header: '헤더명' },
+  { accessorKey: 'amount', header: '금액',
+    cell: ({ getValue }) => fmtKRW(getValue<number>()) },
+  // computed 컬럼: accessorFn 사용
+  { id: 'computed', header: '계산값',
+    accessorFn: row => someCalc(row),
+    cell: ({ getValue }) => <Badge>{getValue<number>()}</Badge> },
+  // 정렬 불가 액션 컬럼
+  { id: 'actions', header: '', enableSorting: false,
+    cell: ({ row }) => <EditDeleteButtons rec={row.original} /> },
+]
+
+// 3. tableId 규칙: '{페이지명}_{탭명}' (소문자, 언더스코어)
+//    예: 'loans_active', 'invest_inactive', 'history_table'
+//    같은 컬럼 구조를 공유하는 패널은 하나의 ID 사용 가능
+//    예: 'equity_history' (모든 종목 이력 패널 공유)
+
+// 4. 렌더링
+<NotionTable<MyRecord>
+  tableId="page_tab"
+  columns={columns}
+  data={list}
+  emptyText="데이터가 없습니다."
+/>
+```
+
+### ColumnDef 패턴 레퍼런스
+
+| 케이스 | 방법 |
+|--------|------|
+| DB 필드 직접 표시 | `accessorKey: 'field'` |
+| 포맷팅 필요 (금액·날짜·%) | `accessorKey` + `cell: ({ getValue }) => ...` |
+| 2개 이상 필드 조합 | `accessorFn: row => calc(row.a, row.b)` + `cell: ({ row }) => ...` |
+| 정렬 기준과 표시값이 다름 | `accessorFn`으로 정렬 기준값 반환, `cell`로 별도 표시 |
+| 액션 버튼 (수정·삭제) | `id: 'actions'`, `enableSorting: false`, `cell: ({ row }) => <Btns />` |
+
+### tableId 네이밍 규칙
+
+- 형식: `{페이지}_{구분}` (소문자, 언더스코어)
+- 탭이 있는 페이지: `loans_active` / `loans_inactive` 처럼 탭별로 분리
+- 동일 컬럼 구조를 공유하는 서브패널: 하나의 ID 공유 가능
+- Supabase `user_table_views` 테이블에 `(sb_id, table_id)` Unique 저장됨
+
+---
+
+## 10. ⚠️ 중요 시행착오 & 금지사항 (구 §9)
 
 ### [CRITICAL] useRef + @types/node 타입 충돌 → React 19 앱 전체 크래시
 ```
@@ -194,7 +299,7 @@ useEffect(() => {
 
 ---
 
-## 10. Supabase 핵심 테이블
+## 11. Supabase 핵심 테이블
 
 | 테이블 | 설명 |
 |--------|------|
@@ -209,7 +314,7 @@ useEffect(() => {
 
 ---
 
-## 11. 라우팅 구조
+## 12. 라우팅 구조
 
 ```
 /dashboard/:company?
@@ -228,7 +333,7 @@ basename: `/New-Treasury`
 
 ---
 
-## 12. 주요 유틸 함수 (src/lib/format.ts)
+## 13. 주요 유틸 함수 (src/lib/format.ts)
 
 | 함수 | 설명 |
 |------|------|
@@ -240,7 +345,7 @@ basename: `/New-Treasury`
 
 ---
 
-## 13. 개발 및 문서화 규칙 (Documentation Rule)
+## 14. 개발 및 문서화 규칙 (Documentation Rule)
 
 코드 수정 또는 기능 추가 시 **작업 완료 직전** 반드시 아래 규칙을 따른다.
 
@@ -270,7 +375,7 @@ basename: `/New-Treasury`
 
 ---
 
-## 14. 개발 시 체크리스트
+## 15. 개발 시 체크리스트
 
 새 세션에서 작업 시작 전:
 - [ ] `pnpm dev` 로 개발 서버 기동 확인 (port 5175)
@@ -280,7 +385,7 @@ basename: `/New-Treasury`
 
 ---
 
-## 15. 참고 문서 (docs/ 폴더)
+## 16. 참고 문서 (docs/ 폴더)
 
 | 문서 | 내용 |
 |------|------|

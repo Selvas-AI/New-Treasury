@@ -1,5 +1,14 @@
 @import "tailwindcss";
 
+/* ── Tailwind v4: .dark 클래스 기반 다크 모드 variant ─── */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ── 다크모드 기본 배경 ──────────────────────────────── */
+.dark body {
+  background-color: #111827;
+  color: #f9fafb;
+}
+
 /* ── 주가 전광판 marquee ─────────────────────────────── */
 @keyframes ticker-scroll {
   from { transform: translateX(0); }
@@ -13,6 +22,28 @@
 }
 
 .ticker-track:hover {
+  animation-play-state: paused;
+}
+
+/* ── 자금흐름 상세 드로어 슬라이드인 ────────────────── */
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(16px) translateY(-50%); }
+  to   { opacity: 1; transform: translateX(0)    translateY(-50%); }
+}
+
+/* ── 이슈 전광판 (우→좌 단방향) ─────────────────────── */
+@keyframes issue-scroll {
+  0%   { transform: translateX(100%); }
+  100% { transform: translateX(-100%); }
+}
+
+.issue-ticker-track {
+  display: flex;
+  white-space: nowrap;
+  animation: issue-scroll 18s linear infinite;
+}
+
+.issue-ticker-track:hover {
   animation-play-state: paused;
 }
 
