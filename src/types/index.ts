@@ -107,6 +107,42 @@ export interface FxRate {
   unit: number          // JPY는 100단위
 }
 
+// ─── 정책회의 (policy_meetings) ─────────────────────────
+export interface PolicyMeeting {
+  id: string
+  title: string
+  meeting_type: '정책회의' | '운영회의'
+  held_at: string       // YYYY-MM-DD
+  created_by: string
+  created_at: string
+}
+
+// ─── 의결사항 (policy_decisions) ────────────────────────
+export type DecisionStatus = 'pending' | 'in_progress' | 'completed'
+
+export interface PolicyDecision {
+  id: string
+  meeting_id: string
+  company: Company
+  title: string
+  decision: string
+  owner: string
+  due_date: string      // YYYY-MM-DD
+  status: DecisionStatus
+  created_at: string
+}
+
+// ─── 정책 파라미터 (policy_params) ──────────────────────
+export interface PolicyParam {
+  id: string
+  company: Company
+  param_key: string
+  param_value: number | null
+  param_text: string | null
+  updated_by: string
+  updated_at: string
+}
+
 // ─── 공통 훅 반환 타입 ────────────────────────────────────
 export interface UseQueryResult<T> {
   data: T[]

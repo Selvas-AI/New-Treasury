@@ -82,8 +82,11 @@ export default function HistoryPage() {
 
       // 운용자금: 해당 날짜 이하 레코드 기준 최신 집계
       const investsUpTo = inv.data.filter(i => {
-        const dt = i.start || i.priceDate || ''
-        return dt <= d.date
+        // 채권은 priceDate(시세 기준일) 우선, 비채권은 start(운용 시작일) 우선
+        const dt = i.product === '국채'
+          ? (i.priceDate || i.start || '')
+          : (i.start || i.priceDate || '')
+        return dt !== '' && dt <= d.date
       })
       const latest = getLatestInvestments(investsUpTo)
       const invest = latest.reduce((s, i) => {
@@ -123,34 +126,36 @@ export default function HistoryPage() {
   const maxNet = rows.length ? Math.max(...rows.map(r => r.net)) : 0
   const minNet = rows.length ? Math.min(...rows.map(r => r.net)) : 0
 
+  const isDark = typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
+
   return (
     <div className="space-y-5 max-w-6xl mx-auto">
 
       {/* 헤더 */}
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <h2 className="text-lg font-bold text-gray-800">자금 변동 이력</h2>
+        <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100">자금 변동 이력</h2>
         <div className="flex items-center gap-2">
           {/* 기간 탭 */}
-          <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+          <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
             {PERIODS.map(p => (
               <button key={p.value} onClick={() => setPeriod(p.value)}
                 className={`text-xs px-3 py-1.5 rounded-md transition-colors ${
                   period === p.value
-                    ? 'bg-white text-blue-700 font-semibold shadow-sm'
-                    : 'text-gray-500 hover:text-gray-700'
+                    ? 'bg-white dark:bg-gray-700 text-blue-700 font-semibold shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
                 }`}>
                 {p.label}
               </button>
             ))}
           </div>
           {/* 보기 전환 */}
-          <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+          <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
             {(['table', 'chart'] as const).map(v => (
               <button key={v} onClick={() => setView(v)}
                 className={`text-xs px-3 py-1.5 rounded-md transition-colors ${
                   view === v
-                    ? 'bg-white text-blue-700 font-semibold shadow-sm'
-                    : 'text-gray-500 hover:text-gray-700'
+                    ? 'bg-white dark:bg-gray-700 text-blue-700 font-semibold shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
                 }`}>
                 {v === 'table' ? '📋 표' : '📈 차트'}
               </button>
@@ -162,29 +167,29 @@ export default function HistoryPage() {
       {/* 요약 KPI */}
       {latest && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-            <p className="text-xs text-blue-600 font-medium mb-1">최근 운전자금</p>
-            <p className="text-lg font-bold text-blue-800">{fmtKRW(latest.operating)}</p>
-            <p className="text-xs text-blue-400 mt-1">{latest.date}</p>
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 dark:bg-blue-950/30 dark:border-blue-800">
+            <p className="text-xs text-blue-600 font-medium mb-1 dark:text-blue-400">최근 운전자금</p>
+            <p className="text-lg font-bold text-blue-800 dark:text-blue-300">{fmtKRW(latest.operating)}</p>
+            <p className="text-xs text-blue-400 mt-1 dark:text-blue-500">{latest.date}</p>
           </div>
-          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
-            <p className="text-xs text-emerald-600 font-medium mb-1">최근 운용자금</p>
-            <p className="text-lg font-bold text-emerald-800">{fmtKRW(latest.invest)}</p>
+          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 dark:bg-emerald-950/30 dark:border-emerald-800">
+            <p className="text-xs text-emerald-600 font-medium mb-1 dark:text-emerald-400">최근 운용자금</p>
+            <p className="text-lg font-bold text-emerald-800 dark:text-emerald-300">{fmtKRW(latest.invest)}</p>
           </div>
-          <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-            <p className="text-xs text-red-500 font-medium mb-1">차입금</p>
-            <p className="text-lg font-bold text-red-800">{fmtKRW(latest.loan)}</p>
+          <div className="bg-red-50 border border-red-200 rounded-xl p-4 dark:bg-red-950/30 dark:border-red-800">
+            <p className="text-xs text-red-500 font-medium mb-1 dark:text-red-400">차입금</p>
+            <p className="text-lg font-bold text-red-800 dark:text-red-300">{fmtKRW(latest.loan)}</p>
           </div>
           <div className={`border rounded-xl p-4 ${latest.net >= 0
-            ? 'bg-gray-50 border-gray-200'
-            : 'bg-red-50 border-red-200'}`}>
-            <p className={`text-xs font-medium mb-1 ${latest.net >= 0 ? 'text-gray-600' : 'text-red-600'}`}>
+            ? 'bg-gray-50 border-gray-200 dark:bg-gray-800 dark:border-gray-700'
+            : 'bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-800'}`}>
+            <p className={`text-xs font-medium mb-1 ${latest.net >= 0 ? 'text-gray-600 dark:text-gray-300' : 'text-red-600 dark:text-red-400'}`}>
               순현금 포지션
             </p>
-            <p className={`text-lg font-bold ${latest.net >= 0 ? 'text-gray-800' : 'text-red-800'}`}>
+            <p className={`text-lg font-bold ${latest.net >= 0 ? 'text-gray-800 dark:text-gray-100' : 'text-red-800 dark:text-red-300'}`}>
               {fmtKRW(latest.net)}
             </p>
-            <p className="text-xs text-gray-400 mt-1">
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
               최고 {fmtKRW(maxNet)} / 최저 {fmtKRW(minNet)}
             </p>
           </div>
@@ -192,19 +197,19 @@ export default function HistoryPage() {
       )}
 
       {loading ? (
-        <div className="bg-white rounded-xl shadow p-8 text-center text-sm text-gray-400">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow p-8 text-center text-sm text-gray-400 dark:text-gray-500">
           로딩 중...
         </div>
       ) : rows.length === 0 ? (
-        <div className="bg-white rounded-xl shadow p-8 text-center text-sm text-gray-400">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow p-8 text-center text-sm text-gray-400 dark:text-gray-500">
           해당 기간에 데이터가 없습니다.
         </div>
       ) : (
         <>
           {/* 차트 뷰 */}
           {view === 'chart' && (
-            <div className="bg-white rounded-xl shadow p-5">
-              <h3 className="text-sm font-semibold text-gray-600 mb-4">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow p-5">
+              <h3 className="text-sm font-semibold text-gray-600 dark:text-gray-300 mb-4">
                 현금흐름 추이 ({rows[0]?.date} ~ {rows[rows.length - 1]?.date})
               </h3>
               <ResponsiveContainer width="100%" height={280}>
@@ -222,17 +227,22 @@ export default function HistoryPage() {
                       </linearGradient>
                     ))}
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis dataKey="dateLabel" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
+                  <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#374151' : '#f0f0f0'} />
+                  <XAxis dataKey="dateLabel" tick={{ fontSize: 10, fill: isDark ? '#9ca3af' : undefined }} interval="preserveStartEnd" />
                   <YAxis
-                    tick={{ fontSize: 10 }}
+                    tick={{ fontSize: 10, fill: isDark ? '#9ca3af' : undefined }}
                     tickFormatter={v => `${(v / 10000).toFixed(0)}억`}
                     width={48}
                   />
                   <Tooltip
                     formatter={(v) => fmtKRW(Number(v) * 10_000)}
                     labelStyle={{ fontSize: 12 }}
-                    contentStyle={{ fontSize: 12 }}
+                    contentStyle={{
+                      fontSize: 12,
+                      backgroundColor: isDark ? '#1f2937' : undefined,
+                      borderColor: isDark ? '#374151' : undefined,
+                      color: isDark ? '#f3f4f6' : undefined,
+                    }}
                   />
                   <Legend iconType="circle" wrapperStyle={{ fontSize: 12 }} />
                   <Area type="monotone" dataKey="opM"   name="운전자금" stroke="#3b82f6" fill="url(#gOp)"   strokeWidth={2} dot={false} />
@@ -246,14 +256,14 @@ export default function HistoryPage() {
 
           {/* 표 뷰 */}
           {view === 'table' && (
-            <div className="bg-white rounded-xl shadow">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-gray-100">
+                    <tr className="border-b border-gray-100 dark:border-gray-700">
                       {['기준일', '운전자금', '운용자금', '차입금', '순현금 포지션', '전일 대비', '작성자'].map(h => (
                         <th key={h}
-                          className="text-left text-xs text-gray-400 font-medium px-5 py-3 whitespace-nowrap first:pl-5">
+                          className="text-left text-xs text-gray-400 dark:text-gray-500 font-medium px-5 py-3 whitespace-nowrap first:pl-5">
                           {h}
                         </th>
                       ))}
@@ -264,21 +274,21 @@ export default function HistoryPage() {
                       const prev = arr[i + 1]
                       const diff = prev ? row.net - prev.net : null
                       return (
-                        <tr key={row.date} className="border-b border-gray-50 hover:bg-gray-50">
-                          <td className="px-5 py-3 font-medium text-gray-800 whitespace-nowrap">
+                        <tr key={row.date} className="border-b border-gray-50 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700">
+                          <td className="px-5 py-3 font-medium text-gray-800 dark:text-gray-100 whitespace-nowrap">
                             {row.date}
                           </td>
-                          <td className="px-5 py-3 text-right tabular-nums text-blue-700">
+                          <td className="px-5 py-3 text-right tabular-nums text-blue-700 dark:text-blue-400">
                             {fmtKRW(row.operating)}
                           </td>
-                          <td className="px-5 py-3 text-right tabular-nums text-emerald-700">
+                          <td className="px-5 py-3 text-right tabular-nums text-emerald-700 dark:text-emerald-400">
                             {fmtKRW(row.invest)}
                           </td>
-                          <td className="px-5 py-3 text-right tabular-nums text-red-600">
+                          <td className="px-5 py-3 text-right tabular-nums text-red-600 dark:text-red-400">
                             {fmtKRW(row.loan)}
                           </td>
                           <td className={`px-5 py-3 text-right tabular-nums font-semibold ${
-                            row.net >= 0 ? 'text-gray-800' : 'text-red-600'
+                            row.net >= 0 ? 'text-gray-800 dark:text-gray-100' : 'text-red-600 dark:text-red-400'
                           }`}>
                             {fmtKRW(row.net)}
                           </td>
@@ -286,14 +296,14 @@ export default function HistoryPage() {
                             {diff !== null ? (
                               <span className={`text-xs font-medium ${
                                 diff > 0 ? 'text-red-500' :
-                                diff < 0 ? 'text-blue-500' : 'text-gray-400'
+                                diff < 0 ? 'text-blue-500' : 'text-gray-400 dark:text-gray-500'
                               }`}>
                                 {diff > 0 ? '▲' : diff < 0 ? '▼' : '─'}{' '}
                                 {diff !== 0 ? fmtKRW(Math.abs(diff)) : '-'}
                               </span>
-                            ) : <span className="text-gray-300">-</span>}
+                            ) : <span className="text-gray-300 dark:text-gray-600">-</span>}
                           </td>
-                          <td className="px-5 py-3 text-xs text-gray-400">{row.writer}</td>
+                          <td className="px-5 py-3 text-xs text-gray-400 dark:text-gray-500">{row.writer}</td>
                         </tr>
                       )
                     })}

@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useParams } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useInvestments } from '../hooks/useInvestments'
+import { usePolicyBankLimits } from '../hooks/usePolicyBankLimits'
 import { fmtKRW, calcDday, fmtReturn, returnBadgeClass, calcReturn } from '../lib/format'
 import type { InvestmentRecord, Company } from '../types'
 
@@ -28,33 +29,31 @@ export default function InvestPage() {
   const { company: paramCompany, id: paramId } = useParams<{ company?: string; id?: string }>()
   const { user, currentCompany, setCurrentCompany } = useAuth()
   const invest = useInvestments()
+  const bankMaster = usePolicyBankLimits(currentCompany)
 
-  const [tab, setTab] = useState<'active' | 'inactive'>('active')
+  const [tab, setTab]           = useState<'active' | 'inactive'>('active')
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState<FormState>(EMPTY_FORM)
-  const [editId, setEditId] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState(false)
+  const [form, setForm]         = useState<FormState>(EMPTY_FORM)
+  const [editId, setEditId]     = useState<string | null>(null)
+  const [saving, setSaving]     = useState(false)
+  const [error, setError]       = useState<string | null>(null)
+  const [success, setSuccess]   = useState(false)
 
   useEffect(() => {
     if (!paramCompany || user?.role === 'company') return
     if (VALID_COMPANIES.includes(paramCompany as Company)) setCurrentCompany(paramCompany as Company)
   }, [paramCompany, user?.role, setCurrentCompany])
 
-  // 딥링크로 특정 ID 진입 시 해당 레코드 수정 모드
   useEffect(() => {
     if (!paramId || !invest.nonBonds.length) return
     const rec = invest.nonBonds.find(r => r.id === paramId)
     if (rec) loadRecord(rec)
   }, [paramId, invest.nonBonds])
 
-  // 비국채만 필터
   const activeList   = useMemo(() => invest.nonBonds.filter(r => r.active),  [invest.nonBonds])
   const inactiveList = useMemo(() => invest.nonBonds.filter(r => !r.active), [invest.nonBonds])
   const displayList  = tab === 'active' ? activeList : inactiveList
 
-  // 활성 합계
   const totalAvail   = useMemo(() => activeList.filter(r => r.available === '가용')  .reduce((s, r) => s + r.amount, 0), [activeList])
   const totalUnavail = useMemo(() => activeList.filter(r => r.available === '불가용').reduce((s, r) => s + r.amount, 0), [activeList])
 
@@ -91,7 +90,6 @@ export default function InvestPage() {
     if (!currentCompany) return
     setSaving(true)
     setError(null)
-
     const record = {
       ...(editId ? { id: editId } : {}),
       company:          currentCompany,
@@ -106,7 +104,6 @@ export default function InvestPage() {
       active:           true,
       acquisition_cost: Number(form.acquisition_cost) || 0,
     }
-
     const err = await invest.save(record)
     setSaving(false)
     if (err) { setError(err); return }
@@ -132,7 +129,7 @@ export default function InvestPage() {
 
       {/* 헤더 */}
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-bold text-gray-800">운용자금</h2>
+        <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100">운용자금</h2>
         {isEditable && !showForm && (
           <button onClick={() => setShowForm(true)}
             className="text-sm bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
@@ -143,98 +140,114 @@ export default function InvestPage() {
 
       {/* KPI 요약 */}
       <div className="grid grid-cols-3 gap-3">
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-          <p className="text-xs text-blue-600 font-medium mb-1">가용 합계</p>
-          <p className="text-xl font-bold text-blue-800">{fmtKRW(totalAvail)}</p>
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 dark:bg-blue-950/30 dark:border-blue-800">
+          <p className="text-xs text-blue-600 font-medium mb-1 dark:text-blue-400">가용 합계</p>
+          <p className="text-xl font-bold text-blue-800 dark:text-blue-300">{fmtKRW(totalAvail)}</p>
         </div>
-        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
-          <p className="text-xs text-gray-500 font-medium mb-1">불가용 합계</p>
-          <p className="text-xl font-bold text-gray-700">{fmtKRW(totalUnavail)}</p>
+        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 dark:bg-gray-800 dark:border-gray-700">
+          <p className="text-xs text-gray-500 font-medium mb-1 dark:text-gray-400">불가용 합계</p>
+          <p className="text-xl font-bold text-gray-700 dark:text-gray-200">{fmtKRW(totalUnavail)}</p>
         </div>
-        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
-          <p className="text-xs text-emerald-600 font-medium mb-1">총 운용 합계</p>
-          <p className="text-xl font-bold text-emerald-800">{fmtKRW(totalAvail + totalUnavail)}</p>
+        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 dark:bg-emerald-950/30 dark:border-emerald-800">
+          <p className="text-xs text-emerald-600 font-medium mb-1 dark:text-emerald-400">총 운용 합계</p>
+          <p className="text-xl font-bold text-emerald-800 dark:text-emerald-300">{fmtKRW(totalAvail + totalUnavail)}</p>
         </div>
       </div>
 
       {/* 입력 폼 */}
       {isEditable && showForm && (
-        <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow p-6 space-y-5">
+        <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow p-6 space-y-5 dark:bg-gray-800">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-gray-700">
+            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">
               {editId ? '✏️ 수정 중' : '+ 신규 등록'}
             </h3>
             <button type="button" onClick={resetForm}
-              className="text-xs text-gray-400 hover:text-red-500">취소</button>
+              className="text-xs text-gray-400 hover:text-red-500 dark:text-gray-500">취소</button>
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             <div className="md:col-span-2">
-              <label className="block text-xs text-gray-500 mb-1">금융기관 *</label>
-              <input type="text" value={form.bank} onChange={e => setField('bank', e.target.value)}
-                required placeholder="예: KB국민은행"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+              <label className="block text-xs text-gray-500 mb-1 dark:text-gray-400">
+                금융기관 *
+                {bankMaster.data.length > 0 && (
+                  <span className="ml-1 text-gray-400 font-normal">({bankMaster.data.length}개 등록)</span>
+                )}
+              </label>
+              {/* datalist: 자금정책 → 기관한도에 등록된 기관 목록 자동완성 */}
+              <datalist id="bank-master-list">
+                {bankMaster.data.map(b => (
+                  <option key={b.id} value={b.bank_name}>{b.bank_type}</option>
+                ))}
+              </datalist>
+              <input type="text" list="bank-master-list"
+                value={form.bank} onChange={e => setField('bank', e.target.value)}
+                required placeholder="기관명 입력 또는 선택"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" />
+              {bankMaster.data.length === 0 && (
+                <p className="text-xs text-gray-400 mt-0.5">
+                  자금정책 → 기관한도 탭에서 거래 금융기관을 먼저 등록하면 여기서 선택할 수 있습니다.
+                </p>
+              )}
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">상품유형 *</label>
+              <label className="block text-xs text-gray-500 mb-1 dark:text-gray-400">상품유형 *</label>
               <select value={form.product} onChange={e => setField('product', e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100">
                 {PRODUCT_OPTIONS.map(p => <option key={p}>{p}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">통화</label>
+              <label className="block text-xs text-gray-500 mb-1 dark:text-gray-400">통화</label>
               <select value={form.currency} onChange={e => setField('currency', e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100">
                 {CURRENCY_OPTIONS.map(c => <option key={c}>{c}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">금액 *</label>
+              <label className="block text-xs text-gray-500 mb-1 dark:text-gray-400">금액 *</label>
               <input type="number" min="0" value={form.amount} onChange={e => setField('amount', e.target.value)}
                 required placeholder="0"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">수익률 (%)</label>
+              <label className="block text-xs text-gray-500 mb-1 dark:text-gray-400">수익률 (%)</label>
               <input type="number" step="0.01" value={form.rate} onChange={e => setField('rate', e.target.value)}
                 placeholder="0.00"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">가용 여부</label>
+              <label className="block text-xs text-gray-500 mb-1 dark:text-gray-400">가용 여부</label>
               <select value={form.available} onChange={e => setField('available', e.target.value as '가용' | '불가용')}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100">
                 <option value="가용">가용</option>
                 <option value="불가용">불가용</option>
               </select>
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">시작일</label>
+              <label className="block text-xs text-gray-500 mb-1 dark:text-gray-400">시작일</label>
               <input type="date" value={form.start} onChange={e => setField('start', e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">만기일 *</label>
+              <label className="block text-xs text-gray-500 mb-1 dark:text-gray-400">만기일 *</label>
               <input type="date" value={form.maturity} onChange={e => setField('maturity', e.target.value)}
                 required
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">취득가액</label>
+              <label className="block text-xs text-gray-500 mb-1 dark:text-gray-400">취득가액</label>
               <input type="number" min="0" value={form.acquisition_cost}
                 onChange={e => setField('acquisition_cost', e.target.value)}
                 placeholder="0"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" />
             </div>
           </div>
 
-          {/* 수익률 미리보기 */}
           {form.amount && form.acquisition_cost && Number(form.acquisition_cost) > 0 && (() => {
             const ret = calcReturn(Number(form.amount), Number(form.acquisition_cost))
             return (
               <div className="flex items-center gap-2">
-                <span className="text-xs text-gray-500">수익률:</span>
+                <span className="text-xs text-gray-500 dark:text-gray-400">수익률:</span>
                 <span className={`text-sm px-2 py-0.5 rounded font-medium ${returnBadgeClass(ret)}`}>
                   {fmtReturn(ret)}
                 </span>
@@ -252,10 +265,14 @@ export default function InvestPage() {
         </form>
       )}
 
+      {/* FVPL 이관 안내 */}
+      <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-xl px-4 py-3 text-sm text-blue-700 dark:text-blue-300">
+        📊 <strong>변동성 리스크 분석</strong>은 <strong>자금정책 관리 → 변동성 리스크 탭</strong>에서 확인하세요.
+      </div>
+
       {/* 탭 + 목록 */}
-      <div className="bg-white rounded-xl shadow">
-        {/* 탭 */}
-        <div className="flex border-b border-gray-100">
+      <div className="bg-white rounded-xl shadow dark:bg-gray-800">
+        <div className="flex border-b border-gray-100 dark:border-gray-700">
           {[
             { key: 'active',   label: `운용 중 (${activeList.length})` },
             { key: 'inactive', label: `만기/종료 (${inactiveList.length})` },
@@ -265,45 +282,44 @@ export default function InvestPage() {
               className={`px-5 py-3 text-sm font-medium transition-colors ${
                 tab === t.key
                   ? 'border-b-2 border-blue-600 text-blue-700'
-                  : 'text-gray-500 hover:text-gray-700'
+                  : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
               }`}>
               {t.label}
             </button>
           ))}
         </div>
 
-        {/* 테이블 */}
         <div className="p-5">
           {invest.loading ? (
-            <p className="text-sm text-gray-400 text-center py-6">로딩 중...</p>
+            <p className="text-sm text-gray-400 text-center py-6 dark:text-gray-500">로딩 중...</p>
           ) : displayList.length === 0 ? (
-            <p className="text-sm text-gray-400 text-center py-6">데이터가 없습니다.</p>
+            <p className="text-sm text-gray-400 text-center py-6 dark:text-gray-500">데이터가 없습니다.</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-gray-100">
+                  <tr className="border-b border-gray-100 dark:border-gray-700">
                     {['금융기관', '상품', '통화', '금액', '수익률', '가용', '시작일', '만기일', 'D-day', ''].map(h => (
-                      <th key={h} className="text-left text-xs text-gray-400 font-medium pb-2 pr-3 whitespace-nowrap">{h}</th>
+                      <th key={h} className="text-left text-xs text-gray-400 font-medium pb-2 pr-3 whitespace-nowrap dark:text-gray-500">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {displayList.map(rec => {
-                    const dday  = calcDday(rec.maturity)
-                    const ret   = calcReturn(rec.amount, rec.acquisition_cost)
+                    const dday   = calcDday(rec.maturity)
+                    const ret    = calcReturn(rec.amount, rec.acquisition_cost)
                     const urgent = tab === 'active' && dday <= 30
                     return (
                       <tr key={rec.id}
-                        className={`border-b border-gray-50 hover:bg-gray-50 ${urgent ? 'bg-red-50' : ''}`}>
-                        <td className="py-2 pr-3 font-medium text-gray-800 whitespace-nowrap">{rec.bank}</td>
-                        <td className="py-2 pr-3 text-gray-600">{rec.product}</td>
-                        <td className="py-2 pr-3 text-gray-500">{rec.currency}</td>
-                        <td className="py-2 pr-3 text-right tabular-nums font-medium text-gray-800">{fmtKRW(rec.amount)}</td>
+                        className={`border-b border-gray-50 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-700 ${urgent ? 'bg-red-50 dark:bg-red-950/20' : ''}`}>
+                        <td className="py-2 pr-3 font-medium text-gray-800 whitespace-nowrap dark:text-gray-100">{rec.bank}</td>
+                        <td className="py-2 pr-3 text-gray-600 dark:text-gray-300">{rec.product}</td>
+                        <td className="py-2 pr-3 text-gray-500 dark:text-gray-400">{rec.currency}</td>
+                        <td className="py-2 pr-3 text-right tabular-nums font-medium text-gray-800 dark:text-gray-100">{fmtKRW(rec.amount)}</td>
                         <td className="py-2 pr-3">
                           {ret !== null
                             ? <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${returnBadgeClass(ret)}`}>{fmtReturn(ret)}</span>
-                            : <span className="text-xs text-gray-400">{rec.rate ? `${rec.rate}%` : '-'}</span>
+                            : <span className="text-xs text-gray-400 dark:text-gray-500">{rec.rate ? `${rec.rate}%` : '-'}</span>
                           }
                         </td>
                         <td className="py-2 pr-3">
@@ -311,8 +327,8 @@ export default function InvestPage() {
                             rec.available === '가용' ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'
                           }`}>{rec.available}</span>
                         </td>
-                        <td className="py-2 pr-3 text-xs text-gray-400 whitespace-nowrap">{rec.start}</td>
-                        <td className="py-2 pr-3 text-xs text-gray-600 whitespace-nowrap">{rec.maturity}</td>
+                        <td className="py-2 pr-3 text-xs text-gray-400 whitespace-nowrap dark:text-gray-500">{rec.start}</td>
+                        <td className="py-2 pr-3 text-xs text-gray-600 whitespace-nowrap dark:text-gray-300">{rec.maturity}</td>
                         <td className="py-2 pr-3 whitespace-nowrap">
                           {tab === 'active' && (
                             <span className={`text-xs font-medium ${

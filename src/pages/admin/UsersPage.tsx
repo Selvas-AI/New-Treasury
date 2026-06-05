@@ -16,9 +16,9 @@ interface AccessCode {
 const ROLE_OPTIONS: UserRole[] = ['master', 'ceo', 'company']
 const COMPANY_OPTIONS = ['셀바스에이아이', '셀바스헬스케어', '메디아나']
 const ROLE_BADGE: Record<UserRole, string> = {
-  master:  'bg-purple-100 text-purple-700',
-  ceo:     'bg-blue-100 text-blue-700',
-  company: 'bg-gray-100 text-gray-600',
+  master:  'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-400',
+  ceo:     'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400',
+  company: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400',
 }
 
 const EMPTY_FORM = {
@@ -109,7 +109,7 @@ export default function UsersPage() {
   return (
     <div className="space-y-5 max-w-4xl mx-auto">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-bold text-gray-800">사용자 관리</h2>
+        <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100">사용자 관리</h2>
         {!showForm && (
           <button onClick={() => setShowForm(true)}
             className="text-sm bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
@@ -120,50 +120,50 @@ export default function UsersPage() {
 
       {/* 등록/수정 폼 */}
       {showForm && (
-        <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="bg-white dark:bg-gray-800 rounded-xl shadow p-6 space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-gray-700">{editId ? '✏️ 수정 중' : '+ 사용자 추가'}</h3>
-            <button type="button" onClick={resetForm} className="text-xs text-gray-400 hover:text-red-500">취소</button>
+            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">{editId ? '✏️ 수정 중' : '+ 사용자 추가'}</h3>
+            <button type="button" onClick={resetForm} className="text-xs text-gray-400 hover:text-red-500 dark:text-gray-500">취소</button>
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             <div className="md:col-span-2">
-              <label className="block text-xs text-gray-500 mb-1">표시 이름 *</label>
+              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">표시 이름 *</label>
               <input type="text" value={form.label}
                 onChange={e => setForm(f => ({ ...f, label: e.target.value }))}
                 required placeholder="예: 홍길동 재무팀장"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">역할 *</label>
+              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">역할 *</label>
               <select value={form.role}
                 onChange={e => setForm(f => ({ ...f, role: e.target.value as UserRole }))}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100">
                 {ROLE_OPTIONS.map(r => <option key={r} value={r}>{r}</option>)}
               </select>
             </div>
             {form.role === 'company' && (
               <div>
-                <label className="block text-xs text-gray-500 mb-1">소속 법인</label>
+                <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">소속 법인</label>
                 <select value={form.company}
                   onChange={e => setForm(f => ({ ...f, company: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100">
                   {COMPANY_OPTIONS.map(c => <option key={c}>{c}</option>)}
                 </select>
               </div>
             )}
             <div>
-              <label className="block text-xs text-gray-500 mb-1">접근 코드 * (6자 이상)</label>
+              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">접근 코드 * (6자 이상)</label>
               <input type="text" value={form.access_code}
                 onChange={e => setForm(f => ({ ...f, access_code: e.target.value }))}
                 required placeholder="코드 입력"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" />
             </div>
             <div className="flex items-center gap-2 pt-5">
               <input type="checkbox" id="is_active" checked={form.is_active}
                 onChange={e => setForm(f => ({ ...f, is_active: e.target.checked }))}
                 className="w-4 h-4 accent-blue-600" />
-              <label htmlFor="is_active" className="text-sm text-gray-600">활성</label>
+              <label htmlFor="is_active" className="text-sm text-gray-600 dark:text-gray-300">활성</label>
             </div>
           </div>
 
@@ -178,23 +178,23 @@ export default function UsersPage() {
       )}
 
       {/* 사용자 목록 */}
-      <div className="bg-white rounded-xl shadow">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow">
         {loading ? (
-          <p className="text-sm text-gray-400 text-center py-8">로딩 중...</p>
+          <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-8">로딩 중...</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-100">
+                <tr className="border-b border-gray-100 dark:border-gray-700">
                   {['이름', '역할', '소속법인', '접근코드', '상태', ''].map(h => (
-                    <th key={h} className="text-left text-xs text-gray-400 font-medium px-5 py-3 whitespace-nowrap">{h}</th>
+                    <th key={h} className="text-left text-xs text-gray-400 dark:text-gray-500 font-medium px-5 py-3 whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {users.map(u => (
-                  <tr key={u.id} className={`border-b border-gray-50 hover:bg-gray-50 ${!u.is_active ? 'opacity-50' : ''}`}>
-                    <td className="px-5 py-3 font-medium text-gray-800">
+                  <tr key={u.id} className={`border-b border-gray-50 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 ${!u.is_active ? 'opacity-50' : ''}`}>
+                    <td className="px-5 py-3 font-medium text-gray-800 dark:text-gray-100">
                       {u.label}
                       {u.id === user?.sb_id && (
                         <span className="ml-1.5 text-xs text-blue-500">(나)</span>
@@ -205,21 +205,21 @@ export default function UsersPage() {
                         {u.role}
                       </span>
                     </td>
-                    <td className="px-5 py-3 text-gray-500">{u.company ?? '—'}</td>
-                    <td className="px-5 py-3 font-mono text-xs text-gray-400">{u.access_code}</td>
+                    <td className="px-5 py-3 text-gray-500 dark:text-gray-400">{u.company ?? '—'}</td>
+                    <td className="px-5 py-3 font-mono text-xs text-gray-400 dark:text-gray-500">{u.access_code}</td>
                     <td className="px-5 py-3">
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${u.is_active ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-400'}`}>
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${u.is_active ? 'bg-green-50 text-green-700 dark:text-emerald-400' : 'bg-gray-100 text-gray-400 dark:bg-gray-700 dark:text-gray-600'}`}>
                         {u.is_active ? '활성' : '비활성'}
                       </span>
                     </td>
                     <td className="px-5 py-3 whitespace-nowrap">
                       <div className="flex gap-2">
-                        <button onClick={() => loadRecord(u)} className="text-xs text-blue-500 hover:text-blue-700">수정</button>
+                        <button onClick={() => loadRecord(u)} className="text-xs text-blue-500 hover:text-blue-700 dark:text-blue-400">수정</button>
                         <button onClick={() => handleToggleActive(u.id, u.is_active)}
                           className="text-xs text-amber-500 hover:text-amber-700">
                           {u.is_active ? '비활성화' : '활성화'}
                         </button>
-                        <button onClick={() => handleDelete(u.id)} className="text-xs text-red-400 hover:text-red-600">삭제</button>
+                        <button onClick={() => handleDelete(u.id)} className="text-xs text-red-400 hover:text-red-600 dark:text-red-400">삭제</button>
                       </div>
                     </td>
                   </tr>

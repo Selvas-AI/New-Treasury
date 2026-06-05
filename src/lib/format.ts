@@ -1,5 +1,3 @@
-import type { FxCode } from '../types'
-
 // ─── 숫자/날짜 포맷 ──────────────────────────────────────
 
 /** 원화 억/만 단위 포맷 */
@@ -61,19 +59,6 @@ export function returnBadgeClass(ret: number | null): string {
 export function fmtReturn(ret: number | null): string {
   if (ret === null) return '-'
   return (ret >= 0 ? '+' : '') + ret.toFixed(2) + '%'
-}
-
-// ─── 환율 / 외화 ─────────────────────────────────────────
-
-/** 외화 → 원화 환산 (rates: { code, rate, unit }) */
-export function calcKRW(
-  amount: number,
-  code: FxCode,
-  rates: { code: FxCode; rate: number; unit: number }[],
-): number {
-  const fx = rates.find(r => r.code === code)
-  if (!fx || !fx.rate) return 0
-  return amount * (fx.rate / fx.unit)
 }
 
 // ─── 영업일 ──────────────────────────────────────────────

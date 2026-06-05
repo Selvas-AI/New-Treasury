@@ -1,0 +1,339 @@
+﻿=== Sheet: 외화보유비중 산출 (shape: (26, 15)) ===
+  Row 0: Unnamed: 1=사업계획 영업이익 | Unnamed: 2=예상 이자수익 | Unnamed: 3=위험포션 | Unnamed: 4=허용가능 최대손익
+  Row 1: Unnamed: 1=4300000000 | Unnamed: 2=2300000000 | Unnamed: 3=0.5 | Unnamed: 4=3300000000 | Unnamed: 6=現외화보유현황[AS-IS]
+  Row 2: Unnamed: 6=통화별 | Unnamed: 7=환율 | Unnamed: 8=현재통화별잔액
+  Row 3: Unnamed: 1=최대 환율 변동폭 | Unnamed: 2=적정 외화보유한도 | Unnamed: 6=24006005288 | Unnamed: 7=1472.3833662776638 | Unnamed: 8=16304181.26
+  Row 4: Unnamed: 1=0.14642518905195923 | Unnamed: 2=22537105954.01034 | Unnamed: 3=15542831.692420926 | Unnamed: 6=4899884732 | Unnamed: 7=1691.027561125976 | Unnamed: 8=2897578.28
+  Row 5: Unnamed: 6=178265575 | Unnamed: 7=9.176278697301555 | Unnamed: 8=19426783
+  Row 6: Unnamed: 1=현재 자금 총액 | Unnamed: 2=전체 자금대비 외화비율 | Unnamed: 6=29084155595
+  Row 7: Unnamed: 1=90000000000 | Unnamed: 2=0.2504122883778927
+  Row 9: Unnamed: 1=※ 최대환율 변동폭 계산 | Unnamed: 6=외화 통화별 적정보유량[TO-BE]
+  Row 10: Unnamed: 1=1년 간 환율 변동의 표준편차 계산 | Unnamed: 2=표준편차 | Unnamed: 3=가중치(보유비율) | Unnamed: 4=가중치 반영 표준편차 | Unnamed: 6=통화별 | Unnamed: 7=환율 | Unnamed: 8=통화별 유지목표 | Unnamed: 11=USD  | Unnamed: 12=13072095.58 | Unnamed: 14=(외화MMDA 6.2백만불, 외화정기예금 1백만불 포함)
+  Row 11: Unnamed: 1=USD | Unnamed: 2=0.08245805012214526 | Unnamed: 3=0.8 | Unnamed: 4=0.06596644009771621 | Unnamed: 6=18029684763.208275 | Unnamed: 7=1503.5 | Unnamed: 8=11991808.954578167 | Unnamed: 11=EUR    | Unnamed: 12=2460838.78
+  Row 12: Unnamed: 1=EUR | Unnamed: 2=0.11443670443906503 | Unnamed: 3=0.18 | Unnamed: 4=0.020598606799031704 | Unnamed: 6=4056679071.7218614 | Unnamed: 7=1728.48 | Unnamed: 8=2346963.269301271 | Unnamed: 11=JPY    | Unnamed: 12=20426738.0
+  Row 13: Unnamed: 1=JPY | Unnamed: 2=0.10887459613106608 | Unnamed: 3=0.02 | Unnamed: 4=0.0021774919226213215 | Unnamed: 6=450742119.0802069 | Unnamed: 7=9.4978 | Unnamed: 8=47457529.01516213
+  Row 14: Unnamed: 1=GBP | Unnamed: 2=0.13025664616351257 | Unnamed: 3=0 | Unnamed: 4=0 | Unnamed: 6=22537105954.010345
+  Row 15: Unnamed: 1=전체 통화 변동율(표준편차) | Unnamed: 4=0.08874253881936923
+  Row 16: Unnamed: 1=적용 최대 환율 변동폭 | Unnamed: 3=일반적(95%신뢰도) | Unnamed: 4=0.14642518905195923 | Unnamed: 6=환전금액(KRW) | Unnamed: 7=환전금액(USD) | Unnamed: 8=환전환율 | Unnamed: 9=환차익
+  Row 17: Unnamed: 6=5976320524.791725 | Unnamed: 7=3974938.825933971 | Unnamed: 8=1510 | Unnamed: 9=149523817.88385147
+  Row 18: Unnamed: 1=변수 목록:
+  Row 19: Unnamed: 1=예상 사업계획 영업이익, 예상 이자수익, 자금보유액
+  Row 21: Unnamed: 1=상수화 필요: 위험포션 → 의사결정의 영역. 영업이익+이자수익의 어느정도까지는 환리스크 노출 하겠다!
+  Row 23: Unnamed: 1=상수 목록: 월 또는 분기별 Back Data 업데이트
+  Row 24: Unnamed: 1=최대 환율 변동폭: 지난 1년 간 주요통화의 변동성을 표준편차로 구했고, 회사의 보유외화 비율에 따라 가중치를 반영.
+  Row 25: Unnamed: 1=                        이후, 해당 표준편차의 신뢰도 부여를 위한 추가 가중치를 설정하여 적용할 최대 환율 변동폭을 산출함.(현재는 신뢰도 95% 수준으로 설정)
+
+=== Sheet: 데이터 (shape: (59, 252)) ===
+  Row 0: Unnamed: 3=원/달러 변동율 | Unnamed: 4=0.08245805012214526 | Unnamed: 5=0.005246680087741399 | Unnamed: 6=0.011149346180316618 | Unnamed: 7=-0.005717397222978553 | Unnamed: 8=-0.007393209200438085 | Unnamed: 9=-0.002000000000000063 | Unnamed: 10=0.00020731117407240822 | Unnamed: 11=0.004145364101146884 | Unnamed: 12=6.880418329428172e-05
+  Row 1: Unnamed: 3=원/유로 변동율 | Unnamed: 4=0.11443670443906503 | Unnamed: 5=0.0072814331359739625 | Unnamed: 6=0.019275896748240026 | Unnamed: 7=-0.0029271501397796712 | Unnamed: 8=-0.005145797598627757 | Unnamed: 9=-0.0034416445623342536 | Unnamed: 10=-0.007492630472248648 | Unnamed: 11=0.004143340819952442 | Unnamed: 12=0.0056952855321052345
+  Row 2: Unnamed: 3=원/파운드 변동율 | Unnamed: 4=0.10887459613106608 | Unnamed: 5=0.006927524659333891 | Unnamed: 6=0.021897361703078377 | Unnamed: 7=-0.0035203376025625364 | Unnamed: 8=-0.005600873319326598 | Unnamed: 9=-0.00739220618738696 | Unnamed: 10=-0.0036902829957983422 | Unnamed: 11=0.0026050382667290564 | Unnamed: 12=0.006537402286699864
+  Row 3: Unnamed: 3=원/엔화 변동율 | Unnamed: 4=0.13025664616351257 | Unnamed: 5=0.008288031923017034 | Unnamed: 6=0.012875169621010641 | Unnamed: 7=-0.001983206042449044 | Unnamed: 8=0.004650769490952115 | Unnamed: 9=0.0063125999494992 | Unnamed: 10=-0.0021746403479424984 | Unnamed: 11=0.002168901927912877 | Unnamed: 12=-0.0038370257300282
+  Row 5: URL:=통계표 | https://ecos.bok.or.kr/#/SearchStat=코드(계정항목) | Unnamed: 2=계정항목 | Unnamed: 3=단위 | Unnamed: 4=변환 | Unnamed: 5=2025/02/03 | Unnamed: 6=2025/02/04 | Unnamed: 7=2025/02/05 | Unnamed: 8=2025/02/06 | Unnamed: 9=2025/02/07
+  Row 6: URL:=3.1.1.1. 주요국 통화의 대원화환율 | https://ecos.bok.or.kr/#/SearchStat=1 | Unnamed: 2=원/미국달러(매매기준율) | Unnamed: 3=원 | Unnamed: 4=원자료 | Unnamed: 5=1453 | Unnamed: 6=1469.2 | Unnamed: 7=1460.8 | Unnamed: 8=1450 | Unnamed: 9=1447.1
+  Row 7: URL:=3.1.1.1. 주요국 통화의 대원화환율 | https://ecos.bok.or.kr/#/SearchStat=53 | Unnamed: 2=원/위안(매매기준율) | Unnamed: 3=원 | Unnamed: 4=원자료 | Unnamed: 5=199.38 | Unnamed: 6=199.91 | Unnamed: 7=199.73 | Unnamed: 8=198.79 | Unnamed: 9=198.79
+  Row 8: URL:=3.1.1.1. 주요국 통화의 대원화환율 | https://ecos.bok.or.kr/#/SearchStat=2 | Unnamed: 2=원/일본엔(100엔) | Unnamed: 3=원 | Unnamed: 4=원자료 | Unnamed: 5=935.91 | Unnamed: 6=947.96 | Unnamed: 7=946.08 | Unnamed: 8=950.48 | Unnamed: 9=956.48
+  Row 9: URL:=3.1.1.1. 주요국 통화의 대원화환율 | https://ecos.bok.or.kr/#/SearchStat=3 | Unnamed: 2=원/유로 | Unnamed: 3=원 | Unnamed: 4=원자료 | Unnamed: 5=1491.5 | Unnamed: 6=1520.25 | Unnamed: 7=1515.8 | Unnamed: 8=1508 | Unnamed: 9=1502.81
+  Row 10: URL:=3.1.1.1. 주요국 통화의 대원화환율 | https://ecos.bok.or.kr/#/SearchStat=4 | Unnamed: 2=원/독일마르크 | Unnamed: 3=원 | Unnamed: 4=원자료
+  Row 11: URL:=3.1.1.1. 주요국 통화의 대원화환율 | https://ecos.bok.or.kr/#/SearchStat=5 | Unnamed: 2=원/프랑스프랑 | Unnamed: 3=원 | Unnamed: 4=원자료
+  Row 12: URL:=3.1.1.1. 주요국 통화의 대원화환율 | https://ecos.bok.or.kr/#/SearchStat=6 | Unnamed: 2=원/이태리리라(100리라) | Unnamed: 3=원 | Unnamed: 4=원자료
+  Row 13: URL:=3.1.1.1. 주요국 통화의 대원화환율 | https://ecos.bok.or.kr/#/SearchStat=7 | Unnamed: 2=원/벨기에프랑 | Unnamed: 3=원 | Unnamed: 4=원자료
+  Row 14: URL:=3.1.1.1. 주요국 통화의 대원화환율 | https://ecos.bok.or.kr/#/SearchStat=8 | Unnamed: 2=원/오스트리아실링 | Unnamed: 3=원 | Unnamed: 4=원자료
+  Row 15: URL:=3.1.1.1. 주요국 통화의 대원화환율 | https://ecos.bok.or.kr/#/SearchStat=9 | Unnamed: 2=원/네덜란드길더 | Unnamed: 3=원 | Unnamed: 4=원자료
+  Row 16: URL:=3.1.1.1. 주요국 통화의 대원화환율 | https://ecos.bok.or.kr/#/SearchStat=10 | Unnamed: 2=원/스페인페세타(100페세타) | Unnamed: 3=원 | Unnamed: 4=원자료
+  Row 17: URL:=3.1.1.1. 주요국 통화의 대원화환율 | https://ecos.bok.or.kr/#/SearchStat=11 | Unnamed: 2=원/핀란드마르카 | Unnamed: 3=원 | Unnamed: 4=원자료
+  Row 18: URL:=3.1.1.1. 주요국 통화의 대원화환율 | https://ecos.bok.or.kr/#/SearchStat=12 | Unnamed: 2=원/영국파운드 | Unnamed: 3=원 | Unnamed: 4=원자료 | Unnamed: 5=1790.17 | Unnamed: 6=1829.37 | Unnamed: 7=1822.93 | Unnamed: 8=1812.72 | Unnamed: 9=1799.32
+  Row 19: URL:=3.1.1.1. 주요국 통화의 대원화환율 | https://ecos.bok.or.kr/#/SearchStat=13 | Unnamed: 2=원/캐나다달러 | Unnamed: 3=원 | Unnamed: 4=원자료 | Unnamed: 5=987.7 | Unnamed: 6=1020.28 | Unnamed: 7=1019.58 | Unnamed: 8=1012.85 | Unnamed: 9=1011.18
+  Row 20: URL:=3.1.1.1. 주요국 통화의 대원화환율 | https://ecos.bok.or.kr/#/SearchStat=14 | Unnamed: 2=원/스위스프랑 | Unnamed: 3=원 | Unnamed: 4=원자료 | Unnamed: 5=1589.63 | Unnamed: 6=1613.88 | Unnamed: 7=1613.61 | Unnamed: 8=1608.34 | Unnamed: 9=1599.45
+  Row 21: URL:=3.1.1.1. 주요국 통화의 대원화환율 | https://ecos.bok.or.kr/#/SearchStat=17 | Unnamed: 2=원/호주달러 | Unnamed: 3=원 | Unnamed: 4=원자료 | Unnamed: 5=894.54 | Unnamed: 6=915.39 | Unnamed: 7=913.37 | Unnamed: 8=911.25 | Unnamed: 9=908.92
+  Row 22: URL:=3.1.1.1. 주요국 통화의 대원화환율 | https://ecos.bok.or.kr/#/SearchStat=26 | Unnamed: 2=원/뉴질랜드달러 | Unnamed: 3=원 | Unnamed: 4=원자료 | Unnamed: 5=811.06 | Unnamed: 6=828.26 | Unnamed: 7=825.28 | Unnamed: 8=824.54 | Unnamed: 9=820.87
+  Row 23: URL:=3.1.1.1. 주요국 통화의 대원화환율 | https://ecos.bok.or.kr/#/SearchStat=27 | Unnamed: 2=원/중국위안 | Unnamed: 3=원 | Unnamed: 4=원자료
+  Row 24: URL:=3.1.1.1. 주요국 통화의 대원화환율 | https://ecos.bok.or.kr/#/SearchStat=30 | Unnamed: 2=원/홍콩위안 | Unnamed: 3=원 | Unnamed: 4=원자료
+  Row 25: URL:=3.1.1.1. 주요국 통화의 대원화환율 | https://ecos.bok.or.kr/#/SearchStat=15 | Unnamed: 2=원/홍콩달러 | Unnamed: 3=원 | Unnamed: 4=원자료 | Unnamed: 5=186.42 | Unnamed: 6=188.53 | Unnamed: 7=187.59 | Unnamed: 8=186.21 | Unnamed: 9=185.84
+  Row 26: URL:=3.1.1.1. 주요국 통화의 대원화환율 | https://ecos.bok.or.kr/#/SearchStat=31 | Unnamed: 2=원/대만달러 | Unnamed: 3=원 | Unnamed: 4=원자료 | Unnamed: 5=44.01 | Unnamed: 6=44.52 | Unnamed: 7=44.4 | Unnamed: 8=44.16 | Unnamed: 9=44.1
+  Row 27: URL:=3.1.1.1. 주요국 통화의 대원화환율 | https://ecos.bok.or.kr/#/SearchStat=32 | Unnamed: 2=원/몽골투그릭 | Unnamed: 3=원 | Unnamed: 4=원자료 | Unnamed: 5=0.42 | Unnamed: 6=0.43 | Unnamed: 7=0.42 | Unnamed: 8=0.42 | Unnamed: 9=0.42
+  Row 28: URL:=3.1.1.1. 주요국 통화의 대원화환율 | https://ecos.bok.or.kr/#/SearchStat=33 | Unnamed: 2=원/카자흐스탄텡게 | Unnamed: 3=원 | Unnamed: 4=원자료 | Unnamed: 5=2.8 | Unnamed: 6=2.81 | Unnamed: 7=2.81 | Unnamed: 8=2.8 | Unnamed: 9=2.82
+  Row 29: URL:=3.1.1.1. 주요국 통화의 대원화환율 | https://ecos.bok.or.kr/#/SearchStat=28 | Unnamed: 2=원/태국바트 | Unnamed: 3=원 | Unnamed: 4=원자료 | Unnamed: 5=42.99 | Unnamed: 6=43.4 | Unnamed: 7=43.42 | Unnamed: 8=43.18 | Unnamed: 9=42.81
+  Row 30: URL:=3.1.1.1. 주요국 통화의 대원화환율 | https://ecos.bok.or.kr/#/SearchStat=24 | Unnamed: 2=원/싱가포르달러 | Unnamed: 3=원 | Unnamed: 4=원자료 | Unnamed: 5=1062.56 | Unnamed: 6=1080.93 | Unnamed: 7=1079.99 | Unnamed: 8=1075.39 | Unnamed: 9=1071.53
+  Row 31: URL:=3.1.1.1. 주요국 통화의 대원화환율 | https://ecos.bok.or.kr/#/SearchStat=29 | Unnamed: 2=원/인도네시아루피아(100루피아) | Unnamed: 3=원 | Unnamed: 4=원자료 | Unnamed: 5=8.91 | Unnamed: 6=8.94 | Unnamed: 7=8.94 | Unnamed: 8=8.9 | Unnamed: 9=8.86
+  Row 32: URL:=3.1.1.1. 주요국 통화의 대원화환율 | https://ecos.bok.or.kr/#/SearchStat=25 | Unnamed: 2=원/말레이지아링깃 | Unnamed: 3=원 | Unnamed: 4=원자료 | Unnamed: 5=326.15 | Unnamed: 6=328.31 | Unnamed: 7=328.71 | Unnamed: 8=327.87 | Unnamed: 9=326.88
+  Row 33: URL:=3.1.1.1. 주요국 통화의 대원화환율 | https://ecos.bok.or.kr/#/SearchStat=34 | Unnamed: 2=원/필리핀페소 | Unnamed: 3=원 | Unnamed: 4=원자료 | Unnamed: 5=24.88 | Unnamed: 6=25.12 | Unnamed: 7=25.18 | Unnamed: 8=25.05 | Unnamed: 9=24.92
+  Row 34: URL:=3.1.1.1. 주요국 통화의 대원화환율 | https://ecos.bok.or.kr/#/SearchStat=35 | Unnamed: 2=원/베트남동(100동) | Unnamed: 3=원 | Unnamed: 4=원자료 | Unnamed: 5=5.79 | Unnamed: 6=5.81 | Unnamed: 7=5.8 | Unnamed: 8=5.76 | Unnamed: 9=5.73
+  Row 35: URL:=3.1.1.1. 주요국 통화의 대원화환율 | https://ecos.bok.or.kr/#/SearchStat=36 | Unnamed: 2=원/브루나이달러 | Unnamed: 3=원 | Unnamed: 4=원자료 | Unnamed: 5=1062.56 | Unnamed: 6=1080.93 | Unnamed: 7=1079.99 | Unnamed: 8=1075.39 | Unnamed: 9=1071.53
+  Row 36: URL:=3.1.1.1. 주요국 통화의 대원화환율 | https://ecos.bok.or.kr/#/SearchStat=37 | Unnamed: 2=원/인도루피 | Unnamed: 3=원 | Unnamed: 4=원자료 | Unnamed: 5=16.79 | Unnamed: 6=16.89 | Unnamed: 7=16.78 | Unnamed: 8=16.6 | Unnamed: 9=16.52
+  Row 37: URL:=3.1.1.1. 주요국 통화의 대원화환율 | https://ecos.bok.or.kr/#/SearchStat=38 | Unnamed: 2=원/파키스탄루피 | Unnamed: 3=원 | Unnamed: 4=원자료 | Unnamed: 5=5.21 | Unnamed: 6=5.26 | Unnamed: 7=5.24 | Unnamed: 8=5.2 | Unnamed: 9=5.19
+  Row 38: URL:=3.1.1.1. 주요국 통화의 대원화환율 | https://ecos.bok.or.kr/#/SearchStat=39 | Unnamed: 2=원/방글라데시타카 | Unnamed: 3=원 | Unnamed: 4=원자료 | Unnamed: 5=11.96 | Unnamed: 6=12.05 | Unnamed: 7=11.98 | Unnamed: 8=11.93 | Unnamed: 9=11.87
+  Row 39: URL:=3.1.1.1. 주요국 통화의 대원화환율 | https://ecos.bok.or.kr/#/SearchStat=40 | Unnamed: 2=원/멕시코 페소 | Unnamed: 3=원 | Unnamed: 4=원자료 | Unnamed: 5=68.62 | Unnamed: 6=72.24 | Unnamed: 7=71.22 | Unnamed: 8=70.43 | Unnamed: 9=70.71
+  Row 40: URL:=3.1.1.1. 주요국 통화의 대원화환율 | https://ecos.bok.or.kr/#/SearchStat=41 | Unnamed: 2=원/브라질 헤알 | Unnamed: 3=원 | Unnamed: 4=원자료 | Unnamed: 5=248.63 | Unnamed: 6=253.01 | Unnamed: 7=253.67 | Unnamed: 8=249.81 | Unnamed: 9=251.14
+  Row 41: URL:=3.1.1.1. 주요국 통화의 대원화환율 | https://ecos.bok.or.kr/#/SearchStat=42 | Unnamed: 2=원/아르헨티나페소 | Unnamed: 3=원 | Unnamed: 4=원자료 | Unnamed: 5=1.38 | Unnamed: 6=1.39 | Unnamed: 7=1.39 | Unnamed: 8=1.38 | Unnamed: 9=1.37
+  Row 42: URL:=3.1.1.1. 주요국 통화의 대원화환율 | https://ecos.bok.or.kr/#/SearchStat=16 | Unnamed: 2=원/스웨덴크로나 | Unnamed: 3=원 | Unnamed: 4=원자료 | Unnamed: 5=129.53 | Unnamed: 6=132.82 | Unnamed: 7=133.12 | Unnamed: 8=132.91 | Unnamed: 9=132.71
+  Row 43: URL:=3.1.1.1. 주요국 통화의 대원화환율 | https://ecos.bok.or.kr/#/SearchStat=18 | Unnamed: 2=원/덴마크크로나 | Unnamed: 3=원 | Unnamed: 4=원자료 | Unnamed: 5=199.88 | Unnamed: 6=203.77 | Unnamed: 7=203.22 | Unnamed: 8=202.14 | Unnamed: 9=201.41
+  Row 44: URL:=3.1.1.1. 주요국 통화의 대원화환율 | https://ecos.bok.or.kr/#/SearchStat=19 | Unnamed: 2=원/노르웨이크로나 | Unnamed: 3=원 | Unnamed: 4=원자료 | Unnamed: 5=126.95 | Unnamed: 6=129.56 | Unnamed: 7=129.88 | Unnamed: 8=129.15 | Unnamed: 9=129.06
+  Row 45: URL:=3.1.1.1. 주요국 통화의 대원화환율 | https://ecos.bok.or.kr/#/SearchStat=43 | Unnamed: 2=원/러시아루블 | Unnamed: 3=원 | Unnamed: 4=원자료 | Unnamed: 5=14.74 | Unnamed: 6=14.73 | Unnamed: 7=14.51 | Unnamed: 8=14.8 | Unnamed: 9=14.96
+  Row 46: URL:=3.1.1.1. 주요국 통화의 대원화환율 | https://ecos.bok.or.kr/#/SearchStat=44 | Unnamed: 2=원/헝가리포린트 | Unnamed: 3=원 | Unnamed: 4=원자료 | Unnamed: 5=3.65 | Unnamed: 6=3.72 | Unnamed: 7=3.72 | Unnamed: 8=3.71 | Unnamed: 9=3.71
+  Row 47: URL:=3.1.1.1. 주요국 통화의 대원화환율 | https://ecos.bok.or.kr/#/SearchStat=45 | Unnamed: 2=원/폴란트즈워티 | Unnamed: 3=원 | Unnamed: 4=원자료 | Unnamed: 5=357.34 | Unnamed: 6=359.53 | Unnamed: 7=360.07 | Unnamed: 8=358.89 | Unnamed: 9=358.57
+  Row 48: URL:=3.1.1.1. 주요국 통화의 대원화환율 | https://ecos.bok.or.kr/#/SearchStat=46 | Unnamed: 2=원/체코코루나 | Unnamed: 3=원 | Unnamed: 4=원자료 | Unnamed: 5=59.21 | Unnamed: 6=60.25 | Unnamed: 7=60.25 | Unnamed: 8=59.9 | Unnamed: 9=59.87
+  Row 49: URL:=3.1.1.1. 주요국 통화의 대원화환율 | https://ecos.bok.or.kr/#/SearchStat=20 | Unnamed: 2=원/사우디아라비아리얄 | Unnamed: 3=원 | Unnamed: 4=원자료 | Unnamed: 5=387.39 | Unnamed: 6=391.71 | Unnamed: 7=389.48 | Unnamed: 8=386.59 | Unnamed: 9=385.83
+  Row 50: URL:=3.1.1.1. 주요국 통화의 대원화환율 | https://ecos.bok.or.kr/#/SearchStat=47 | Unnamed: 2=원/카타르리얄 | Unnamed: 3=원 | Unnamed: 4=원자료 | Unnamed: 5=398.54 | Unnamed: 6=402.98 | Unnamed: 7=400.68 | Unnamed: 8=397.72 | Unnamed: 9=396.92
+  Row 51: URL:=3.1.1.1. 주요국 통화의 대원화환율 | https://ecos.bok.or.kr/#/SearchStat=48 | Unnamed: 2=원/이스라엘셰켈 | Unnamed: 3=원 | Unnamed: 4=원자료 | Unnamed: 5=404.93 | Unnamed: 6=410.33 | Unnamed: 7=409.4 | Unnamed: 8=409.3 | Unnamed: 9=407.33
+  Row 52: URL:=3.1.1.1. 주요국 통화의 대원화환율 | https://ecos.bok.or.kr/#/SearchStat=49 | Unnamed: 2=원/요르단디나르 | Unnamed: 3=원 | Unnamed: 4=원자료 | Unnamed: 5=2049.37 | Unnamed: 6=2070.32 | Unnamed: 7=2058.48 | Unnamed: 8=2043.26 | Unnamed: 9=2039.17
+  Row 53: URL:=3.1.1.1. 주요국 통화의 대원화환율 | https://ecos.bok.or.kr/#/SearchStat=21 | Unnamed: 2=원/쿠웨이트디나르 | Unnamed: 3=원 | Unnamed: 4=원자료 | Unnamed: 5=4703.94 | Unnamed: 6=4758.85 | Unnamed: 7=4733.64 | Unnamed: 8=4699.55 | Unnamed: 9=4688.94
+  Row 54: URL:=3.1.1.1. 주요국 통화의 대원화환율 | https://ecos.bok.or.kr/#/SearchStat=22 | Unnamed: 2=원/바레인디나르 | Unnamed: 3=원 | Unnamed: 4=원자료 | Unnamed: 5=3854.21 | Unnamed: 6=3896.98 | Unnamed: 7=3874.7 | Unnamed: 8=3846.05 | Unnamed: 9=3838.46
+  Row 55: URL:=3.1.1.1. 주요국 통화의 대원화환율 | https://ecos.bok.or.kr/#/SearchStat=23 | Unnamed: 2=원/아랍에미리트디르함 | Unnamed: 3=원 | Unnamed: 4=원자료 | Unnamed: 5=395.59 | Unnamed: 6=400 | Unnamed: 7=397.71 | Unnamed: 8=394.77 | Unnamed: 9=393.98
+  Row 56: URL:=3.1.1.1. 주요국 통화의 대원화환율 | https://ecos.bok.or.kr/#/SearchStat=50 | Unnamed: 2=원/튀르키예리라 | Unnamed: 3=원 | Unnamed: 4=원자료 | Unnamed: 5=40.48 | Unnamed: 6=40.83 | Unnamed: 7=40.61 | Unnamed: 8=40.37 | Unnamed: 9=40.23
+  Row 57: URL:=3.1.1.1. 주요국 통화의 대원화환율 | https://ecos.bok.or.kr/#/SearchStat=51 | Unnamed: 2=원/남아프리카공화국랜드 | Unnamed: 3=원 | Unnamed: 4=원자료 | Unnamed: 5=77.02 | Unnamed: 6=78.37 | Unnamed: 7=78.23 | Unnamed: 8=78.18 | Unnamed: 9=78.52
+  Row 58: URL:=3.1.1.1. 주요국 통화의 대원화환율 | https://ecos.bok.or.kr/#/SearchStat=52 | Unnamed: 2=원/이집트파운드 | Unnamed: 3=원 | Unnamed: 4=원자료 | Unnamed: 5=28.93 | Unnamed: 6=29.17 | Unnamed: 7=29.06 | Unnamed: 8=28.82 | Unnamed: 9=28.77
+
+=== Sheet: 매매기준율표(통화명_환율(원)_전일대비) (shape: (3, 3)) ===
+  Row 0: 통화명=미국 달러 (USD) | 환율(원)=1503.5 | 전일대비=0.4
+  Row 1: 통화명=유로 (EUR) | 환율(원)=1746.69 | 전일대비=-6.63
+  Row 2: 통화명=일본 엔 (JPY) (100) | 환율(원)=945.51 | 전일대비=1.0
+
+=== Sheet: 재정된 매매기준율 (shape: (55, 5)) ===
+  Row 0: 통화명=일본 엔 (JPY) (100) | 환율(원)=949.78 | 전일대비=3.66 | Cross Rate=159.125
+  Row 1: 통화명=유로 (EUR) | 환율(원)=1728.48 | 전일대비=8.1 | Cross Rate=1.15625 | Cross Rate_1=(US$)
+  Row 2: 통화명=영국 파운드 (GBP) | 환율(원)=1993.08 | 전일대비=20.79 | Cross Rate=1.33325 | Cross Rate_1=(US$)
+  Row 3: 통화명=캐나다 달러 (CAD) | 환율(원)=1089.38 | 전일대비=2.46 | Cross Rate=1.37225
+  Row 4: 통화명=스위스 프랑 (CHF) | 환율(원)=1899.25 | 전일대비=2.35 | Cross Rate=0.7871
+  Row 5: 통화명=호주 달러 (AUD) | 환율(원)=1048.15 | 전일대비=14.99 | Cross Rate=0.70115 | Cross Rate_1=(US$)
+  Row 6: 통화명=뉴질랜드 달러 (NZD) | 환율(원)=872.05 | 전일대비=8.27 | Cross Rate=0.58335 | Cross Rate_1=(US$)
+  Row 7: 통화명=홍콩 달러 (HKD) | 환율(원)=190.84 | 전일대비=0.61 | Cross Rate=7.83335
+  Row 8: 통화명=대만 달러 (TWD) | 환율(원)=46.66 | 전일대비=0.48 | Cross Rate=32.039
+  Row 9: 통화명=몽골 투그릭 (MNT) | 환율(원)=0.42 | 전일대비=0.0 | Cross Rate=3569.0
+  Row 10: 통화명=카자흐스탄 텡게 (KZT) | 환율(원)=3.11 | 전일대비=0.01 | Cross Rate=479.95
+  Row 11: 통화명=태국 밧 (THB) | 환율(원)=45.38 | 전일대비=0.78 | Cross Rate=32.94
+  Row 12: 통화명=싱가포르 달러 (SGD) | 환율(원)=1166.11 | 전일대비=7.69 | Cross Rate=1.28195
+  Row 13: 통화명=인도네시아 루피아 (IDR) (100) | 환율(원)=8.8 | 전일대비=0.03 | Cross Rate=16980.0
+  Row 14: 통화명=말레이시아 링깃 (MYR) | 환율(원)=379.46 | 전일대비=1.22 | Cross Rate=3.9395
+  Row 15: 통화명=필리핀 페소 (PHP) | 환율(원)=24.98 | 전일대비=0.08 | Cross Rate=59.842
+  Row 16: 통화명=베트남 동 (VND) (100) | 환율(원)=5.68 | 전일대비=0.02 | Cross Rate=26312.0
+  Row 17: 통화명=브루나이 달러 (BND) | 환율(원)=1166.11 | 전일대비=7.69 | Cross Rate=1.28195
+  Row 18: 통화명=인도 루피 (INR) | 환율(원)=15.96 | 전일대비=0.18 | Cross Rate=93.692
+  Row 19: 통화명=파키스탄 루피 (PKR) | 환율(원)=5.36 | 전일대비=0.01 | Cross Rate=279.15
+  Row 20: 통화명=방글라데시 타카 (BDT) | 환율(원)=12.18 | 전일대비=0.04 | Cross Rate=122.7
+  Row 21: 통화명=캄보디아 리엘 (KHR) | 환율(원)=0.37 | 전일대비=0.0 | Cross Rate=3999.5
+  Row 22: 통화명=마카오 파타카 (MOP) | 환율(원)=185.1 | 전일대비=0.68 | Cross Rate=8.076
+  Row 23: 통화명=네팔 루피 (NPR) | 환율(원)=9.97 | 전일대비=0.15 | Cross Rate=149.945
+  Row 24: 통화명=스리랑카 루피 (LKR) | 환율(원)=4.79 | 전일대비=0.02 | Cross Rate=311.95
+  Row 25: 통화명=우즈베키스탄 숨 (UZS) | 환율(원)=0.12 | 전일대비=0.0 | Cross Rate=12192.06
+  Row 26: 통화명=미얀마 짯 (MMK) | 환율(원)=0.71 | 전일대비=0.0 | Cross Rate=2100.0
+  Row 27: 통화명=멕시코 페소 (MXN) | 환율(원)=83.33 | 전일대비=1.24 | Cross Rate=17.9394
+  Row 28: 통화명=브라질 헤알 (BRL) | 환율(원)=281.35 | 전일대비=5.89 | Cross Rate=5.3134
+  Row 29: 통화명=아르헨티나 페소 (ARS) | 환율(원)=1.07 | 전일대비=0.01 | Cross Rate=1391.5
+  Row 30: 통화명=칠레 페소 (CLP) | 환율(원)=1.61 | 전일대비=0.03 | Cross Rate=927.1
+  Row 31: 통화명=콜롬비아 페소 (COP) | 환율(원)=0.4 | 전일대비=0.01 | Cross Rate=3696.535
+  Row 32: 통화명=스웨덴 크로나 (SEK) | 환율(원)=160.03 | 전일대비=1.28 | Cross Rate=9.3416
+  Row 33: 통화명=덴마크 크로네 (DKK) | 환율(원)=231.34 | 전일대비=1.12 | Cross Rate=6.46185
+  Row 34: 통화명=노르웨이 크로네 (NOK) | 환율(원)=156.18 | 전일대비=1.74 | Cross Rate=9.5715
+  Row 35: 통화명=러시아 루블 (RUB) | 환율(원)=17.98 | 전일대비=0.57 | Cross Rate=83.125
+  Row 36: 통화명=헝가리 포린트 (HUF) | 환율(원)=4.4 | 전일대비=0.04 | Cross Rate=339.92
+  Row 37: 통화명=폴란드 즈워티 (PLN) | 환율(원)=404.13 | 전일대비=2.76 | Cross Rate=3.6991
+  Row 38: 통화명=체코 코루나 (CZK) | 환율(원)=70.69 | 전일대비=0.24 | Cross Rate=21.146
+  Row 39: 통화명=루마니아 레우 (RON) | 환율(원)=339.63 | 전일대비=1.33 | Cross Rate=4.4016
+  Row 40: 통화명=사우디아라비아 리얄 (SAR) | 환율(원)=398.13 | 전일대비=1.32 | Cross Rate=3.7548
+  Row 41: 통화명=카타르 리얄 (QAR) | 환율(원)=409.0 | 전일대비=2.51 | Cross Rate=3.655
+  Row 42: 통화명=이스라엘 셰켈 (ILS) | 환율(원)=476.71 | 전일대비=5.49 | Cross Rate=3.1359
+  Row 43: 통화명=요르단 디나르 (JOD) | 환율(원)=2108.46 | 전일대비=6.77 | Cross Rate=0.709
+  Row 44: 통화명=쿠웨이트 디나르 (KWD) | 환율(원)=4875.73 | 전일대비=15.66 | Cross Rate=0.3066
+  Row 45: 통화명=바레인 디나르 (BHD) | 환율(원)=3959.48 | 전일대비=12.71 | Cross Rate=0.37755
+  Row 46: 통화명=아랍에미리트 디르함 (AED) | 환율(원)=406.98 | 전일대비=1.28 | Cross Rate=3.67315
+  Row 47: 통화명=튀르키예 리라 (TRY) | 환율(원)=33.73 | 전일대비=0.12 | Cross Rate=44.315
+  Row 48: 통화명=오만 리얄 (OMR) | 환율(원)=3882.86 | 전일대비=12.46 | Cross Rate=0.385
+  Row 49: 통화명=남아프리카공화국 랜드 (ZAR) | 환율(원)=87.51 | 전일대비=2.09 | Cross Rate=17.08335
+  Row 50: 통화명=이집트 파운드 (EGP) | 환율(원)=28.62 | 전일대비=0.09 | Cross Rate=52.24
+  Row 51: 통화명=케냐 실링 (KES) | 환율(원)=11.54 | 전일대비=0.04 | Cross Rate=129.55
+  Row 52: 통화명=리비아 디나르 (LYD) | 환율(원)=233.51 | 전일대비=0.75 | Cross Rate=6.40185
+  Row 53: 통화명=에티오피아 비르 (ETB) | 환율(원)=9.49 | 전일대비=0.03 | Cross Rate=157.6011
+  Row 54: 통화명=피지 달러 (FJD) | 환율(원)=666.87 | 전일대비=12.27 | Cross Rate=0.4461 | Cross Rate_1=(US$)
+
+=== Sheet: 2025년 이자수익 (shape: (183, 11)) ===
+  Row 0: Unnamed: 0=회계일 | Unnamed: 1=기표자 | Unnamed: 2=기표부서 | Unnamed: 3=계정과목 | Unnamed: 4=비용구분 | Unnamed: 5=적요 | Unnamed: 6=이월잔액 | Unnamed: 8=차변금액 | Unnamed: 9=대변금액 | Unnamed: 10=잔액
+  Row 1: Unnamed: 8=0 | Unnamed: 9=2494347989
+  Row 2: Unnamed: 0=2025-01-07 00:00:00 | Unnamed: 1=김다은(2) | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=외화 | Unnamed: 5=기업은행 외화정기예금 $10,000,000 만기시 이자수익 | Unnamed: 6=0 | Unnamed: 8=0 | Unnamed: 9=22550083 | Unnamed: 10=22550083
+  Row 3: Unnamed: 0=2025-01-16 00:00:00 | Unnamed: 1=김다은(2) | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=기업은행 정기예금(원주013) 30억 만기시 이자수익 | Unnamed: 6=22550083 | Unnamed: 8=0 | Unnamed: 9=4642193 | Unnamed: 10=27192276
+  Row 4: Unnamed: 0=2025-01-20 00:00:00 | Unnamed: 1=김다은(2) | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=보통예금(기업011)이자수익 | Unnamed: 6=27192276 | Unnamed: 8=0 | Unnamed: 9=17945 | Unnamed: 10=27210221
+  Row 5: Unnamed: 0=2025-01-20 00:00:00 | Unnamed: 1=김운주(2) | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=대여금이자 | Unnamed: 5=1월 경영관리부 차장 백종완 대여금이자(5,000,000*4.6%*20/365)(12/31~1/20) | Unnamed: 6=27210221 | Unnamed: 8=0 | Unnamed: 9=12602 | Unnamed: 10=27222823
+  Row 6: Unnamed: 0=2025-01-20 00:00:00 | Unnamed: 1=김운주(2) | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=대여금이자 | Unnamed: 5=1월 제조사업부 차장 신승철 대여금이자(20,000,000*4.6%*20/365)(12/31~1/20) | Unnamed: 6=27222823 | Unnamed: 8=0 | Unnamed: 9=50410 | Unnamed: 10=27273233
+  Row 7: Unnamed: 0=2025-01-20 00:00:00 | Unnamed: 1=김운주(2) | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=대여금이자 | Unnamed: 5=1월 제조사업부 차장 이기혁 대여금이자(30,000,000*4.6%*20/365)(12/31~1/20) | Unnamed: 6=27273233 | Unnamed: 8=0 | Unnamed: 9=75616 | Unnamed: 10=27348849
+  Row 8: Unnamed: 0=2025-01-21 00:00:00 | Unnamed: 1=김다은(2) | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=외화 | Unnamed: 5=하나은행 외화정기예금 $1,000,000 (3개월) 만기시 이자수익 | Unnamed: 6=27348849 | Unnamed: 8=0 | Unnamed: 9=4325634 | Unnamed: 10=31674483
+  Row 9: Unnamed: 0=2025-01-31 00:00:00 | Unnamed: 1=김다은(2) | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=KB증권 자사주취득신탁계좌 이자수익 | Unnamed: 6=31674483 | Unnamed: 8=0 | Unnamed: 9=11464484 | Unnamed: 10=43138967
+  Row 10: Unnamed: 0=2025-02-12 00:00:00 | Unnamed: 1=김다은(2) | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=기업은행 정기예금(원주008) 65억 만기시 이자수익 | Unnamed: 6=43138967 | Unnamed: 8=0 | Unnamed: 9=26112193 | Unnamed: 10=69251160
+  Row 11: Unnamed: 0=2025-02-17 00:00:00 | Unnamed: 1=김다은(2) | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=보통예금(기업011) 이자수익 | Unnamed: 6=69251160 | Unnamed: 8=0 | Unnamed: 9=19398 | Unnamed: 10=69270558
+  Row 12: Unnamed: 0=2025-02-20 00:00:00 | Unnamed: 1=김운주(2) | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=대여금이자 | Unnamed: 5=2월 경영관리부 차장 백종완 대여금이자(5,000,000*4.6%*11/365)(1/20~1/31) | Unnamed: 6=69270558 | Unnamed: 8=0 | Unnamed: 9=6931 | Unnamed: 10=69277489
+  Row 13: Unnamed: 0=2025-02-20 00:00:00 | Unnamed: 1=김운주(2) | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=대여금이자 | Unnamed: 5=2월 제조사업부 차장 신승철 대여금이자(20,000,000*4.6%*31/365)(1/20~2/20) | Unnamed: 6=69277489 | Unnamed: 8=0 | Unnamed: 9=78136 | Unnamed: 10=69355625
+  Row 14: Unnamed: 0=2025-02-20 00:00:00 | Unnamed: 1=김운주(2) | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=대여금이자 | Unnamed: 5=2월 제조사업부 차장 이기혁 대여금이자(30,000,000*4.6%*31/365)(1/20~2/20) | Unnamed: 6=69355625 | Unnamed: 8=0 | Unnamed: 9=117205 | Unnamed: 10=69472830
+  Row 15: Unnamed: 0=2025-02-21 00:00:00 | Unnamed: 1=김다은(2) | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=하나은행 정기예금(반포남811) 50억 만기시 이자수익 | Unnamed: 6=69472830 | Unnamed: 8=0 | Unnamed: 9=24504110 | Unnamed: 10=93976940
+  Row 16: Unnamed: 0=2025-02-21 00:00:00 | Unnamed: 1=김다은(2) | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=하나은행 정기예금(반포남111) 50억 만기시 이자수익 | Unnamed: 6=93976940 | Unnamed: 8=0 | Unnamed: 9=24504110 | Unnamed: 10=118481050
+  Row 17: Unnamed: 0=2025-02-21 00:00:00 | Unnamed: 1=김다은(2) | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=기업은행 정기예금(원주012) 100억 만기 시 이자수익 | Unnamed: 6=118481050 | Unnamed: 8=0 | Unnamed: 9=49008221 | Unnamed: 10=167489271
+  Row 18: Unnamed: 0=2025-02-28 00:00:00 | Unnamed: 1=김다은(2) | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=KB증권 자사주취득신탁계좌 이자수익 | Unnamed: 6=167489271 | Unnamed: 8=0 | Unnamed: 9=9839681 | Unnamed: 10=177328952
+  Row 19: Unnamed: 0=2025-03-11 00:00:00 | Unnamed: 1=김다은(2) | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=국민은행 정기예금(방배637) 20억 만기 시 이자수익 | Unnamed: 6=177328952 | Unnamed: 8=0 | Unnamed: 9=13616438 | Unnamed: 10=190945390
+  Row 20: Unnamed: 0=2025-03-11 00:00:00 | Unnamed: 1=김다은(2) | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=국민은행 정기예금(방배637) 10억 만기 시 이자수익 | Unnamed: 6=190945390 | Unnamed: 8=0 | Unnamed: 9=6808220 | Unnamed: 10=197753610
+  Row 21: Unnamed: 0=2025-03-15 00:00:00 | Unnamed: 1=김다은(2) | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=보통예금(국민460) 이자수익 | Unnamed: 6=197753610 | Unnamed: 8=0 | Unnamed: 9=290 | Unnamed: 10=197753900
+  Row 22: Unnamed: 0=2025-03-15 00:00:00 | Unnamed: 1=김다은(2) | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=보통예금(우리825) 이자수익 | Unnamed: 6=197753900 | Unnamed: 8=0 | Unnamed: 9=960 | Unnamed: 10=197754860
+  Row 23: Unnamed: 0=2025-03-16 00:00:00 | Unnamed: 1=김다은(2) | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화mmda | Unnamed: 5=보통예금(기업MMDA166) 이자수익 | Unnamed: 6=197754860 | Unnamed: 8=0 | Unnamed: 9=14001411 | Unnamed: 10=211756271
+  Row 24: Unnamed: 0=2025-03-16 00:00:00 | Unnamed: 1=김다은(2) | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=보통예금(기업173) 이자수익 | Unnamed: 6=211756271 | Unnamed: 8=0 | Unnamed: 9=22137 | Unnamed: 10=211778408
+  Row 25: Unnamed: 0=2025-03-17 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=보통예금(기업011) 이자수익 | Unnamed: 6=211778408 | Unnamed: 8=0 | Unnamed: 9=20619 | Unnamed: 10=211799027
+  Row 26: Unnamed: 0=2025-03-20 00:00:00 | Unnamed: 1=권현우 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=대여금이자 | Unnamed: 5=3월 제조사업부 차장 신승철 대여금이자(20,000,000*4.6%*49/365)(2/20~3/31) | Unnamed: 6=211799027 | Unnamed: 8=0 | Unnamed: 9=98301 | Unnamed: 10=211897328
+  Row 27: Unnamed: 0=2025-03-20 00:00:00 | Unnamed: 1=권현우 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=대여금이자 | Unnamed: 5=3월 제조사업부 차장 이기혁 대여금이자(30,000,000*4.6%*31/365)(2/20~3/31) | Unnamed: 6=211897328 | Unnamed: 8=0 | Unnamed: 9=147452 | Unnamed: 10=212044780
+  Row 28: Unnamed: 0=2025-03-23 00:00:00 | Unnamed: 1=김다은(2) | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=보통예금(신한RCMS751) 이자수익 | Unnamed: 6=212044780 | Unnamed: 8=0 | Unnamed: 9=646 | Unnamed: 10=212045426
+  Row 29: Unnamed: 0=2025-03-23 00:00:00 | Unnamed: 1=김다은(2) | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=외화 | Unnamed: 5=외화예금(기업217)달러이자수익($73.12) | Unnamed: 6=212045426 | Unnamed: 8=0 | Unnamed: 9=125721 | Unnamed: 10=212171147
+  Row 30: Unnamed: 0=2025-03-23 00:00:00 | Unnamed: 1=김다은(2) | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=외화 | Unnamed: 5=외화예금(기업217)엔화이자수익(JPY72) | Unnamed: 6=212171147 | Unnamed: 8=0 | Unnamed: 9=701 | Unnamed: 10=212171848
+  Row 31: Unnamed: 0=2025-03-23 00:00:00 | Unnamed: 1=김다은(2) | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=외화 | Unnamed: 5=외화예금(기업217)유로이자수익(EUR5.32) | Unnamed: 6=212171848 | Unnamed: 8=0 | Unnamed: 9=9896 | Unnamed: 10=212181744
+  Row 32: Unnamed: 0=2025-03-23 00:00:00 | Unnamed: 1=김다은(2) | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=외화 | Unnamed: 5=외화예금(기업MMDA)달러이자수익($24,899.26) | Unnamed: 6=212181744 | Unnamed: 8=0 | Unnamed: 9=42811438 | Unnamed: 10=254993182
+  Row 33: Unnamed: 0=2025-03-31 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=2025년 1분기 결산분개 - 미수수익 계상 | Unnamed: 6=254993182 | Unnamed: 8=0 | Unnamed: 9=259119530 | Unnamed: 10=514112712
+  Row 34: Unnamed: 0=2025-03-31 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=외화 | Unnamed: 5=2025년 1분기 결산분개 - 미수수익 계상 | Unnamed: 6=514112712 | Unnamed: 8=0 | Unnamed: 9=157122397 | Unnamed: 10=671235109
+  Row 35: Unnamed: 0=2025-03-31 00:00:00 | Unnamed: 1=김다은(2) | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=KB증권 자사주취득신탁계좌 이자수익 | Unnamed: 6=671235109 | Unnamed: 8=0 | Unnamed: 9=6156702 | Unnamed: 10=677391811
+  Row 36: Unnamed: 0=2025-03-31 00:00:00 | Unnamed: 1=성숙화 | Unnamed: 2=생산1팀 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=3월 이자수익입금-문막농협 동화점 | Unnamed: 6=677391811 | Unnamed: 8=0 | Unnamed: 9=1483 | Unnamed: 10=677393294
+  Row 37: Unnamed: 0=2025-03-31 00:00:00 | Unnamed: 1=김다은(2) | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=리스 | Unnamed: 5=2025년 1분기 결산분개 - 리스 매출 | Unnamed: 6=677393294 | Unnamed: 8=0 | Unnamed: 9=5702291 | Unnamed: 10=683095585
+  Row 38: Unnamed: 0=2025-03-31 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=리스 | Unnamed: 5=2025년 1분기 결산분개 - 리스 건물 인식 | Unnamed: 6=683095585 | Unnamed: 8=0 | Unnamed: 9=8310279 | Unnamed: 10=691405864
+  Row 39: Unnamed: 0=2025-04-08 00:00:00 | Unnamed: 1=김다은(2) | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=기업은행 정기예금(원주003) 20억 만기시 이자수익 | Unnamed: 6=691405864 | Unnamed: 8=0 | Unnamed: 9=1534249 | Unnamed: 10=692940113
+  Row 40: Unnamed: 0=2025-04-08 00:00:00 | Unnamed: 1=김다은(2) | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=외화 | Unnamed: 5=국민은행 외화정기예금 $10,000,000 만기시 이자수익 | Unnamed: 6=692940113 | Unnamed: 8=0 | Unnamed: 9=15262344 | Unnamed: 10=708202457
+  Row 41: Unnamed: 0=2025-04-16 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=기업은행 정기예금(원주007) 167억 만기시 이자수익 | Unnamed: 6=708202457 | Unnamed: 8=0 | Unnamed: 9=25475508 | Unnamed: 10=733677965
+  Row 42: Unnamed: 0=2025-04-18 00:00:00 | Unnamed: 1=권현우 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=대여금이자 | Unnamed: 5=4월 제조사업부 차장 신승철 대여금이자(20,000,000*4.6%*19/365)(4/1~4/20) | Unnamed: 6=733677965 | Unnamed: 8=0 | Unnamed: 9=47890 | Unnamed: 10=733725855
+  Row 43: Unnamed: 0=2025-04-18 00:00:00 | Unnamed: 1=권현우 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=대여금이자 | Unnamed: 5=4월 제조사업부 차장 이기혁 대여금이자(30,000,000*4.6%*19/365)(4/1~4/20) | Unnamed: 6=733725855 | Unnamed: 8=0 | Unnamed: 9=71835 | Unnamed: 10=733797690
+  Row 44: Unnamed: 0=2025-04-21 00:00:00 | Unnamed: 1=김다은(2) | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=보통예금(기업011) 이자수익 | Unnamed: 6=733797690 | Unnamed: 8=0 | Unnamed: 9=33327 | Unnamed: 10=733831017
+  Row 45: Unnamed: 0=2025-04-30 00:00:00 | Unnamed: 1=김다은(2) | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=KB증권 자사주취득신탁계좌 이자수익 | Unnamed: 6=733831017 | Unnamed: 8=0 | Unnamed: 9=10253417 | Unnamed: 10=744084434
+  Row 46: Unnamed: 0=2025-05-15 00:00:00 | Unnamed: 1=김다은(2) | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=기업은행 정기예금(원주008) 65억 만기시 이자수익 | Unnamed: 6=744084434 | Unnamed: 8=0 | Unnamed: 9=24602056 | Unnamed: 10=768686490
+  Row 47: Unnamed: 0=2025-05-15 00:00:00 | Unnamed: 1=김다은(2) | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=KB증권 자사주취득신탁계좌 5월 이자수익 | Unnamed: 6=768686490 | Unnamed: 8=0 | Unnamed: 9=12176496 | Unnamed: 10=780862986
+  Row 48: Unnamed: 0=2025-05-19 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=보통예금(기업011) 이자수익 | Unnamed: 6=780862986 | Unnamed: 8=0 | Unnamed: 9=23017 | Unnamed: 10=780886003
+  Row 49: Unnamed: 0=2025-05-20 00:00:00 | Unnamed: 1=권현우 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=대여금이자 | Unnamed: 5=5월 제조사업부 차장 신승철 대여금이자(20,000,000*4.6%*19/365)(4/21~5/20) | Unnamed: 6=780886003 | Unnamed: 8=0 | Unnamed: 9=73095 | Unnamed: 10=780959098
+  Row 50: Unnamed: 0=2025-05-20 00:00:00 | Unnamed: 1=권현우 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=대여금이자 | Unnamed: 5=5월 제조사업부 차장 이기혁 대여금이자(30,000,000*4.6%*19/365)(4/21~5/20) | Unnamed: 6=780959098 | Unnamed: 8=0 | Unnamed: 9=109643 | Unnamed: 10=781068741
+  Row 51: Unnamed: 0=2025-06-14 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=보통예금(국민460) 이자수익 | Unnamed: 6=781068741 | Unnamed: 8=0 | Unnamed: 9=106 | Unnamed: 10=781068847
+  Row 52: Unnamed: 0=2025-06-16 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=보통예금(기업011) 이자수익 | Unnamed: 6=781068847 | Unnamed: 8=0 | Unnamed: 9=17604 | Unnamed: 10=781086451
+  Row 53: Unnamed: 0=2025-06-20 00:00:00 | Unnamed: 1=권현우 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=대여금이자 | Unnamed: 5=6월 제조사업부 차장 신승철 대여금이자(20,000,000*4.6%*40/365)(5/21~6/30) | Unnamed: 6=781086451 | Unnamed: 8=0 | Unnamed: 9=100821 | Unnamed: 10=781187272
+  Row 54: Unnamed: 0=2025-06-20 00:00:00 | Unnamed: 1=권현우 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=대여금이자 | Unnamed: 5=6월 제조사업부 차장 이기혁 대여금이자(30,000,000*4.6%*40/365)(5/21~6/30) | Unnamed: 6=781187272 | Unnamed: 8=0 | Unnamed: 9=151232 | Unnamed: 10=781338504
+  Row 55: Unnamed: 0=2025-06-21 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=보통예금(신한329)이자수익 | Unnamed: 6=781338504 | Unnamed: 8=0 | Unnamed: 9=5397 | Unnamed: 10=781343901
+  Row 56: Unnamed: 0=2025-06-21 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=보통예금(신한RCMS751) 이자수익 | Unnamed: 6=781343901 | Unnamed: 8=0 | Unnamed: 9=1 | Unnamed: 10=781343902
+  Row 57: Unnamed: 0=2025-06-21 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=보통예금(신한USC개발790)이자수익 | Unnamed: 6=781343902 | Unnamed: 8=0 | Unnamed: 9=3267 | Unnamed: 10=781347169
+  Row 58: Unnamed: 0=2025-06-21 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=보통예금(우리825) 이자수익 | Unnamed: 6=781347169 | Unnamed: 8=0 | Unnamed: 9=855 | Unnamed: 10=781348024
+  Row 59: Unnamed: 0=2025-06-21 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=보통예금(하나222) 이자수익 | Unnamed: 6=781348024 | Unnamed: 8=0 | Unnamed: 9=518 | Unnamed: 10=781348542
+  Row 60: Unnamed: 0=2025-06-21 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=보통예금(하나264) 이자수익 | Unnamed: 6=781348542 | Unnamed: 8=0 | Unnamed: 9=493 | Unnamed: 10=781349035
+  Row 61: Unnamed: 0=2025-06-22 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화mmda | Unnamed: 5=보통예금(기업MMDA166) 이자수익 | Unnamed: 6=781349035 | Unnamed: 8=0 | Unnamed: 9=13296515 | Unnamed: 10=794645550
+  Row 62: Unnamed: 0=2025-06-22 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=보통예금(기업173) 이자수익 | Unnamed: 6=794645550 | Unnamed: 8=0 | Unnamed: 9=43091 | Unnamed: 10=794688641
+  Row 63: Unnamed: 0=2025-06-22 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=보통예금(신한RCMS751) 이자수익 | Unnamed: 6=794688641 | Unnamed: 8=0 | Unnamed: 9=6091 | Unnamed: 10=794694732
+  Row 64: Unnamed: 0=2025-06-25 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=기업은행 정기예금(원주014) 10억 만기해지시 이자수익 | Unnamed: 6=794694732 | Unnamed: 8=0 | Unnamed: 9=6785755 | Unnamed: 10=801480487
+  Row 65: Unnamed: 0=2025-06-29 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=외화 | Unnamed: 5=외화예금(기업217)달러이자수익($88.41) | Unnamed: 6=801480487 | Unnamed: 8=0 | Unnamed: 9=141137 | Unnamed: 10=801621624
+  Row 66: Unnamed: 0=2025-06-29 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=외화 | Unnamed: 5=외화예금(기업217)엔화이자수익(JPY80) | Unnamed: 6=801621624 | Unnamed: 8=0 | Unnamed: 9=746 | Unnamed: 10=801622370
+  Row 67: Unnamed: 0=2025-06-29 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=외화 | Unnamed: 5=외화예금(기업217)유로이자수익(EUR5.02) | Unnamed: 6=801622370 | Unnamed: 8=0 | Unnamed: 9=9402 | Unnamed: 10=801631772
+  Row 68: Unnamed: 0=2025-06-29 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=외화 | Unnamed: 5=외화예금(기업MMDA)달러이자수익($28,932.99) | Unnamed: 6=801631772 | Unnamed: 8=0 | Unnamed: 9=46190182 | Unnamed: 10=847821954
+  Row 69: Unnamed: 0=2025-06-30 00:00:00 | Unnamed: 1=김다은(2) | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=리스 | Unnamed: 5=2025년 2분기 결산분개 - 리스 건물 인식 | Unnamed: 6=847821954 | Unnamed: 8=0 | Unnamed: 9=6321801 | Unnamed: 10=854143755
+  Row 70: Unnamed: 0=2025-06-30 00:00:00 | Unnamed: 1=성숙화 | Unnamed: 2=생산1팀 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=6월 이자수익입금-문막농협 동화점 | Unnamed: 6=854143755 | Unnamed: 8=0 | Unnamed: 9=2029 | Unnamed: 10=854145784
+  Row 71: Unnamed: 0=2025-06-30 00:00:00 | Unnamed: 1=박은진 | Unnamed: 2=Marketing1팀 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=2024년 서울사무소 이자수익 | Unnamed: 6=854145784 | Unnamed: 8=0 | Unnamed: 9=60 | Unnamed: 10=854145844
+  Row 72: Unnamed: 0=2025-06-30 00:00:00 | Unnamed: 1=김다은(2) | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=2025년 2분기 결산분개 - 미수수익 계상 | Unnamed: 6=854145844 | Unnamed: 8=0 | Unnamed: 9=355234598 | Unnamed: 10=1209380442
+  Row 73: Unnamed: 0=2025-06-30 00:00:00 | Unnamed: 1=김다은(2) | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=외화 | Unnamed: 5=2025년 2분기 결산분개 - 미수수익 계상 | Unnamed: 6=1209380442 | Unnamed: 8=0 | Unnamed: 9=146190819 | Unnamed: 10=1355571261
+  Row 74: Unnamed: 0=2025-06-30 00:00:00 | Unnamed: 1=김다은(2) | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=전환사채 | Unnamed: 5=2025년 2분기 결산분개 - 미수수익 계상(20억, 전환사채) | Unnamed: 6=1355571261 | Unnamed: 8=0 | Unnamed: 9=13216438 | Unnamed: 10=1368787699
+  Row 75: Unnamed: 0=2025-06-30 00:00:00 | Unnamed: 1=김다은(2) | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=리스 | Unnamed: 5=2025년 2분기 결산분개 - 리스 매출 | Unnamed: 6=1368787699 | Unnamed: 8=0 | Unnamed: 9=5398840 | Unnamed: 10=1374186539
+  Row 76: Unnamed: 0=2025-07-09 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=기업은행 정기예금(원주003) 20억 만기해지시 이자수익 | Unnamed: 6=1374186539 | Unnamed: 8=0 | Unnamed: 9=1351234 | Unnamed: 10=1375537773
+  Row 77: Unnamed: 0=2025-07-18 00:00:00 | Unnamed: 1=권현우 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=대여금이자 | Unnamed: 5=7월 제조사업부 차장 신승철 대여금이자(20,000,000*4.6%*19/365)(7/1~7/20) | Unnamed: 6=1375537773 | Unnamed: 8=0 | Unnamed: 9=47890 | Unnamed: 10=1375585663
+  Row 78: Unnamed: 0=2025-07-18 00:00:00 | Unnamed: 1=권현우 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=대여금이자 | Unnamed: 5=7월 제조사업부 차장 이기혁 대여금이자(30,000,000*4.6%*40/365)(7/1~7/20) | Unnamed: 6=1375585663 | Unnamed: 8=0 | Unnamed: 9=71835 | Unnamed: 10=1375657498
+  Row 79: Unnamed: 0=2025-07-21 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=보통예금(기업011) 이자수익 | Unnamed: 6=1375657498 | Unnamed: 8=0 | Unnamed: 9=22883 | Unnamed: 10=1375680381
+  Row 80: Unnamed: 0=2025-07-28 00:00:00 | Unnamed: 1=안은미 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=외화 | Unnamed: 5=국민은행 외화정기예금 ($3,000,000 , 4.20%) 만기해지시 이자 | Unnamed: 6=1375680381 | Unnamed: 8=0 | Unnamed: 9=7048097 | Unnamed: 10=1382728478
+  Row 81: Unnamed: 0=2025-07-29 00:00:00 | Unnamed: 1=안은미 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=외화 | Unnamed: 5=국민은행 외화정기예금 ($4,000,000 , 4.20%) 만기해지시 이자 | Unnamed: 6=1382728478 | Unnamed: 8=0 | Unnamed: 9=10123299 | Unnamed: 10=1392851777
+  Row 82: Unnamed: 0=2025-08-13 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=보통예금(KB증권181) 이자수익 | Unnamed: 6=1392851777 | Unnamed: 8=0 | Unnamed: 9=4027396 | Unnamed: 10=1396879173
+  Row 83: Unnamed: 0=2025-08-18 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=보통예금(기업011) 이자수익 | Unnamed: 6=1396879173 | Unnamed: 8=0 | Unnamed: 9=26950 | Unnamed: 10=1396906123
+  Row 84: Unnamed: 0=2025-08-20 00:00:00 | Unnamed: 1=권현우 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=대여금이자 | Unnamed: 5=8월 제조사업부 차장 신승철 대여금이자(20,000,000*4.6%*30/365)(7/21~8/20) | Unnamed: 6=1396906123 | Unnamed: 8=0 | Unnamed: 9=75616 | Unnamed: 10=1396981739
+  Row 85: Unnamed: 0=2025-08-20 00:00:00 | Unnamed: 1=권현우 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=대여금이자 | Unnamed: 5=8월 제조사업부 차장 이기혁 대여금이자(30,000,000*4.6%*30/365)(7/21~8/20) | Unnamed: 6=1396981739 | Unnamed: 8=0 | Unnamed: 9=113424 | Unnamed: 10=1397095163
+  Row 86: Unnamed: 0=2025-08-20 00:00:00 | Unnamed: 1=권현우 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=대여금이자 | Unnamed: 5=8월 연구소 전임연구원 천승범 대여금이자(26,000,000*4.6%*15/365)(8/5~8/20) | Unnamed: 6=1397095163 | Unnamed: 8=0 | Unnamed: 9=49150 | Unnamed: 10=1397144313
+  Row 87: Unnamed: 0=2025-08-21 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=기업은행 정기예금(원주012) 100억 만기 시 이자수익 | Unnamed: 6=1397144313 | Unnamed: 8=0 | Unnamed: 9=43879454 | Unnamed: 10=1441023767
+  Row 88: Unnamed: 0=2025-08-21 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=하나은행 정기예금(반포남911) 50억 만기시 이자수익 | Unnamed: 6=1441023767 | Unnamed: 8=0 | Unnamed: 9=21939727 | Unnamed: 10=1462963494
+  Row 89: Unnamed: 0=2025-08-21 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=2025년 2분기 결산분개 - 미수수익 계상(50억, 3.08%) | Unnamed: 6=1462963494 | Unnamed: 8=0 | Unnamed: 9=21939727 | Unnamed: 10=1484903221
+  Row 90: Unnamed: 0=2025-08-27 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=외화 | Unnamed: 5=국민은행 외화정기예금 $3,000,000 만기해지시 이자수익 | Unnamed: 6=1484903221 | Unnamed: 8=0 | Unnamed: 9=11981313 | Unnamed: 10=1496884534
+  Row 91: Unnamed: 0=2025-09-10 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화국채 | Unnamed: 5=KB증권 국채 이자수익(2025.08.13~2025.09.10) | Unnamed: 6=1496884534 | Unnamed: 8=0 | Unnamed: 9=20057065 | Unnamed: 10=1516941599
+  Row 92: Unnamed: 0=2025-09-11 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=외화 | Unnamed: 5=국민은행 외화정기예금 $1,000,000 만기시 이자수익 | Unnamed: 6=1516941599 | Unnamed: 8=0 | Unnamed: 9=5693234 | Unnamed: 10=1522634833
+  Row 93: Unnamed: 0=2025-09-11 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=국민은행 정기예금(방배637) 30억 만기 시 이자수익 | Unnamed: 6=1522634833 | Unnamed: 8=0 | Unnamed: 9=17400022 | Unnamed: 10=1540034855
+  Row 94: Unnamed: 0=2025-09-13 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=보통예금(국민460) 이자수익 | Unnamed: 6=1540034855 | Unnamed: 8=0 | Unnamed: 9=203 | Unnamed: 10=1540035058
+  Row 95: Unnamed: 0=2025-09-19 00:00:00 | Unnamed: 1=권현우 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=대여금이자 | Unnamed: 5=9월 제조사업부 차장 신승철 대여금이자(20,000,000*4.6%*30/365)(8/21~9/30) | Unnamed: 6=1540035058 | Unnamed: 8=0 | Unnamed: 9=100821 | Unnamed: 10=1540135879
+  Row 96: Unnamed: 0=2025-09-19 00:00:00 | Unnamed: 1=권현우 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=대여금이자 | Unnamed: 5=9월 제조사업부 차장 이기혁 대여금이자(30,000,000*4.6%*30/365)(8/21~9/30) | Unnamed: 6=1540135879 | Unnamed: 8=0 | Unnamed: 9=151232 | Unnamed: 10=1540287111
+  Row 97: Unnamed: 0=2025-09-19 00:00:00 | Unnamed: 1=권현우 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=대여금이자 | Unnamed: 5=9월 연구소 전임연구원 천승범 대여금이자(26,000,000*4.6%*15/365)(8/21~9/30) | Unnamed: 6=1540287111 | Unnamed: 8=0 | Unnamed: 9=125607 | Unnamed: 10=1540412718
+  Row 98: Unnamed: 0=2025-09-20 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=보통예금(우리825) 이자수익 | Unnamed: 6=1540412718 | Unnamed: 8=0 | Unnamed: 9=476 | Unnamed: 10=1540413194
+  Row 99: Unnamed: 0=2025-09-21 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화mmda | Unnamed: 5=보통예금(기업MMDA166) 이자수익 | Unnamed: 6=1540413194 | Unnamed: 8=0 | Unnamed: 9=29574766 | Unnamed: 10=1569987960
+  Row 100: Unnamed: 0=2025-09-21 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=보통예금(기업173) 이자수익 | Unnamed: 6=1569987960 | Unnamed: 8=0 | Unnamed: 9=43947 | Unnamed: 10=1570031907
+  Row 101: Unnamed: 0=2025-09-21 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=보통예금(기업255) 이자수익 | Unnamed: 6=1570031907 | Unnamed: 8=0 | Unnamed: 9=1 | Unnamed: 10=1570031908
+  Row 102: Unnamed: 0=2025-09-21 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=보통예금(기업RCMS262) 이자수익 | Unnamed: 6=1570031908 | Unnamed: 8=0 | Unnamed: 9=1184 | Unnamed: 10=1570033092
+  Row 103: Unnamed: 0=2025-09-21 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=보통예금(기업270) 이자수익 | Unnamed: 6=1570033092 | Unnamed: 8=0 | Unnamed: 9=1643 | Unnamed: 10=1570034735
+  Row 104: Unnamed: 0=2025-09-21 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=보통예금(신한RCMS751) 이자수익 | Unnamed: 6=1570034735 | Unnamed: 8=0 | Unnamed: 9=10731 | Unnamed: 10=1570045466
+  Row 105: Unnamed: 0=2025-09-22 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=보통예금(기업011) 이자수익 | Unnamed: 6=1570045466 | Unnamed: 8=0 | Unnamed: 9=30148 | Unnamed: 10=1570075614
+  Row 106: Unnamed: 0=2025-09-24 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=기업은행 정기예금(원주015) 73억 만기해지시 이자수익 | Unnamed: 6=1570075614 | Unnamed: 8=0 | Unnamed: 9=50052000 | Unnamed: 10=1620127614
+  Row 107: Unnamed: 0=2025-09-28 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=외화 | Unnamed: 5=외화예금(기업217)달러이자수익($136.49) | Unnamed: 6=1620127614 | Unnamed: 8=0 | Unnamed: 9=225892 | Unnamed: 10=1620353506
+  Row 108: Unnamed: 0=2025-09-28 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=외화 | Unnamed: 5=외화예금(기업217)엔화이자수익(JPY71) | Unnamed: 6=1620353506 | Unnamed: 8=0 | Unnamed: 9=664 | Unnamed: 10=1620354170
+  Row 109: Unnamed: 0=2025-09-28 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=외화 | Unnamed: 5=외화예금(기업217)유로이자수익(EUR2.28) | Unnamed: 6=1620354170 | Unnamed: 8=0 | Unnamed: 9=3732 | Unnamed: 10=1620357902
+  Row 110: Unnamed: 0=2025-09-28 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=외화 | Unnamed: 5=외화예금(기업MMDA)달러이자수익($32,345.16) | Unnamed: 6=1620357902 | Unnamed: 8=0 | Unnamed: 9=53530093 | Unnamed: 10=1673887995
+  Row 111: Unnamed: 0=2025-09-30 00:00:00 | Unnamed: 1=김다은(2) | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=2025년 3분기 결산분개 - 미수수익 계상 | Unnamed: 6=1673887995 | Unnamed: 8=0 | Unnamed: 9=220005747 | Unnamed: 10=1893893742
+  Row 112: Unnamed: 0=2025-09-30 00:00:00 | Unnamed: 1=김다은(2) | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=외화 | Unnamed: 5=2025년 3분기 결산분개 - 미수수익 계상 | Unnamed: 6=1893893742 | Unnamed: 8=0 | Unnamed: 9=2884529 | Unnamed: 10=1896778271
+  Row 113: Unnamed: 0=2025-09-30 00:00:00 | Unnamed: 1=김다은(2) | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=2025년 3분기 결산분개 - 미수수익 계상(국채, 2.625%) | Unnamed: 6=1896778271 | Unnamed: 8=0 | Unnamed: 9=14563931 | Unnamed: 10=1911342202
+  Row 114: Unnamed: 0=2025-09-30 00:00:00 | Unnamed: 1=김다은(2) | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=전환사채 | Unnamed: 5=2025년 3분기 결산분개 - 미수수익 계상(20억, 전환사채) | Unnamed: 6=1911342202 | Unnamed: 8=0 | Unnamed: 9=18147945 | Unnamed: 10=1929490147
+  Row 115: Unnamed: 0=2025-09-30 00:00:00 | Unnamed: 1=성숙화 | Unnamed: 2=생산1팀 | Unnamed: 3=이자수익 | Unnamed: 4=대여금이자 | Unnamed: 5=9월 이자수익입금 문막농협동화점 | Unnamed: 6=1929490147 | Unnamed: 8=0 | Unnamed: 9=1555 | Unnamed: 10=1929491702
+  Row 116: Unnamed: 0=2025-09-30 00:00:00 | Unnamed: 1=김다은(2) | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=리스 | Unnamed: 5=2025년 3분기 결산분개 - 리스 매출 | Unnamed: 6=1929491702 | Unnamed: 8=0 | Unnamed: 9=5191705 | Unnamed: 10=1934683407
+  Row 117: Unnamed: 0=2025-09-30 00:00:00 | Unnamed: 1=김다은(2) | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=리스 | Unnamed: 5=2025년 3분기 결산분개 - 리스 건물 인식 | Unnamed: 6=1934683407 | Unnamed: 8=0 | Unnamed: 9=5377386 | Unnamed: 10=1940060793
+  Row 118: Unnamed: 0=2025-10-13 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=보통예금(KB증권181) RP 이자수익(2025.09.10~2025.10.13) | Unnamed: 6=1940060793 | Unnamed: 8=0 | Unnamed: 9=244382 | Unnamed: 10=1940305175
+  Row 119: Unnamed: 0=2025-10-16 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=기업은행 정기예금(원주007) 150억 만기해지시 이자수익 | Unnamed: 6=1940305175 | Unnamed: 8=0 | Unnamed: 9=17819180 | Unnamed: 10=1958124355
+  Row 120: Unnamed: 0=2025-10-20 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=보통예금(기업011) 이자수익 | Unnamed: 6=1958124355 | Unnamed: 8=0 | Unnamed: 9=15077 | Unnamed: 10=1958139432
+  Row 121: Unnamed: 0=2025-10-20 00:00:00 | Unnamed: 1=권현우 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=대여금이자 | Unnamed: 5=10월 제조사업부 차장 신승철 대여금이자(20,000,000*4.6%*30/365)(10/1~10/20) | Unnamed: 6=1958139432 | Unnamed: 8=0 | Unnamed: 9=47890 | Unnamed: 10=1958187322
+  Row 122: Unnamed: 0=2025-10-20 00:00:00 | Unnamed: 1=권현우 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=대여금이자 | Unnamed: 5=10월 제조사업부 차장 이기혁 대여금이자(30,000,000*4.6%*30/365)(10/1~10/20) | Unnamed: 6=1958187322 | Unnamed: 8=0 | Unnamed: 9=71835 | Unnamed: 10=1958259157
+  Row 123: Unnamed: 0=2025-10-20 00:00:00 | Unnamed: 1=권현우 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=대여금이자 | Unnamed: 5=10월 연구소 전임연구원 천승범 대여금이자(26,000,000*4.6%*15/365)(10/1~10/20) | Unnamed: 6=1958259157 | Unnamed: 8=0 | Unnamed: 9=57069 | Unnamed: 10=1958316226
+  Row 124: Unnamed: 0=2025-11-11 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=KB증권 발행어음 50억원 만기해지시 이자수익 | Unnamed: 6=1958316226 | Unnamed: 8=0 | Unnamed: 9=16397260 | Unnamed: 10=1974713486
+  Row 125: Unnamed: 0=2025-11-13 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=보통예금(KB증권181) RP 이자수익(2025.10.13~2025.11.13) | Unnamed: 6=1974713486 | Unnamed: 8=0 | Unnamed: 9=229939 | Unnamed: 10=1974943425
+  Row 126: Unnamed: 0=2025-11-14 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=기업은행 정기예금(원주008) 40억 만기시 이자수익 | Unnamed: 6=1974943425 | Unnamed: 8=0 | Unnamed: 9=12772604 | Unnamed: 10=1987716029
+  Row 127: Unnamed: 0=2025-11-17 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=보통예금(기업011) 이자수익 | Unnamed: 6=1987716029 | Unnamed: 8=0 | Unnamed: 9=30434 | Unnamed: 10=1987746463
+  Row 128: Unnamed: 0=2025-11-20 00:00:00 | Unnamed: 1=권현우 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=대여금이자 | Unnamed: 5=11월 제조사업부 차장 신승철 대여금이자(20,000,000*4.6%*30/365)(10/21~11/20) | Unnamed: 6=1987746463 | Unnamed: 8=0 | Unnamed: 9=75616 | Unnamed: 10=1987822079
+  Row 129: Unnamed: 0=2025-11-20 00:00:00 | Unnamed: 1=권현우 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=대여금이자 | Unnamed: 5=11월 제조사업부 차장 이기혁 대여금이자(30,000,000*4.6%*30/365)(10/21~11/20) | Unnamed: 6=1987822079 | Unnamed: 8=0 | Unnamed: 9=113424 | Unnamed: 10=1987935503
+  Row 130: Unnamed: 0=2025-11-20 00:00:00 | Unnamed: 1=권현우 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=대여금이자 | Unnamed: 5=11월 연구소 전임연구원 천승범 대여금이자(26,000,000*4.6%*30/365)(10/21~11/20) | Unnamed: 6=1987935503 | Unnamed: 8=0 | Unnamed: 9=86013 | Unnamed: 10=1988021516
+  Row 131: Unnamed: 0=2025-12-04 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=기업은행 정기예금(원주019) 50억 중도해지시 이자수익 | Unnamed: 6=1988021516 | Unnamed: 8=0 | Unnamed: 9=602739 | Unnamed: 10=1988624255
+  Row 132: Unnamed: 0=2025-12-11 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=외화 | Unnamed: 5=국민은행 외화정기예금 $1,000,000 (3개월) 만기시 이자수익 | Unnamed: 6=1988624255 | Unnamed: 8=0 | Unnamed: 9=11958787 | Unnamed: 10=2000583042
+  Row 133: Unnamed: 0=2025-12-13 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=보통예금(국민460) 이자수익 | Unnamed: 6=2000583042 | Unnamed: 8=0 | Unnamed: 9=206 | Unnamed: 10=2000583248
+  Row 134: Unnamed: 0=2025-12-15 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=보통예금(KB증권181) RP 이자수익(2025.11.13~2025.12.15) | Unnamed: 6=2000583248 | Unnamed: 8=0 | Unnamed: 9=237715 | Unnamed: 10=2000820963
+  Row 135: Unnamed: 0=2025-12-19 00:00:00 | Unnamed: 1=권현우 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=대여금이자 | Unnamed: 5=11월 제조사업부 차장 신승철 대여금이자(30,000,000*4.6%*40/365)(11/21~12/31) | Unnamed: 6=2000820963 | Unnamed: 8=0 | Unnamed: 9=151232 | Unnamed: 10=2000972195
+  Row 136: Unnamed: 0=2025-12-19 00:00:00 | Unnamed: 1=권현우 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=대여금이자 | Unnamed: 5=11월 제조사업부 차장 이기혁 대여금이자(30,000,000*4.6%*40/365)(11/21~12/31) | Unnamed: 6=2000972195 | Unnamed: 8=0 | Unnamed: 9=151232 | Unnamed: 10=2001123427
+  Row 137: Unnamed: 0=2025-12-19 00:00:00 | Unnamed: 1=권현우 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=대여금이자 | Unnamed: 5=11월 연구소 전임연구원 천승범 대여금이자(26,000,000*4.6%*40/365)(11/21~12/31) | Unnamed: 6=2001123427 | Unnamed: 8=0 | Unnamed: 9=109223 | Unnamed: 10=2001232650
+  Row 138: Unnamed: 0=2025-12-20 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=보통예금(신한329) 이자수익 | Unnamed: 6=2001232650 | Unnamed: 8=0 | Unnamed: 9=13700 | Unnamed: 10=2001246350
+  Row 139: Unnamed: 0=2025-12-20 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=보통예금(신한RCMS751) 이자수익 | Unnamed: 6=2001246350 | Unnamed: 8=0 | Unnamed: 9=7 | Unnamed: 10=2001246357
+  Row 140: Unnamed: 0=2025-12-20 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=보통예금(신한USC개발790)이자수익 | Unnamed: 6=2001246357 | Unnamed: 8=0 | Unnamed: 9=4178 | Unnamed: 10=2001250535
+  Row 141: Unnamed: 0=2025-12-20 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=보통예금(우리825) 이자수익 | Unnamed: 6=2001250535 | Unnamed: 8=0 | Unnamed: 9=930 | Unnamed: 10=2001251465
+  Row 142: Unnamed: 0=2025-12-20 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=보통예금(하나222) 이자수익 | Unnamed: 6=2001251465 | Unnamed: 8=0 | Unnamed: 9=695 | Unnamed: 10=2001252160
+  Row 143: Unnamed: 0=2025-12-20 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=보통예금(하나264) 이자수익 | Unnamed: 6=2001252160 | Unnamed: 8=0 | Unnamed: 9=948 | Unnamed: 10=2001253108
+  Row 144: Unnamed: 0=2025-12-21 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화mmda | Unnamed: 5=보통예금(기업MMDA166) 이자수익 | Unnamed: 6=2001253108 | Unnamed: 8=0 | Unnamed: 9=29068489 | Unnamed: 10=2030321597
+  Row 145: Unnamed: 0=2025-12-21 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=보통예금(기업173) 이자수익 | Unnamed: 6=2030321597 | Unnamed: 8=0 | Unnamed: 9=40361 | Unnamed: 10=2030361958
+  Row 146: Unnamed: 0=2025-12-21 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=보통예금(기업RCMS262) 이자수익 | Unnamed: 6=2030361958 | Unnamed: 8=0 | Unnamed: 9=7875 | Unnamed: 10=2030369833
+  Row 147: Unnamed: 0=2025-12-21 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=보통예금(기업270) 이자수익 | Unnamed: 6=2030369833 | Unnamed: 8=0 | Unnamed: 9=611 | Unnamed: 10=2030370444
+  Row 148: Unnamed: 0=2025-12-21 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=보통예금(신한RCMS751) 이자수익 | Unnamed: 6=2030370444 | Unnamed: 8=0 | Unnamed: 9=6496 | Unnamed: 10=2030376940
+  Row 149: Unnamed: 0=2025-12-22 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=보통예금(기업011) 이자수익 | Unnamed: 6=2030376940 | Unnamed: 8=0 | Unnamed: 9=20865 | Unnamed: 10=2030397805
+  Row 150: Unnamed: 0=2025-12-28 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=외화 | Unnamed: 5=외화예금(기업MMDA)달러이자수익($29,978.46) | Unnamed: 6=2030397805 | Unnamed: 8=0 | Unnamed: 9=50722417 | Unnamed: 10=2081120222
+  Row 151: Unnamed: 0=2025-12-28 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=외화 | Unnamed: 5=외화예금(기업217)달러이자수익($91.42) | Unnamed: 6=2081120222 | Unnamed: 8=0 | Unnamed: 9=154677 | Unnamed: 10=2081274899
+  Row 152: Unnamed: 0=2025-12-28 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=외화 | Unnamed: 5=외화예금(기업217)엔화이자수익(JPY54) | Unnamed: 6=2081274899 | Unnamed: 8=0 | Unnamed: 9=493 | Unnamed: 10=2081275392
+  Row 153: Unnamed: 0=2025-12-28 00:00:00 | Unnamed: 1=박상희 | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=외화 | Unnamed: 5=외화예금(기업217)유로이자수익(EUR4.16) | Unnamed: 6=2081275392 | Unnamed: 8=0 | Unnamed: 9=8286 | Unnamed: 10=2081283678
+  Row 154: Unnamed: 0=2025-12-31 00:00:00 | Unnamed: 1=박은진 | Unnamed: 2=Marketing1팀 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=2025년 하반기 서울사무소 이자수익 | Unnamed: 6=2081283678 | Unnamed: 8=0 | Unnamed: 9=102 | Unnamed: 10=2081283780
+  Row 155: Unnamed: 0=2025-12-31 00:00:00 | Unnamed: 1=김다은(2) | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=2025년 4분기 결산분개 - 미수수익 계상 | Unnamed: 6=2081283780 | Unnamed: 8=0 | Unnamed: 9=313916982 | Unnamed: 10=2395200762
+  Row 156: Unnamed: 0=2025-12-31 00:00:00 | Unnamed: 1=김다은(2) | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=외화 | Unnamed: 5=2025년 4분기 결산분개 - 미수수익 계상 | Unnamed: 6=2395200762 | Unnamed: 8=0 | Unnamed: 9=2625423 | Unnamed: 10=2397826185
+  Row 157: Unnamed: 0=2025-12-31 00:00:00 | Unnamed: 1=김다은(2) | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화국채 | Unnamed: 5=2025년 4분기 결산분개 - 미수수익 계상(국채, 2.625%) | Unnamed: 6=2397826185 | Unnamed: 8=0 | Unnamed: 9=66994081 | Unnamed: 10=2464820266
+  Row 158: Unnamed: 0=2025-12-31 00:00:00 | Unnamed: 1=김다은(2) | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=전환사채 | Unnamed: 5=2025년 4분기 결산분개 - 미수수익 계상(20억, 전환사채) | Unnamed: 6=2464820266 | Unnamed: 8=0 | Unnamed: 9=18147945 | Unnamed: 10=2482968211
+  Row 159: Unnamed: 0=2025-12-31 00:00:00 | Unnamed: 1=김다은(2) | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=2025년 4분기 결산분개 - 미수수익 계상(RP, 2.10%) | Unnamed: 6=2482968211 | Unnamed: 8=0 | Unnamed: 9=119042 | Unnamed: 10=2483087253
+  Row 160: Unnamed: 0=2025-12-31 00:00:00 | Unnamed: 1=성숙화 | Unnamed: 2=생산1팀 | Unnamed: 3=이자수익 | Unnamed: 4=원화 | Unnamed: 5=12월 이자수익-문막농협 동화점 | Unnamed: 6=2483087253 | Unnamed: 8=0 | Unnamed: 9=1860 | Unnamed: 10=2483089113
+  Row 161: Unnamed: 0=2025-12-31 00:00:00 | Unnamed: 1=김다은(2) | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=리스 | Unnamed: 5=2025년 4분기 결산분개 - 리스 건물 인식 | Unnamed: 6=2483089113 | Unnamed: 8=0 | Unnamed: 9=5438636 | Unnamed: 10=2488527749
+  Row 162: Unnamed: 0=2025-12-31 00:00:00 | Unnamed: 1=김다은(2) | Unnamed: 2=경영본부 | Unnamed: 3=이자수익 | Unnamed: 4=리스 | Unnamed: 5=2025년 4분기 결산분개 - 리스 매출 | Unnamed: 6=2488527749 | Unnamed: 8=0 | Unnamed: 9=5820240 | Unnamed: 10=2494347989
+  Row 165: Unnamed: 0=외화예금이자 | Unnamed: 1=591701436
+  Row 166: Unnamed: 0=원화예금이자 | Unnamed: 1=1629838887
+  Row 167: Unnamed: 0=전환사채 | Unnamed: 1=49512328
+  Row 168: Unnamed: 0=원화MMDA | Unnamed: 1=85941181
+  Row 169: Unnamed: 0=원화국채 | Unnamed: 1=87051146
+  Row 170: Unnamed: 0=리스 | Unnamed: 1=47561178
+  Row 171: Unnamed: 0=대여금이자 | Unnamed: 1=2741833
+  Row 172: Unnamed: 1=2494347989
+  Row 174: Unnamed: 0=26년도예상 | Unnamed: 3=원금 | Unnamed: 4=예상이율 | Unnamed: 6=2025년이율 | Unnamed: 7=25년대비차이 | Unnamed: 8=원금
+  Row 175: Unnamed: 0=전환사채 | Unnamed: 1=64000000 | Unnamed: 2=20억 | Unnamed: 3=2000000000 | Unnamed: 4=0.032
+  Row 176: Unnamed: 0=원화정기예금 | Unnamed: 1=1296400000 | Unnamed: 2=463억 | Unnamed: 3=46300000000 | Unnamed: 4=0.028 | Unnamed: 6=0.0305 | Unnamed: 7=411000000 | Unnamed: 8=560억
+  Row 177: Unnamed: 0=외화예금이자 | Unnamed: 1=504000000 | Unnamed: 2=12백만불 | Unnamed: 3=16800000000 | Unnamed: 4=0.03 | Unnamed: 5=환율 1,400 | Unnamed: 6=0.043 | Unnamed: 7=168000000
+  Row 178: Unnamed: 0=대여금이자 | Unnamed: 1=6210000 | Unnamed: 3=135000000 | Unnamed: 4=0.046
+  Row 179: Unnamed: 0=원화MMDA | Unnamed: 1=100000000 | Unnamed: 2=50억(평잔) | Unnamed: 3=5000000000 | Unnamed: 4=0.02
+  Row 180: Unnamed: 0=KB국채 | Unnamed: 1=262500000 | Unnamed: 2=100억 | Unnamed: 3=10000000000 | Unnamed: 4=0.02625
+  Row 181: Unnamed: 0=리스이자 | Unnamed: 1=45000000
+  Row 182: Unnamed: 1=2278110000
+
+=== Sheet: Sheet1 (shape: (8, 8)) ===
+  Row 0: 항목=외화예금이자 | 2025년도=591701436 | 금리=0.0416 | 2026년도 예상이자=511200000 | 예상금리=0.03 | 26년 비고=12만불 환율1,420 | 25년대비차이=-80501436 | 25년 비고=10만불 환율1,422
+  Row 1: 항목=원화예금이자 | 2025년도=1629838887 | 금리=0.0305 | 2026년도 예상이자=1296400000 | 예상금리=0.028 | 26년 비고=26년예금 500억 | 25년대비차이=-333438887 | 25년 비고=25년예금 560억
+  Row 2: 항목=원화MMDA | 2025년도=85941181 | 금리=0.02 | 2026년도 예상이자=120000000 | 예상금리=0.02 | 26년 비고=평잔 60억 | 25년대비차이=34058819 | 25년 비고=평잔 43억
+  Row 3: 항목=전환사채 | 2025년도=49512328 | 금리=0.032 | 2026년도 예상이자=64000000 | 예상금리=0.032 | 25년대비차이=14487672 | 25년 비고=25년4월24일
+  Row 4: 항목=원화국채 | 2025년도=87051146 | 금리=0.0263 | 2026년도 예상이자=262500000 | 예상금리=0.0263 | 25년대비차이=175448854 | 25년 비고=25년 8월가입
+  Row 5: 항목=대여금이자 | 2025년도=2741833 | 2026년도 예상이자=6210000 | 예상금리=0.046 | 25년대비차이=3468167 | 25년 비고=대여금 1.3억
+  Row 6: 항목=리스(결산분개) | 2025년도=47561178 | 2026년도 예상이자=45000000 | 25년대비차이=-2561178
+  Row 7: 2025년도=2494347989 | 2026년도 예상이자=2305310000 | 25년대비차이=-189037989
+

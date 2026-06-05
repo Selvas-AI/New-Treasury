@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { fmtKRW, fmtReturn, returnBadgeClass, calcReturn, calcBondValue, normDate } from '../../lib/format'
 import { fetchBondPrice } from '../../hooks/useGas'
 import type { InvestmentRecord } from '../../types'
+import { NotionTable, type ColumnDef } from '../common/NotionTable'
 
 interface Props {
   bondName: string
@@ -138,15 +139,19 @@ export default function BondHistoryPanel({
                 className="w-full border border-gray-200 rounded px-2 py-1.5 text-xs text-right focus:outline-none focus:ring-1 focus:ring-blue-400" />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">기준가 (÷10=1좌당)</label>
+              <label className="block text-xs text-gray-400 mb-1">
+                기준가 (÷10=1좌당)
+                {fetching && <span className="ml-1 text-blue-400 animate-pulse">조회 중…</span>}
+              </label>
               <div className="flex gap-1">
                 <input type="number" min="0" step="0.01" value={form.bondPrice}
                   onChange={e => setForm(f => ({ ...f, bondPrice: e.target.value }))}
                   placeholder="0"
                   className="flex-1 min-w-0 border border-gray-200 rounded px-2 py-1.5 text-xs text-right focus:outline-none focus:ring-1 focus:ring-blue-400" />
                 <button type="button" onClick={handleFetchPrice} disabled={fetching}
-                  className="shrink-0 text-xs bg-blue-50 text-blue-600 border border-blue-200 px-2 rounded hover:bg-blue-100 disabled:opacity-50">
-                  {fetching ? '…' : '조회'}
+                  title="전 영업일 기준가 조회 (공공데이터 T+1)"
+                  className="shrink-0 text-xs bg-blue-50 text-blue-600 border border-blue-200 px-2 rounded hover:bg-blue-100 disabled:opacity-50 whitespace-nowrap">
+                  {fetching ? '조회 중' : '조회'}
                 </button>
               </div>
             </div>
@@ -189,59 +194,94 @@ export default function BondHistoryPanel({
         </form>
       )}
 
-      {history.length === 0 ? (
-        <p className="text-xs text-gray-400 text-center py-2">이력이 없습니다.</p>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="border-b border-gray-200">
-                {['기준일', '좌수', '기준가', '평가금액', '수익률', '취득가액', '가용', ''].map(h => (
-                  <th key={h} className="text-left text-gray-400 font-medium pb-1.5 pr-3 whitespace-nowrap">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {history.map(rec => {
-                const val = rec.bondQty && rec.bondPrice
-                  ? calcBondValue(rec.bondQty, rec.bondPrice)
-                  : rec.amount
-                const ret = calcReturn(val, rec.acquisition_cost)
-                return (
-                  <tr key={rec.id} className="border-b border-gray-100 hover:bg-white">
-                    <td className="py-1.5 pr-3 text-gray-700">{rec.priceDate || rec.start}</td>
-                    <td className="py-1.5 pr-3 text-right tabular-nums text-gray-600">{(rec.bondQty || 0).toLocaleString()}</td>
-                    <td className="py-1.5 pr-3 text-right tabular-nums text-gray-600">{rec.bondPrice || '-'}</td>
-                    <td className="py-1.5 pr-3 text-right tabular-nums font-medium text-gray-800">{fmtKRW(val)}</td>
-                    <td className="py-1.5 pr-3">
-                      {ret !== null
-                        ? <span className={`px-1.5 py-0.5 rounded font-medium ${returnBadgeClass(ret)}`}>{fmtReturn(ret)}</span>
-                        : <span className="text-gray-300">-</span>
-                      }
-                    </td>
-                    <td className="py-1.5 pr-3 text-right tabular-nums text-gray-400">
-                      {rec.acquisition_cost ? fmtKRW(rec.acquisition_cost) : '-'}
-                    </td>
-                    <td className="py-1.5 pr-3">
-                      <span className={`px-1 rounded ${rec.available === '가용' ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-400'}`}>
-                        {rec.available}
-                      </span>
-                    </td>
-                    <td className="py-1.5 whitespace-nowrap">
-                      {isEditable && (
-                        <div className="flex gap-1.5">
-                          <button onClick={() => loadRecord(rec)} className="text-blue-400 hover:text-blue-600">수정</button>
-                          <button onClick={() => handleRemove(rec.id)} className="text-red-300 hover:text-red-500">삭제</button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+      {(() => {
+        const columns: ColumnDef<InvestmentRecord, unknown>[] = [
+          {
+            id: 'priceDate',
+            header: '기준일',
+            accessorFn: row => row.priceDate || row.start,
+          },
+          {
+            accessorKey: 'bondQty',
+            header: '좌수',
+            cell: ({ getValue }) => (
+              <span className="tabular-nums text-gray-600">{(getValue<number | undefined>() || 0).toLocaleString()}</span>
+            ),
+          },
+          {
+            accessorKey: 'bondPrice',
+            header: '기준가',
+            cell: ({ getValue }) => (
+              <span className="tabular-nums text-gray-600">{getValue<number | undefined>() ?? '-'}</span>
+            ),
+          },
+          {
+            id: 'evalAmt',
+            header: '평가금액',
+            accessorFn: row =>
+              row.bondQty && row.bondPrice ? calcBondValue(row.bondQty, row.bondPrice) : row.amount,
+            cell: ({ getValue }) => (
+              <span className="tabular-nums font-medium text-gray-800">{fmtKRW(getValue<number>())}</span>
+            ),
+          },
+          {
+            id: 'return',
+            header: '수익률',
+            accessorFn: row => {
+              const val = row.bondQty && row.bondPrice ? calcBondValue(row.bondQty, row.bondPrice) : row.amount
+              return calcReturn(val, row.acquisition_cost) ?? -Infinity
+            },
+            cell: ({ row }) => {
+              const val = row.original.bondQty && row.original.bondPrice
+                ? calcBondValue(row.original.bondQty, row.original.bondPrice)
+                : row.original.amount
+              const ret = calcReturn(val, row.original.acquisition_cost)
+              return ret !== null
+                ? <span className={`px-1.5 py-0.5 rounded font-medium ${returnBadgeClass(ret)}`}>{fmtReturn(ret)}</span>
+                : <span className="text-gray-300">-</span>
+            },
+          },
+          {
+            accessorKey: 'acquisition_cost',
+            header: '취득가액',
+            cell: ({ getValue }) => {
+              const v = getValue<number | undefined>()
+              return <span className="tabular-nums text-gray-400">{v ? fmtKRW(v) : '-'}</span>
+            },
+          },
+          {
+            accessorKey: 'available',
+            header: '가용',
+            cell: ({ getValue }) => {
+              const v = getValue<string>()
+              return (
+                <span className={`px-1 rounded ${v === '가용' ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-400'}`}>
+                  {v}
+                </span>
+              )
+            },
+          },
+          ...(isEditable ? [{
+            id: 'actions',
+            header: '',
+            enableSorting: false,
+            cell: ({ row }: { row: { original: InvestmentRecord } }) => (
+              <div className="flex gap-1.5">
+                <button onClick={() => loadRecord(row.original)} className="text-blue-400 hover:text-blue-600">수정</button>
+                <button onClick={() => handleRemove(row.original.id)} className="text-red-300 hover:text-red-500">삭제</button>
+              </div>
+            ),
+          } as ColumnDef<InvestmentRecord, unknown>] : []),
+        ]
+        return (
+          <NotionTable<InvestmentRecord>
+            tableId="bond_history"
+            columns={columns}
+            data={history}
+            emptyText="이력이 없습니다."
+          />
+        )
+      })()}
     </div>
   )
 }

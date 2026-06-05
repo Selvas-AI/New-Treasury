@@ -8,6 +8,9 @@ export default defineConfig({
     tailwindcss(),
   ],
   base: '/New-Treasury/',
+  resolve: {
+    dedupe: ['react', 'react-dom'],
+  },
   server: { port: 5175 },
   test: {
     globals: true,

@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useIssueCount } from '../contexts/issueCount'
@@ -20,6 +20,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/history',        label: '자금 변동 이력',  icon: '📋' },
   { to: '/issue-history',  label: '이슈 이력',       icon: '🔔' },
   { to: '/fx',             label: '환율 현황',       icon: '💱' },
+  { to: '/policy',         label: '자금정책 관리',   icon: '📋' },
 ]
 
 const ADMIN_ITEMS: NavItem[] = [
@@ -40,24 +41,39 @@ export default function Sidebar({ collapsed, onCollapse, onNavClick }: Props) {
   const { user } = useAuth()
   const { openCount } = useIssueCount()
   const fx = useFx()
+  const [fxPopupOpen, setFxPopupOpen] = useState(false)
+  const fxRef = useRef<HTMLDivElement>(null)
 
-  // 마운트 시 환율 자동 로드 — 주가 3건 GAS 요청 완료 후 호출되도록 3초 지연
+  // 마운트 시 환율 자동 로드
   useEffect(() => {
     const timer = window.setTimeout(() => { void fx.fetchRates() }, 3000)
     return () => window.clearTimeout(timer)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // 환율 팝업 외부 클릭 닫기
+  useEffect(() => {
+    if (!fxPopupOpen) return
+    function handler(e: MouseEvent) {
+      if (fxRef.current && !fxRef.current.contains(e.target as Node)) {
+        setFxPopupOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [fxPopupOpen])
+
   const w = collapsed ? 'w-14' : 'w-56'
 
   function linkClass({ isActive }: { isActive: boolean }) {
-    return `flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+    return `relative flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
       isActive ? 'bg-blue-600 text-white' : 'hover:bg-gray-700 hover:text-white'
     }`
   }
 
   return (
-    <aside className={`${w} h-full bg-gray-900 text-gray-300 flex flex-col transition-all duration-200 overflow-hidden`}>
-
+    <aside className={`${w} h-full bg-gray-900 text-gray-300 flex flex-col transition-all duration-200`}
+      style={{ overflow: collapsed ? 'visible' : 'hidden' }}
+    >
       {/* 헤더 + 접기 버튼 */}
       <div className="flex items-center justify-between px-3 py-4 border-b border-gray-700 shrink-0">
         {!collapsed && (
@@ -75,7 +91,7 @@ export default function Sidebar({ collapsed, onCollapse, onNavClick }: Props) {
       </div>
 
       {/* 메인 메뉴 */}
-      <nav className="flex-1 px-2 py-4 space-y-0.5 overflow-y-auto">
+      <nav className={`flex-1 px-2 py-4 space-y-0.5 ${collapsed ? 'overflow-visible' : 'overflow-y-auto sidebar-scroll'}`}>
         {NAV_ITEMS.map(item => (
           <NavLink
             key={item.to}
@@ -84,10 +100,19 @@ export default function Sidebar({ collapsed, onCollapse, onNavClick }: Props) {
             onClick={onNavClick}
             title={collapsed ? item.label : undefined}
           >
-            <span className="w-5 shrink-0 text-center text-base leading-none">{item.icon}</span>
+            {/* 이슈 아이콘 뱃지 (접힌 상태에서 아이콘 우상단) */}
+            <span className={`relative shrink-0 w-5 text-center text-base leading-none ${collapsed ? 'block' : ''}`}>
+              {item.icon}
+              {item.to === '/issue-history' && openCount > 0 && collapsed && (
+                <span className="absolute -top-1.5 -right-1.5 min-w-[14px] h-3.5 px-0.5 text-[9px] font-bold bg-red-500 text-white rounded-full flex items-center justify-center leading-none z-10">
+                  {openCount}
+                </span>
+              )}
+            </span>
             {!collapsed && <span className="flex-1 truncate">{item.label}</span>}
-            {item.to === '/issue-history' && openCount > 0 && (
-              <span className={`shrink-0 text-xs font-bold px-1.5 py-0.5 rounded-full bg-red-500 text-white ${collapsed ? 'ml-0' : 'ml-auto'}`}>
+            {/* 펼친 상태 배지 */}
+            {item.to === '/issue-history' && openCount > 0 && !collapsed && (
+              <span className="ml-auto shrink-0 text-xs font-bold px-1.5 py-0.5 rounded-full bg-red-500 text-white leading-none">
                 {openCount}
               </span>
             )}
@@ -120,7 +145,7 @@ export default function Sidebar({ collapsed, onCollapse, onNavClick }: Props) {
       </nav>
 
       {/* ── 하단: 실시간 환율 ── */}
-      <div className="border-t border-gray-700 shrink-0">
+      <div className="border-t border-gray-700 shrink-0" ref={fxRef}>
         {!collapsed ? (
           <div className="px-3 py-3">
             <div className="flex items-center justify-between mb-2">
@@ -137,7 +162,6 @@ export default function Sidebar({ collapsed, onCollapse, onNavClick }: Props) {
             </div>
 
             {(fx.loading && fx.rates.length === 0) ? (
-              /* 초기 로딩 스켈레톤 */
               <div className="space-y-1.5">
                 {FX_CODES.map(code => (
                   <div key={code} className="flex justify-between items-center">
@@ -147,7 +171,6 @@ export default function Sidebar({ collapsed, onCollapse, onNavClick }: Props) {
                 ))}
               </div>
             ) : fx.rates.length > 0 ? (
-              /* 환율 표시 */
               <div className="space-y-1">
                 {FX_CODES.map(code => {
                   const r = fx.rates.find(r => r.code === code)
@@ -162,12 +185,9 @@ export default function Sidebar({ collapsed, onCollapse, onNavClick }: Props) {
                     </div>
                   )
                 })}
-                {fx.error && (
-                  <p className="text-xs text-yellow-700 mt-1">⚠ 일부 미조회</p>
-                )}
+                {fx.error && <p className="text-xs text-yellow-700 mt-1">⚠ 일부 미조회</p>}
               </div>
             ) : (
-              /* 에러 (rates 없음) */
               <div className="space-y-1.5">
                 {FX_CODES.map(code => (
                   <div key={code} className="flex justify-between items-center">
@@ -178,20 +198,71 @@ export default function Sidebar({ collapsed, onCollapse, onNavClick }: Props) {
                 <button
                   onClick={() => void fx.fetchRates()}
                   className="text-xs text-gray-600 hover:text-gray-400 mt-1 w-full text-left"
-                >
-                  ↺ 재시도
-                </button>
+                >↺ 재시도</button>
               </div>
             )}
           </div>
         ) : (
-          /* 접힌 상태: 💱 아이콘만 */
-          <div className="flex justify-center py-3">
-            <span className="text-gray-600 text-base" title="실시간 환율">💱</span>
+          /* 접힌 상태: 💱 클릭 → 환율 팝업 */
+          <div className="relative flex justify-center py-3">
+            <button
+              onClick={() => {
+                setFxPopupOpen(prev => !prev)
+                if (!fx.rates.length && !fx.loading) void fx.fetchRates()
+              }}
+              className="text-gray-500 hover:text-gray-300 text-base transition-colors p-1 rounded hover:bg-gray-700"
+              title="실시간 환율"
+            >
+              💱
+            </button>
+
+            {/* 환율 팝업 (사이드바 우측으로 슬라이드) */}
+            {fxPopupOpen && (
+              <div
+                style={{ animation: 'slideInLeft 0.15s ease-out both' }}
+                className="absolute left-full bottom-0 ml-2 w-44 bg-gray-800 border border-gray-700 rounded-xl shadow-2xl px-3 py-3 z-50"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-gray-400 font-medium">실시간 환율</span>
+                  <button
+                    onClick={() => void fx.fetchRates()}
+                    className="text-xs text-gray-600 hover:text-gray-400 transition-colors"
+                    title="새로고침"
+                  >↺</button>
+                </div>
+                {fx.loading && fx.rates.length === 0 ? (
+                  <div className="space-y-1.5">
+                    {FX_CODES.map(code => (
+                      <div key={code} className="flex justify-between items-center">
+                        <span className="text-xs text-gray-500">{code}</span>
+                        <div className="h-2.5 w-14 bg-gray-700 rounded animate-pulse" />
+                      </div>
+                    ))}
+                  </div>
+                ) : fx.rates.length > 0 ? (
+                  <div className="space-y-1.5">
+                    {FX_CODES.map(code => {
+                      const r = fx.rates.find(r => r.code === code)
+                      const label = code === 'JPY' ? '100JPY' : code
+                      const display = r?.rate
+                        ? `${(code === 'JPY' ? r.rate * 100 : r.rate).toLocaleString('ko-KR', { maximumFractionDigits: 2 })}원`
+                        : '—'
+                      return (
+                        <div key={code} className="flex justify-between items-center">
+                          <span className="text-xs text-gray-500">{label}</span>
+                          <span className="text-xs font-medium text-gray-300 tabular-nums">{display}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-600 text-center py-1">데이터 없음</p>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
-
     </aside>
   )
 }

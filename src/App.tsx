@@ -11,6 +11,7 @@ import EquityPage from './pages/EquityPage'
 import HistoryPage from './pages/HistoryPage'
 import IssueHistoryPage from './pages/IssueHistoryPage'
 import FxPage from './pages/FxPage'
+import PolicyPage from './pages/PolicyPage'
 import MyCodePage from './pages/admin/MyCodePage'
 import UsersPage from './pages/admin/UsersPage'
 import DataPage from './pages/admin/DataPage'
@@ -78,6 +79,10 @@ export default function App() {
             {/* 환율 */}
             <Route path="/fx"           element={<FxPage />} />
             <Route path="/fx/:currency" element={<FxPage />} />
+
+            {/* 자금정책 */}
+            <Route path="/policy"          element={<PolicyPage />} />
+            <Route path="/policy/:company" element={<PolicyPage />} />
 
             {/* 관리 */}
             <Route path="/admin/mycode" element={<MyCodePage />} />

@@ -121,21 +121,24 @@ export default function DashboardPage() {
           value={db.kpi.availableCash}
           color="blue"
           sub={`운전 ${fmtKRW(db.kpi.operatingCash)} + 가용운용 ${fmtKRW(db.kpi.investCash)}`}
-          linkedChart="자금 흐름"
+          linkedChart="상세 보기"
+          onClick={() => setFlowDetail(prev => prev === 'available' ? null : 'available')}
         />
         <KpiCard
           label="순현금 포지션"
           value={db.kpi.netCashPosition}
           color={db.kpi.netCashPosition >= 0 ? 'green' : 'red'}
           sub={`가용 ${fmtKRW(db.kpi.availableCash)} − 차입 ${fmtKRW(db.kpi.totalLoan)}`}
-          linkedChart="현금흐름 추이"
+          linkedChart="상세 보기"
+          onClick={() => setFlowDetail(prev => prev === 'net' ? null : 'net')}
         />
         <KpiCard
           label="불가용 자산"
           value={db.kpi.unavailableAssets}
           color="gray"
           sub="매각·비상장"
-          linkedChart="지분 현황"
+          linkedChart="상세 보기"
+          onClick={() => setFlowDetail(prev => prev === 'unavailable' ? null : 'unavailable')}
         />
       </div>
 
@@ -154,6 +157,7 @@ export default function DashboardPage() {
           <AssetCompositionCard
             kpi={db.kpi}
             fxKrw={db.latestDaily?.fx_krw ?? 0}
+            onItemClick={key => setFlowDetail(prev => prev === key ? null : key)}
           />
         </div>
 

@@ -17,6 +17,7 @@ export function useDaily(): UseQueryResult<DailyRecord> & {
   const fetch = useCallback(async () => {
     if (!fetchCompany) return
     setLoading(true)
+    setData([])
     setError(null)
     const { data: rows, error: err } = await supabase
       .from('daily')

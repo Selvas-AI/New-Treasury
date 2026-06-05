@@ -1,5 +1,5 @@
 # Selvas Treasury — React 신규 구축 컨텍스트
-> 최종 업데이트: 2026-06-04 | **전체 Step 1~18 완료 + 대시보드 Updateplan_260604 반영**
+> 최종 업데이트: 2026-06-04 (3차) | **전체 Step 1~18 완료 + UI 개선 + GAS 이름검색 연동**
 > 이 문서는 새로운 Claude 세션(어떤 환경에서든)에서 맥락을 이어받기 위한 핸드오버 문서입니다.
 > 기존 HTML 시스템 전체 컨텍스트는 `SELVAS_TREASURY_CONTEXT.md` 를 함께 참조하세요.
 
@@ -143,6 +143,8 @@ CI 빌드용 GitHub Secrets 등록도 별도 필요 (섹션 12 참조)
 | 18 | 관리 페이지 (코드변경/사용자/데이터 집계) | ✅ |
 | UI+ | 대시보드 차트 버그 수정 + 레이아웃 재설계 | ✅ |
 | UI++ | Updateplan_260604 대시보드 개편 (2026-06-04) | ✅ |
+| Phase2-A | 자금정책 기반 (PolicyPage 초안 + FxPage FX탭 + InvestPage FVPL탭, 2026-06-05) | ✅ |
+| Phase2-B | **자금정책 통합** — Step3(실데이터 연동) + Step1,2(이관) (2026-06-05) | ✅ |
 
 ---
 
@@ -259,18 +261,21 @@ makeIssueKey(type, id?)          // loan_{uuid} | equity_{name} | input_daily
 
 ---
 
-## 11. 다음 진행할 작업 (선택적)
+## 11. 다음 진행할 작업 (2026-06-05 기준)
 
-### 전체 18 Step 완료 — 남은 선택 작업
+### 자금정책 Phase 2 완료 — 남은 선택 작업
 
 | 항목 | 설명 | 우선순위 |
 |------|------|---------|
 | GitHub Secrets 등록 | CI 빌드용 환경변수 3개 | 높음 |
 | GAS URL 설정 | `.env.local`의 `VITE_GAS_API_URL` 입력 | 높음 |
 | DNS 전환 | 검증 완료 후 `treasury.selvas.com` → React 앱 | 중간 |
-| UI 폴리싱 | 대시보드 카드 재배치, Tabler Icons 교체 | 낮음 |
+| 거래 금융기관 한도 | `policy_bank_limits` 테이블 + PolicyPage 탭 | 중간 |
+| 12주 롤링 포캐스트 | 운영회의 핵심 안건, 주별 자금수지 예측 | 중간 |
+| 상품 적정성 체크리스트 | 별지2 디지털화 (`policy_product_checks` 테이블) | 낮음 |
+| 의결 ↔ 파라미터 자동 연결 | 현재 읽기 전용 → 저장 연결 구현 | 낮음 |
+| UI 폴리싱 | Tabler Icons 교체 | 낮음 |
 | E2E 테스트 | Playwright 설정 | 낮음 |
-| Phase 2 | 자금정책 준수 상황판 | 계획 |
 
 ### 아키텍처 검증 (2026-06-01 확인 완료)
 ```
@@ -399,9 +404,54 @@ pnpm install
 cat > .env.local << 'EOF'
 VITE_SUPABASE_URL=https://qobfmihxcclbzfaohnor.supabase.co
 VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFvYmZtaWh4Y2NsYnpmYW9obm9yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxNTQ1ODEsImV4cCI6MjA5MTczMDU4MX0.9Bh5drygpl-cNEsdXQM6dS9RYo8_mjy2bI4G7jUoN2I
-VITE_GAS_API_URL=<GAS URL>
+VITE_GAS_API_URL=https://script.google.com/macros/s/AKfycbwZJSscSxlVz29qyYqduYQJ29NAVofeq6Qw67EPB6WTzcR86l6ubrbBmcqOZxPhxNH3/exec
 EOF
 
 # 5. 정상 확인
 pnpm vitest run && pnpm dev
+```
+
+---
+
+## 16. 2026-06-04 세션 3차 완료 기능 목록
+
+### UI/UX 개선
+| 항목 | 파일 | 내용 |
+|------|------|------|
+| KPI 카드 팝업 연결 | `KpiCard.tsx`, `DashboardPage.tsx` | 가용자금·순현금·불가용 클릭 → FlowDetailDrawer 팝업 |
+| 자산구성 카드 팝업 | `AssetCompositionCard.tsx` | 카드 클릭 → AssetDetail 팝업 (비율%+금액+원화/외화) |
+| 팝업 위치 통일 | `FlowDetailDrawer.tsx`, `IssueDrawer.tsx` | 화면 정중앙 (`left-1/2 top-1/2 -translate`) |
+| 팝업 깜빡임 수정 | `src/index.css` | `fadeInScale` keyframe에서 translate 제거 |
+| EquityCard 주기 | `EquityCard.tsx` | 7/14/30/90일, 디폴트 7일 |
+| CashflowChart 주기 | `CashflowChart.tsx` | 7/14/30/90일, 디폴트 7일 |
+| EquityPage 신규등록 | `EquityPage.tsx` | 지분/국채/비상장 탭마다 신규등록 폼 |
+| Sidebar 이슈배지 | `Sidebar.tsx` | 접힌 상태 아이콘 우상단 배치, overflow-visible |
+| Sidebar 환율팝업 | `Sidebar.tsx` | 접힌 상태 💱 클릭 → 환율 팝업 (외부클릭 닫기) |
+| Sidebar 스크롤바 | `src/index.css` | `.sidebar-scroll` 3px 다크 스크롤바 |
+| TopBar 반응형 | `TopBar.tsx` | `IconBtn` 컴포넌트, lg 이하 아이콘+툴팁, xl 이상 풀텍스트 |
+
+### GAS 연동 개선
+| 항목 | 파일 | 내용 |
+|------|------|------|
+| 종목명 검색 | `NewEquityForm.tsx`, `useGas.ts`, `Code.gs` | 종목명 blur → KRX finder → 자동입력 + 후보드롭다운 |
+| 채권명 검색 | `NewBondForm.tsx`, `useGas.ts`, `Code.gs` | 채권명 blur → KRX finder → 자동입력 + 후보드롭다운 |
+| GAS 타임아웃 수정 | `useGas.ts` | 10s → 30s, 1회 자동재시도 |
+| GAS 내부 타임아웃 | `Code.gs` | 10s → 25s (재배포 필요) |
+| ISIN onBlur | `NewBondForm.tsx` | ISIN 직접 입력 후 blur → 기준가 자동조회 |
+| 티커 onBlur | `NewEquityForm.tsx` | 티커 직접 입력 후 blur → 주가 자동조회 |
+
+### 신규 GAS 함수 (Code.gs — 재배포 필요)
+```javascript
+searchStockByName_(name)    // ?name=종목명
+searchBondByName_(bondName) // ?type=bond&bondName=채권명
+getStockPriceByCode_(code6) // 내부 헬퍼
+getBondPriceByIsin_(isinCd) // 내부 헬퍼
+```
+
+### 신규 React 타입/함수 (useGas.ts)
+```typescript
+StockSearchResult   // extends StockPriceResult + {ticker, name, market, candidates[]}
+BondSearchResult    // extends BondPriceResult + {name, candidates[]}
+fetchStockByName(name)    // GAS ?name=... 호출
+fetchBondByName(bondName) // GAS ?type=bond&bondName=... 호출
 ```

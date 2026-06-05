@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { fmtKRW, fmtReturn, returnBadgeClass, calcReturn } from '../../lib/format'
 import { fetchStockPrice } from '../../hooks/useGas'
 import type { EquityRecord } from '../../types'
+import { NotionTable, type ColumnDef } from '../common/NotionTable'
 
 interface Props {
   name: string
@@ -195,56 +196,82 @@ export default function EquityHistoryPanel({
       )}
 
       {/* 이력 테이블 */}
-      {history.length === 0 ? (
-        <p className="text-xs text-gray-400 text-center py-2">이력이 없습니다.</p>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="border-b border-gray-200">
-                {['기준일', '주수', '주가', '평가금액', '수익률', '취득가액', '가용', ''].map(h => (
-                  <th key={h} className="text-left text-gray-400 font-medium pb-1.5 pr-3 whitespace-nowrap">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {history.map(rec => {
-                const ret = calcReturn(rec.total_value, rec.acquisition_cost)
-                return (
-                  <tr key={rec.id} className="border-b border-gray-100 hover:bg-white">
-                    <td className="py-1.5 pr-3 text-gray-700">{rec.date}</td>
-                    <td className="py-1.5 pr-3 text-right tabular-nums text-gray-600">{rec.shares.toLocaleString()}</td>
-                    <td className="py-1.5 pr-3 text-right tabular-nums text-gray-600">{rec.price.toLocaleString()}원</td>
-                    <td className="py-1.5 pr-3 text-right tabular-nums font-medium text-gray-800">{fmtKRW(rec.total_value)}</td>
-                    <td className="py-1.5 pr-3">
-                      {ret !== null
-                        ? <span className={`px-1.5 py-0.5 rounded font-medium ${returnBadgeClass(ret)}`}>{fmtReturn(ret)}</span>
-                        : <span className="text-gray-300">-</span>
-                      }
-                    </td>
-                    <td className="py-1.5 pr-3 text-right tabular-nums text-gray-400">
-                      {rec.acquisition_cost ? fmtKRW(rec.acquisition_cost) : '-'}
-                    </td>
-                    <td className="py-1.5 pr-3">
-                      <span className={`px-1 rounded ${rec.available === '가용' ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-400'}`}>
-                        {rec.available}
-                      </span>
-                    </td>
-                    <td className="py-1.5 whitespace-nowrap">
-                      {isEditable && (
-                        <div className="flex gap-1.5">
-                          <button onClick={() => loadRecord(rec)} className="text-blue-400 hover:text-blue-600">수정</button>
-                          <button onClick={() => handleRemove(rec.id)} className="text-red-300 hover:text-red-500">삭제</button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+      {(() => {
+        const columns: ColumnDef<EquityRecord, unknown>[] = [
+          { accessorKey: 'date', header: '기준일' },
+          {
+            accessorKey: 'shares',
+            header: '주수',
+            cell: ({ getValue }) => (
+              <span className="tabular-nums text-gray-600">{getValue<number>().toLocaleString()}</span>
+            ),
+          },
+          {
+            accessorKey: 'price',
+            header: '주가',
+            cell: ({ getValue }) => (
+              <span className="tabular-nums text-gray-600">{getValue<number>().toLocaleString()}원</span>
+            ),
+          },
+          {
+            accessorKey: 'total_value',
+            header: '평가금액',
+            cell: ({ getValue }) => (
+              <span className="tabular-nums font-medium text-gray-800">{fmtKRW(getValue<number>())}</span>
+            ),
+          },
+          {
+            id: 'return',
+            header: '수익률',
+            accessorFn: row => calcReturn(row.total_value, row.acquisition_cost) ?? -Infinity,
+            cell: ({ row }) => {
+              const ret = calcReturn(row.original.total_value, row.original.acquisition_cost)
+              return ret !== null
+                ? <span className={`px-1.5 py-0.5 rounded font-medium ${returnBadgeClass(ret)}`}>{fmtReturn(ret)}</span>
+                : <span className="text-gray-300">-</span>
+            },
+          },
+          {
+            accessorKey: 'acquisition_cost',
+            header: '취득가액',
+            cell: ({ getValue }) => {
+              const v = getValue<number>()
+              return <span className="tabular-nums text-gray-400">{v ? fmtKRW(v) : '-'}</span>
+            },
+          },
+          {
+            accessorKey: 'available',
+            header: '가용',
+            cell: ({ getValue }) => {
+              const v = getValue<string>()
+              return (
+                <span className={`px-1 rounded ${v === '가용' ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-400'}`}>
+                  {v}
+                </span>
+              )
+            },
+          },
+          ...(isEditable ? [{
+            id: 'actions',
+            header: '',
+            enableSorting: false,
+            cell: ({ row }: { row: { original: EquityRecord } }) => (
+              <div className="flex gap-1.5">
+                <button onClick={() => loadRecord(row.original)} className="text-blue-400 hover:text-blue-600">수정</button>
+                <button onClick={() => handleRemove(row.original.id)} className="text-red-300 hover:text-red-500">삭제</button>
+              </div>
+            ),
+          } as ColumnDef<EquityRecord, unknown>] : []),
+        ]
+        return (
+          <NotionTable<EquityRecord>
+            tableId="equity_history"
+            columns={columns}
+            data={history}
+            emptyText="이력이 없습니다."
+          />
+        )
+      })()}
     </div>
   )
 }

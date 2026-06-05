@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ds:datastoreItem xmlns:ds="http://schemas.openxmlformats.org/officeDocument/2006/customXml" ds:itemID="{A2D9D781-9119-46D4-93A8-28BF10E3230E}">
+  <ds:schemaRefs>
+    <ds:schemaRef ds:uri="http://schemas.microsoft.com/office/2006/metadata/contentType"/>
+    <ds:schemaRef ds:uri="http://schemas.microsoft.com/office/2006/metadata/properties/metaAttributes"/>
+    <ds:schemaRef ds:uri="http://www.w3.org/2001/XMLSchema"/>
+    <ds:schemaRef ds:uri="http://schemas.microsoft.com/office/2006/metadata/properties"/>
+    <ds:schemaRef ds:uri="0711a813-37bd-4c0b-8e23-c92a0e11930d"/>
+    <ds:schemaRef ds:uri="http://schemas.microsoft.com/office/2006/documentManagement/types"/>
+    <ds:schemaRef ds:uri="http://schemas.microsoft.com/office/infopath/2007/PartnerControls"/>
+    <ds:schemaRef ds:uri="http://schemas.openxmlformats.org/package/2006/metadata/core-properties"/>
+    <ds:schemaRef ds:uri="http://purl.org/dc/elements/1.1/"/>
+    <ds:schemaRef ds:uri="http://purl.org/dc/terms/"/>
+    <ds:schemaRef ds:uri="http://schemas.microsoft.com/internal/obd"/>
+  </ds:schemaRefs>
+</ds:datastoreItem>

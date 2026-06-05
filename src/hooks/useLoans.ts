@@ -18,6 +18,7 @@ export function useLoans(activeOnly = false): UseQueryResult<LoanRecord> & {
   const fetch = useCallback(async () => {
     if (!fetchCompany) return
     setLoading(true)
+    setData([])
     setError(null)
     let query = supabase
       .from('loans')

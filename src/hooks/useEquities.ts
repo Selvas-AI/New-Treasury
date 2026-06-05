@@ -32,6 +32,7 @@ export function useEquities(): UseQueryResult<EquityRecord> & {
   const fetch = useCallback(async () => {
     if (!fetchCompany) return
     setLoading(true)
+    setData([])
     setError(null)
     const { data: rows, error: err } = await supabase
       .from('equities')

@@ -1,7 +1,7 @@
 import { fmtKRW } from '../../lib/format'
 import type { KpiData } from '../../hooks/useDashboard'
 
-export type FlowItemKey = 'operating' | 'invest' | 'fx' | 'loan' | 'net' | 'unavailable'
+export type FlowItemKey = 'operating' | 'invest' | 'fx' | 'loan' | 'net' | 'unavailable' | 'available' | 'asset'
 
 interface Props {
   kpi:               KpiData

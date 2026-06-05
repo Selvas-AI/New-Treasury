@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from './useAuth'
 import type { IssueComment, IssueStatus, UseQueryResult } from '../types'
@@ -32,6 +32,7 @@ export function useIssues(): UseQueryResult<IssueComment> & {
   const fetch = useCallback(async () => {
     if (!fetchCompany) return
     setLoading(true)
+    setData([])
     setError(null)
     const { data: rows, error: err } = await supabase
       .from('issue_comments')
@@ -51,7 +52,14 @@ export function useIssues(): UseQueryResult<IssueComment> & {
       .sort((a, b) => a.created_at.localeCompare(b.created_at))
   }
 
-  const openCount = data.filter(c => c.status !== 'done').length
+  // issue_key별 최신 상태 기준으로 집계 (동일 키에 여러 코멘트가 있어도 1건으로 카운트)
+  const openCount = useMemo(() => {
+    const keyMap = new Map<string, IssueStatus>()
+    // created_at 오름차순으로 순회해 최신 상태로 덮어씀
+    ;[...data].sort((a, b) => a.created_at.localeCompare(b.created_at))
+      .forEach(c => keyMap.set(c.issue_key, c.status))
+    return [...keyMap.values()].filter(s => s !== 'done').length
+  }, [data])
 
   async function addComment(
     comment: Omit<IssueComment, 'id' | 'created_at'>,

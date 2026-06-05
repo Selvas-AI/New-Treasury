@@ -1,11 +1,22 @@
-import { useMemo } from 'react'
+import { useMemo, useCallback } from 'react'
 import { useDaily } from './useDaily'
-import { useInvestments, getLatestInvestments } from './useInvestments'
+import { useInvestments, getLatestInvestments, getLatestBonds } from './useInvestments'
 import { useLoans } from './useLoans'
 import { useEquities } from './useEquities'
 import { useIssues, makeIssueKey } from './useIssues'
 import { useFx } from './useFx'
 import { calcReturn, calcBondValue, calcDday, isBusinessDay } from '../lib/format'
+
+export interface BondSummary {
+  name:             string
+  isin:             string
+  qty:              number
+  price:            number
+  value:            number    // calcBondValue(qty, price)
+  priceDate:        string
+  available:        '가용' | '불가용'
+  acquisition_cost: number
+}
 
 export interface WaterfallItem {
   label: string
@@ -145,7 +156,7 @@ export function useDashboard() {
       }
     }
 
-    // 2. 차입금 만기 D-90 이하
+    // 2. 차입금 만기 D-90 이하 (만기 경과 포함)
     for (const loan of loans.data) {
       const dday = calcDday(loan.maturity)
       if (dday <= 90) {
@@ -153,9 +164,12 @@ export function useDashboard() {
         const thread = issues.threadOf(key)
         const lastStatus = thread[thread.length - 1]?.status ?? 'open'
         if (lastStatus !== 'done') {
+          const ddayLabel = dday < 0
+            ? `만기경과 D+${Math.abs(dday)}`
+            : `D-${dday}`
           result.push({
             key,
-            title: `차입금 만기 D-${dday}`,
+            title: `차입금 만기 ${ddayLabel}`,
             desc: `${loan.lender} ${loan.type} ${(loan.amount / 1_0000_0000).toFixed(0)}억 — ${loan.maturity} 만기`,
             status: lastStatus,
             commentCount: thread.length,
@@ -189,6 +203,13 @@ export function useDashboard() {
     return result
   }, [daily.data, loans.data, equities.latest, issues])
 
+  // ─── 전일 운전자금 (전일 대비 표시용) ────────────────────
+  const prevOperatingCash = useMemo(() => {
+    if (daily.data.length < 2) return null
+    const prev = daily.data[1]   // 날짜 내림차순 정렬 → [0]=오늘, [1]=전일
+    return (prev.krw_demand || 0) + (prev.krw_govt || 0) + (prev.krw_mmda || 0) + (prev.fx_krw || 0)
+  }, [daily.data])
+
   // ─── 지분 수익률 ─────────────────────────────────────────
   const equityReturns = useMemo(() =>
     equities.latest.map(e => ({
@@ -196,6 +217,40 @@ export function useDashboard() {
       returnRate: calcReturn(e.total_value, e.acquisition_cost),
     })),
   [equities.latest])
+
+  // ─── 국채 최신 시세 ──────────────────────────────────────
+  const latestBonds = useMemo<BondSummary[]>(() =>
+    getLatestBonds(invest.data).map(b => {
+      const qty   = b.bondQty   ?? 0
+      const price = b.bondPrice ?? 0
+      return {
+        name:             b.bondName ?? b.bank,
+        isin:             b.bondTicker ?? '',
+        qty,
+        price,
+        value:            qty && price ? calcBondValue(qty, price) : (b.amount ?? 0),
+        priceDate:        b.priceDate ?? b.start ?? '',
+        available:        b.available,
+        acquisition_cost: b.acquisition_cost ?? 0,
+      }
+    }),
+  [invest.data])
+
+  // ─── 국채 ISIN별 평가금액 이력 ───────────────────────────
+  const bondHistoryOf = useCallback((isin: string): { date: string; value: number }[] =>
+    invest.data
+      .filter(r => r.product === '국채' && r.bondTicker === isin)
+      .map(r => {
+        const qty   = r.bondQty   ?? 0
+        const price = r.bondPrice ?? 0
+        return {
+          date:  r.priceDate ?? r.start ?? '',
+          value: qty && price ? calcBondValue(qty, price) : (r.amount ?? 0),
+        }
+      })
+      .filter(r => r.date)
+      .sort((a, b) => a.date.localeCompare(b.date)),
+  [invest.data])
 
   return {
     loading,
@@ -210,6 +265,9 @@ export function useDashboard() {
     detectedIssues,
     equityReturns,
     equityHistoryOf: equities.historyOf,  // ← 지분 종목별 이력 (스파크라인용)
+    latestBonds,                          // ← 국채 최신 시세
+    bondHistoryOf,                        // ← 국채 ISIN별 평가금액 이력
+    prevOperatingCash,                    // ← 전일 운전자금 (전일 대비용)
     issues,
     refetchAll: () => {
       void daily.refetch()

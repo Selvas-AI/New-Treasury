@@ -3,11 +3,12 @@ import { fmtKRW } from '../../lib/format'
 import type { KpiData } from '../../hooks/useDashboard'
 
 interface Props {
-  kpi:   KpiData
-  fxKrw: number
+  kpi:         KpiData
+  fxKrw:       number
+  onItemClick?: (key: 'asset') => void
 }
 
-export default function AssetCompositionCard({ kpi, fxKrw }: Props) {
+export default function AssetCompositionCard({ kpi, fxKrw, onItemClick }: Props) {
   const isDark = typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
 
   const investTotal = kpi.investCash + kpi.bondCash
@@ -28,8 +29,15 @@ export default function AssetCompositionCard({ kpi, fxKrw }: Props) {
     : { fontSize: 10, padding: '2px 6px', borderRadius: 8, border: '1px solid #e5e7eb' }
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl shadow p-5 flex flex-col">
-      <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-3">자산 구성</h3>
+    <div
+      className={`bg-white dark:bg-gray-800 rounded-xl shadow p-5 flex flex-col ${onItemClick ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}
+      onClick={() => onItemClick?.('asset')}
+      title={onItemClick ? '클릭하여 자산 구성 상세 보기' : undefined}
+    >
+      <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-3">
+        자산 구성
+        {onItemClick && <span className="ml-1 text-[10px] text-gray-400">↗</span>}
+      </h3>
 
       {donutData.length > 0 && (
         <div className="flex justify-center mb-2">

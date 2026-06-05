@@ -1,6 +1,6 @@
 # Selvas Treasury — 문서 인덱스
 
-> 최종 업데이트: 2026-06-04
+> 최종 업데이트: 2026-06-05
 
 ---
 
@@ -56,15 +56,25 @@
 |------|--------|-------------|
 | [DashboardPage.md](./pages/DashboardPage.md) | `/dashboard` | daily + investments + loans + equities |
 | [InputPage.md](./pages/InputPage.md) | `/input` | `daily` |
-| [InvestPage.md](./pages/InvestPage.md) | `/invest` | `investments` (비국채) |
+| [InvestPage.md](./pages/InvestPage.md) | `/invest` | `investments` (비국채, FVPL 탭 제거) |
 | [LoansPage.md](./pages/LoansPage.md) | `/loans` | `loans` |
 | [EquityPage.md](./pages/EquityPage.md) | `/equity`, `/bonds` | `equities` + `investments`(국채) |
 | [HistoryPage.md](./pages/HistoryPage.md) | `/history` | daily + investments + loans |
 | [IssueHistoryPage.md](./pages/IssueHistoryPage.md) | `/issue-history` | `issue_comments` |
-| [FxPage.md](./pages/FxPage.md) | `/fx` | GAS API + `daily` |
+| [FxPage.md](./pages/FxPage.md) | `/fx` | GAS API + `daily` (FX 정책탭 제거) |
+| [PolicyPage.md](./pages/PolicyPage.md) | `/policy` | **통합**: meetings + decisions + daily + investments + loans + policy_params |
 | [MyCodePage.md](./pages/admin/MyCodePage.md) | `/admin/mycode` | `access_codes` |
 | [UsersPage.md](./pages/admin/UsersPage.md) | `/admin/users` | `access_codes` |
 | [DataPage.md](./pages/admin/DataPage.md) | `/admin/data` | 전체 테이블 집계 |
+
+---
+
+## GAS 스크립트
+
+| 문서 | 설명 |
+|------|------|
+| [GAS_NAME_SEARCH_PATCH.md](./GAS_NAME_SEARCH_PATCH.md) | 종목명/채권명 이름 검색 GAS 패치 방법 (Code.gs 적용 가이드) |
+| [GAS_ECOS_STDDEV.md](./GAS_ECOS_STDDEV.md) | ECOS API 연동 FX 표준편차 자동계산 (Code.gs v4, 주기D, GBP코드) |
 
 ---
 
@@ -73,6 +83,7 @@
 | 문서 | 설명 |
 |------|------|
 | [supabase_schema.md](./supabase_schema.md) | 전체 테이블 스키마 DDL 및 설계 의도 |
+| [supabase_policy_tables.sql](./supabase_policy_tables.sql) | Phase 2 자금정책 테이블 생성 SQL (policy_meetings/decisions/params) |
 
 ---
 
@@ -82,6 +93,11 @@
 |------|------|
 | [hooks/README.md](./hooks/README.md) | 전체 커스텀 훅 API 레퍼런스 |
 | [hooks/useStockTicker.md](./hooks/useStockTicker.md) | 3개 법인 주가 5분 폴링 훅 |
+| (usePolicyMeetings) | 정책회의 CRUD — `src/hooks/usePolicyMeetings.ts` |
+| (usePolicyDecisions) | 의결사항 CRUD + 상태변경 — `src/hooks/usePolicyDecisions.ts` |
+| (usePolicyParams) | 정책 파라미터 get/upsert — `src/hooks/usePolicyParams.ts` |
+| (usePolicyThreads) | 후속조치 스레드 — `src/hooks/usePolicyThreads.ts` |
+| **(usePolicyDashboard)** | **법인별 실데이터 직접 패치 (auth 독립) — `src/hooks/usePolicyDashboard.ts`** |
 
 ---
 
@@ -93,6 +109,10 @@
 | 메뉴 항목 추가 | `Sidebar.tsx` (NAV_ITEMS) + `App.tsx` (라우트) |
 | 이슈 감지 조건 변경 | `src/hooks/useDashboard.ts` (detectedIssues useMemo) |
 | 차트 색상/종류 변경 | 해당 컴포넌트 MD 문서의 "변경 포인트" 참조 |
-| GAS API 변경 | `src/hooks/useGas.ts` + `.env.local` (VITE_GAS_API_URL) |
+| GAS API 변경 | `src/hooks/useGas.ts` + `.env.local` (VITE_GAS_API_URL) + `Code.gs` (재배포 필요) |
 | 외화 종류 추가 | `src/types/index.ts` (FxCode) + `FxPage.tsx` + DB 컬럼 추가 |
 | 상품유형/차입유형 추가 | `InvestPage.tsx` / `LoansPage.tsx` 각 Options 배열 |
+| 정책 현황 카드 추가 | `src/pages/PolicyPage.tsx` (인라인 컴포넌트) + `usePolicyDashboard` |
+| FX 정책 파라미터 편집 | `src/components/policy/FxPolicyTab.tsx` |
+| FVPL Duration 편집 | `src/components/policy/FvplRiskTab.tsx` |
+| 유동성/차입 한도 설정 | `PolicyPage.tsx` (LiquidityCard, LoanStatusCard) + `policy_params` 키 추가 |

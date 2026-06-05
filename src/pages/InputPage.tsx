@@ -163,9 +163,9 @@ export default function InputPage() {
   return (
     <div className="space-y-6 max-w-3xl mx-auto">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-bold text-gray-800">운전자금 입력</h2>
+        <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100">운전자금 입력</h2>
         {!isBusinessDay() && (
-          <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-md">
+          <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 dark:bg-amber-950/30 dark:border-amber-800 px-2.5 py-1 rounded-md">
             오늘은 비영업일입니다
           </span>
         )}
@@ -173,14 +173,14 @@ export default function InputPage() {
 
       {/* 입력 폼 */}
       {isEditable && (
-        <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow p-6 space-y-5">
+        <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow p-6 space-y-5 dark:bg-gray-800">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-gray-700">
+            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">
               {editId ? '✏️ 수정 중' : '+ 새로 입력'}
             </h3>
             {editId && (
               <button type="button" onClick={resetForm}
-                className="text-xs text-gray-400 hover:text-red-500">
+                className="text-xs text-gray-400 dark:text-gray-500 hover:text-red-500">
                 취소
               </button>
             )}
@@ -189,22 +189,22 @@ export default function InputPage() {
           {/* 날짜 / 작성자 */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">기준일 *</label>
+              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">기준일 *</label>
               <input type="date" value={form.date} onChange={e => setField('date', e.target.value)}
                 required
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">작성자 *</label>
+              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">작성자 *</label>
               <input type="text" value={form.writer} onChange={e => setField('writer', e.target.value)}
                 required placeholder="이름"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 dark:placeholder-gray-400" />
             </div>
           </div>
 
           {/* 원화 잔고 */}
           <div>
-            <p className="text-xs font-medium text-gray-500 mb-2">원화 잔고 (원)</p>
+            <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">원화 잔고 (원)</p>
             <div className="grid grid-cols-3 gap-3">
               {[
                 { key: 'krw_demand' as const, label: '보통예금/CMA' },
@@ -212,12 +212,12 @@ export default function InputPage() {
                 { key: 'krw_mmda'   as const, label: '증권 예수금'  },
               ].map(f => (
                 <div key={f.key}>
-                  <label className="block text-xs text-gray-400 mb-1">{f.label}</label>
+                  <label className="block text-xs text-gray-400 dark:text-gray-500 mb-1">{f.label}</label>
                   <input
                     type="number" min="0" value={form[f.key]}
                     onChange={e => setField(f.key, e.target.value)}
                     placeholder="0"
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-400"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
                   />
                 </div>
               ))}
@@ -226,17 +226,17 @@ export default function InputPage() {
 
           {/* 외화 잔고 */}
           <div>
-            <p className="text-xs font-medium text-gray-500 mb-2">외화 잔고</p>
+            <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">외화 잔고</p>
             <div className="grid grid-cols-5 gap-2">
               {FX_FIELDS.map(f => (
                 <div key={f.key}>
-                  <label className="block text-xs text-gray-400 mb-1">{f.label}</label>
+                  <label className="block text-xs text-gray-400 dark:text-gray-500 mb-1">{f.label}</label>
                   <input
                     type="number" min="0" step="0.01"
                     value={form[`fx_${f.key.toLowerCase()}` as keyof FormState]}
                     onChange={e => setField(`fx_${f.key.toLowerCase()}` as keyof FormState, e.target.value)}
                     placeholder="0"
-                    className="w-full border border-gray-200 rounded-lg px-2 py-2 text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-400"
+                    className="w-full border border-gray-200 rounded-lg px-2 py-2 text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
                   />
                 </div>
               ))}
@@ -250,18 +250,18 @@ export default function InputPage() {
           </div>
 
           {/* 합계 미리보기 */}
-          <div className="bg-blue-50 rounded-lg px-4 py-3 flex items-center justify-between">
-            <span className="text-sm text-blue-700">운전자금 합계 (추정)</span>
-            <span className="text-lg font-bold text-blue-800">{fmtKRW(totalKrw)}</span>
+          <div className="bg-blue-50 rounded-lg px-4 py-3 flex items-center justify-between dark:bg-blue-950/30 dark:border dark:border-blue-800">
+            <span className="text-sm text-blue-700 dark:text-blue-300">운전자금 합계 (추정)</span>
+            <span className="text-lg font-bold text-blue-800 dark:text-blue-300">{fmtKRW(totalKrw)}</span>
           </div>
 
           {/* 메모 */}
           <div>
-            <label className="block text-xs text-gray-500 mb-1">메모</label>
+            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">메모</label>
             <textarea
               value={form.memo} onChange={e => setField('memo', e.target.value)}
               rows={2} placeholder="비고 사항"
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 dark:placeholder-gray-400"
             />
           </div>
 
@@ -276,8 +276,8 @@ export default function InputPage() {
       )}
 
       {/* 이력 테이블 */}
-      <div className="bg-white rounded-xl shadow p-5">
-        <h3 className="text-sm font-semibold text-gray-600 mb-4">입력 이력</h3>
+      <div className="bg-white rounded-xl shadow p-5 dark:bg-gray-800">
+        <h3 className="text-sm font-semibold text-gray-600 dark:text-gray-300 mb-4">입력 이력</h3>
         {loading ? (
           <p className="text-sm text-gray-400 text-center py-6">로딩 중...</p>
         ) : data.length === 0 ? (
@@ -286,9 +286,9 @@ export default function InputPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-100">
+                <tr className="border-b border-gray-100 dark:border-gray-700">
                   {['기준일', '보통예금', '국책자금', '예수금', '외화환산', '합계', '작성자', ''].map(h => (
-                    <th key={h} className="text-left text-xs text-gray-400 font-medium pb-2 pr-3 whitespace-nowrap">
+                    <th key={h} className="text-left text-xs text-gray-400 dark:text-gray-500 font-medium pb-2 pr-3 whitespace-nowrap">
                       {h}
                     </th>
                   ))}
@@ -300,22 +300,22 @@ export default function InputPage() {
                   const isToday = rec.date === today
                   return (
                     <tr key={rec.id}
-                      className={`border-b border-gray-50 hover:bg-gray-50 ${isToday ? 'bg-blue-50' : ''}`}>
-                      <td className="py-2 pr-3 font-medium text-gray-800 whitespace-nowrap">
+                      className={`border-b border-gray-50 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700 ${isToday ? 'bg-blue-50 dark:bg-blue-950/20' : ''}`}>
+                      <td className="py-2 pr-3 font-medium text-gray-800 dark:text-gray-100 whitespace-nowrap">
                         {rec.date}
-                        {isToday && <span className="ml-1 text-xs text-blue-500">오늘</span>}
+                        {isToday && <span className="ml-1 text-xs text-blue-500 dark:text-blue-400">오늘</span>}
                       </td>
-                      <td className="py-2 pr-3 text-right tabular-nums text-gray-700">{fmtKRW(rec.krw_demand)}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums text-gray-700">{fmtKRW(rec.krw_govt)}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums text-gray-700">{fmtKRW(rec.krw_mmda)}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums text-gray-500">{fmtKRW(rec.fx_krw)}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums font-semibold text-gray-800">{fmtKRW(total)}</td>
-                      <td className="py-2 pr-3 text-gray-500 whitespace-nowrap">{rec.writer}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums text-gray-700 dark:text-gray-200">{fmtKRW(rec.krw_demand)}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums text-gray-700 dark:text-gray-200">{fmtKRW(rec.krw_govt)}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums text-gray-700 dark:text-gray-200">{fmtKRW(rec.krw_mmda)}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums text-gray-500 dark:text-gray-400">{fmtKRW(rec.fx_krw)}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums font-semibold text-gray-800 dark:text-gray-100">{fmtKRW(total)}</td>
+                      <td className="py-2 pr-3 text-gray-500 dark:text-gray-400 whitespace-nowrap">{rec.writer}</td>
                       <td className="py-2 whitespace-nowrap">
                         {isEditable && (
                           <div className="flex gap-1.5">
                             <button onClick={() => loadRecord(rec)}
-                              className="text-xs text-blue-500 hover:text-blue-700">수정</button>
+                              className="text-xs text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300">수정</button>
                             <button onClick={() => handleDelete(rec.id)}
                               className="text-xs text-red-400 hover:text-red-600">삭제</button>
                           </div>

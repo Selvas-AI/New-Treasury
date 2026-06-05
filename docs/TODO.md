@@ -1,46 +1,63 @@
 # Selvas Treasury — 기능 구현 TODO
 
-> 분석 기준: SELVAS_TREASURY_CONTEXT.md vs 실제 src/ 구현 (2026-06-02)
+> 분석 기준: SELVAS_TREASURY_CONTEXT.md vs 실제 src/ 구현 (2026-06-04 최종)
 > UI/UX 관련 항목 제외. 데이터·로직·기능 누락만 포함.
 
 ---
 
 ## 🔴 미구현 핵심 기능 (High Priority)
 
-- [ ] **외화 잔고 원화 환산 자동 계산 (InputPage)**: `InputPage.tsx`에서 fx_usd/eur/jpy/gbp/cny 입력 시 실시간 환율 적용 `fx_krw` 자동 계산이 없음. 현재는 사용자가 `fx_krw`를 직접 입력해야 함. `useFx().toKRW()`와 환율 데이터를 활용해 5개 외화 잔고 합산 → `fx_krw` 자동 산출 로직 필요.
+- [x] **외화 잔고 원화 환산 자동 계산 (InputPage)**: `calcFxKrw` useMemo + `fx.toKRW()` 조합으로 이미 구현됨. 저장 시 `fx_krw: calcFxKrw` 자동 반영. → **확인 완료 (2026-06-05)**
 
-- [ ] **운용자금 자동 시세 갱신 (InvestPage)**: GAS `getStockPrice` 연동을 통한 지분(주식) 전체 종목 일괄 시세 갱신 버튼이 없음. `useStockTicker.ts`는 TopBar 티커용 3개 법인 주가만 폴링하며, `EquityHistoryPanel`/`BondHistoryPanel` 내에서 개별 종목 시세 조회 연동(`useGas.ts`의 `fetchStockPrice`, `fetchBondPrice`)이 구현되지 않음.
+- [x] **운용자금 자동 시세 갱신 (EquityPage)**: `EquityPage` 헤더에 "전체 시세 갱신" / "전체 기준가 갱신" 버튼 추가. `bulkRefreshStocks()` — 상장 종목 전체 순차 `fetchStockPrice` → `eq.save()`. `bulkRefreshBonds()` — 국채 전체 순차 `fetchBondPrice` → `inv.save()`. 진행 카운터 (N/M), 실패 종목 오류 메시지 표시. → **2026-06-05 완료**
 
 - [ ] **영업일 공휴일 데이터 다년도 부재**: `src/lib/format.ts`의 `isBusinessDay()`가 2026년 공휴일만 하드코딩(`KR_HOLIDAYS_2026`). 이슈 감지(`useDashboard.ts`)와 운전자금 미입력 알림이 2026년 이후 또는 2025년 이전 날짜에는 오작동함.
 
-- [ ] **채권 기준가 GAS 조회 연동 (BondHistoryPanel)**: `BondHistoryPanel.tsx`에서 날짜 선택 후 GAS `getBondPrice?isin=...&basDt=...` 호출 → 기준가 자동 입력 기능이 미구현. `useGas.ts`에 `fetchBondPrice` 함수가 있어도 패널에서 호출하지 않음.
+- [x] **채권 기준가 GAS 조회 연동 (BondHistoryPanel)**: ~~`BondHistoryPanel.tsx`에서 날짜 선택 후 GAS `getBondPrice?isin=...&basDt=...` 호출 → 기준가 자동 입력 기능이 미구현.~~ → **2026-06-04 완료**: 조회 버튼 연동, 타임아웃 30s, T+1 안내 표시
 
 ---
 
 ## 🟡 불완전한 기능 / 보완 필요 (Medium Priority)
 
-- [ ] **HistoryPage 운용자금 날짜별 계산 부정확**: `HistoryPage.tsx` 99행 — 운용자금 날짜 필터링 기준을 `i.start || i.priceDate`로 사용하나, `investments` 테이블의 날짜 필드는 `start`, `start_date`, `priceDate` 세 가지가 혼용됨. `start_date`(legacy 필드) 누락으로 일부 레코드가 필터에서 제외될 수 있음. `SELVAS_TREASURY_CONTEXT.md` §3-2 참조.
+- [x] **HistoryPage 운용자금 날짜별 계산 부정확**: 채권은 `priceDate || start`, 비채권은 `start || priceDate` 우선순위로 수정. `fromDb` 매퍼가 `start_date→start` 변환을 이미 처리하므로 legacy 필드 누락 문제 해소. → **2026-06-05 완료**
 
-- [ ] **이슈 openCount 중복 카운팅**: `useIssues.ts`의 `openCount`가 `data.filter(c => c.status !== 'done').length`로 코멘트 개수 기준임. 동일 `issue_key`에 여러 코멘트가 달리면 1개 이슈가 N개로 카운팅됨. 실제 이슈 수는 `issue_key`별로 최신 상태만 봐야 함 (기존 HTML의 배지 카운트 로직과 불일치).
+- [x] **이슈 openCount 중복 카운팅**: `issue_key`별 최신 상태 기준 집계로 수정. Map으로 key별 상태 덮어쓰기 후 `'done'` 아닌 키 수 카운트. → **2026-06-05 완료**
 
-- [ ] **차입금 만기 이슈 감지 범위**: `useDashboard.ts` 149행 — `dday <= 90`만 체크하나 `dday < 0`(이미 만기 경과)인 경우도 포함되어야 함. 또한 `dday`가 음수일 때 `D--30`처럼 잘못된 문자열이 이슈 title에 표시됨 (`D-${dday}` 직접 보간).
+- [x] **차입금 만기 이슈 감지 범위**: `dday < 0`은 `<= 90` 조건에 이미 포함됨. 음수 시 `D--30` 출력 버그 → `만기경과 D+N` 형식으로 수정. → **2026-06-05 완료**
 
-- [ ] **운전자금 미입력 이슈 — 법인 전환 시 즉시 초기화 누락**: `DashboardPage.tsx`에서 법인 전환 시 `detectedIssues`는 새 법인 데이터가 로드된 후에야 갱신됨. 전환 직후 이전 법인의 이슈가 잠깐 표시되는 버그 (기존 HTML §9-5에서 해결된 문제가 React 버전에서 미적용).
+- [x] **운전자금 미입력 이슈 — 법인 전환 시 즉시 초기화 누락**: `useDaily`·`useLoans`·`useInvestments`·`useEquities`·`useIssues` 5개 훅의 fetch 시작 시 `setData([])` 추가. company 변경 → 즉시 data 초기화 → `db.loading=true` → 대시보드 로딩 스피너 표시, 이전 법인 이슈 미표시. → **2026-06-05 완료**
 
-- [ ] **FxPage 환율 조회 자동 로드 미연동**: `src/pages/FxPage.tsx`(PlaceholderPage로 추정)에서 실제 환율 현황 기능이 구현되지 않음. `useFx` 훅은 `fetchRates()`를 수동 호출해야 하며 자동 로드 트리거 없음.
+- [x] **FxPage 환율 자동 로드**: 마운트 시 1회 + `window.setInterval` 5분 폴링 추가. cancelled 플래그로 언마운트 시 정리. → **2026-06-05 완료**
 
-- [ ] **취득가액 일괄반영 모달 자동 표시 미구현**: `SELVAS_TREASURY_CONTEXT.md` §7 — 취득가액 저장 완료 0.4초 후 과거이력 일괄반영 모달이 자동 표시되어야 하나, `EquityHistoryPanel.tsx`/`BondHistoryPanel.tsx`에서 저장 후 자동 모달 호출 로직이 없음. `updateAcquisitionCost` 함수는 구현됐으나 UI 트리거 연결 누락.
+- [x] **취득가액 일괄반영 모달 자동 표시**: `EquityHistoryPanel:96-100`, `BondHistoryPanel:101-106`에 이미 구현됨. `acquisition_cost > 0 && !editId` 조건 시 `confirm()` 다이얼로그 → `onBulkAcq` 호출. → **확인 완료 (2026-06-05)**
 
-- [ ] **price_history 테이블 미활용**: Supabase `price_history` 테이블(`key`, `date`, `value`)이 스키마에 정의되어 있으나 React 훅/페이지 어디에도 이 테이블을 읽거나 쓰는 코드가 없음. 지분/채권 시세 이력 별도 저장 기능 미구현.
+- [x] **price_history 테이블 미활용**: 검토 결과 현 아키텍처에서 불필요 — `equities`(날짜별 시세 row 누적) + `investments`(priceDate별 국채 row)가 동일 역할 수행. supabase_schema.md 미등재로 현 Supabase에 미생성 상태. 이중 쓰기는 유지보수 부담만 증가. → **구현 불필요 확정 (2026-06-05)**
 
 ---
 
 ## 🟢 미구현 부가 기능 (Low Priority)
 
-- [ ] **관리 페이지 (AdminPage) 미구현**: 라우팅에 `/admin/mycode`, `/admin/users`, `/admin/data` 경로가 있으나 실제 페이지 구현 없이 PlaceholderPage로 대체됨. 특히 `access_codes` 테이블 CRUD(사용자 관리)와 데이터 일괄 관리 기능 누락.
+- [x] **관리 페이지 (AdminPage)**: 3개 페이지 모두 완전 구현 + Sidebar 연결 확인. `MyCodePage` (코드 변경·재로그인 유도), `UsersPage` (access_codes CRUD + 활성/비활성), `DataPage` (테이블 레코드 현황 + 날짜 이전 일괄 삭제). → **확인 완료 (2026-06-05)**
 
-- [ ] **자금정책 / 자금일보 페이지**: Phase 2/3 로드맵 항목. `policies`, `policy_checks`, `reports`, `approvals` 테이블 미생성. 현재 라우팅에도 해당 경로 없음.
+- [x] **자금정책 관리 페이지 (Phase 2 B안)**: → **2026-06-05 완료**
+  - `policy_meetings`, `policy_decisions`, `policy_params` 테이블 생성
+  - `PolicyPage.tsx` — 의결사항 + 후속조치 스레드
+  - `FxPage` — FX 정책관리 탭 구현 (후에 PolicyPage로 이관)
+  - `InvestPage` — FVPL 리스크 탭 구현 (후에 PolicyPage로 이관)
+
+- [x] **자금정책 페이지 통합 (Phase 2 Step 3)**: → **2026-06-05 완료**
+  - `usePolicyDashboard.ts` — auth 독립적 법인별 실데이터 훅 신규
+  - `PolicyPage.tsx` — 3탭 구조(회의·의결/FX정책/FVPL리스크), 실데이터 연동, 3사 현황 요약
+  - `src/components/policy/FxPolicyTab.tsx` — FxPage에서 이관
+  - `src/components/policy/FvplRiskTab.tsx` — InvestPage에서 이관
+  - `FxPage.tsx` — 환율 현황 단순화 (정책탭 제거)
+  - `InvestPage.tsx` — 운용자금 단순화 (FVPL탭 제거)
+  - 신규 `policy_params` 키: `liquidity_fixed_cost_monthly`, `liquidity_min_months`, `liquidity_credit_line`, `loan_max_total_ratio`
+
+- [x] **자금정책 C안 확장**: `PolicyCTab.tsx` — 서브탭 2개. ① 만기 래더링(향후 13개월 운용자금+차입금 BarChart, 40% 집중 만기 경고) ② 상품 적정성 체크리스트 12항목(신용/안전성·유동성·수익성·한도·승인). PolicyPage "📊 C안" 6번째 탭 추가. → **2026-06-05 완료**
+- [x] **거래 금융기관 한도 테이블**: `policy_bank_limits` DDL 작성(supabase_policy_tables.sql), `usePolicyBankLimits` 훅, `BankLimitsTab.tsx` 컴포넌트, PolicyPage "🏦 기관한도" 4번째 탭 추가. 규정 §9 기본 30%, master 커스텀 설정, 초과/주의 상태 표시. → **2026-06-05 완료**
+- [x] **12주 롤링 포캐스트**: `cashflow_plan` DDL, `useCashflowPlan` 훅, `CashflowForecastTab.tsx`, PolicyPage "📅 주간예측" 5번째 탭. 기초잔고(현재 운전자금)→주별 유입/유출 입력→기말잔고 누적, 12주 합계, 잔고 마이너스 시 적색 경고. → **2026-06-05 완료**
 
 - [ ] **GAS 자동 시세 스케줄러 ON/OFF 토글**: 기존 HTML에서 `localStorage: auto_price_on`으로 관리하던 자동 시세 조회 ON/OFF 기능이 React 버전에 없음. `useStockTicker.ts`는 항상 폴링 활성화 상태.
 
-- [ ] **`calcKRW` 함수 중복 정의**: `src/lib/format.ts`에 `calcKRW(amount, code, rates)` 함수가 있고, `useFx.ts`에 `toKRW(amount, code)` 메서드가 중복 구현됨. 로직은 동일하나 인터페이스가 달라 소비처마다 다른 방식을 사용할 위험이 있음. 통일 필요.
+- [x] **`calcKRW` 함수 중복 정의**: `format.ts`의 `calcKRW` 가 실사용처 없음(grep 확인). 완전 제거. 모든 소비처는 `useFx().toKRW()` 통일 사용 중. → **2026-06-05 완료**
