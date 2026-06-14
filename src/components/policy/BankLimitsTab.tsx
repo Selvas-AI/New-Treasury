@@ -7,8 +7,16 @@ import type { Company, InvestmentRecord } from '../../types'
 export const BANK_TYPES = ['은행', '증권사', '보험', '기타'] as const
 const DEFAULT_LIMIT_PCT = 30
 
-/** 기업은행(007) → 기업은행 : 괄호 suffix 제거로 동일 기관 통합 */
+/**
+ * 금융기관명 정규화 — 동일 은행의 계좌별 등록명을 하나로 합산
+ * 예) "국민은행(231)-2" → "국민은행"
+ *     "기업은행(007)"   → "기업은행"
+ *     "산업은행"        → "산업은행"
+ * 규칙: "은행" 문자가 있으면 "은행"까지만 추출, 없으면 괄호 suffix 제거
+ */
 export function normBank(bank: string): string {
+  const idx = bank.indexOf('은행')
+  if (idx >= 0) return bank.slice(0, idx + 2).trim()
   return bank.replace(/\s*\([^)]*\)\s*$/, '').trim()
 }
 
@@ -57,20 +65,26 @@ export default function BankLimitsTab({ company, investments, isMaster, userLabe
 
   // ── 잔고 집계 ──────────────────────────────────────────────────────────
   const latestInvests = useMemo(() => getLatestInvestments(investments), [investments])
-  const totalAmt = useMemo(() => latestInvests.reduce((s, i) => s + (i.amount || 0), 0), [latestInvests])
+  // 은행 기관만 집계 (은행한도 관리 대상)
+  const bankInvests = useMemo(
+    () => latestInvests.filter(i => normBank(i.bank).includes('은행')),
+    [latestInvests],
+  )
+  const totalAmt = useMemo(() => bankInvests.reduce((s, i) => s + (i.amount || 0), 0), [bankInvests])
 
-  // ── bankRows: 운용 기관 + 마스터 등록 기관 합산 ────────────────────────
+  // ── bankRows: 운용 기관 + 마스터 등록 기관 합산 (은행만) ────────────────
   const bankRows = useMemo<BankRow[]>(() => {
-    // 1. 운용 잔고 집계 (괄호 suffix 정규화)
+    // 1. 은행 운용 잔고 집계 (normBank로 계좌별 등록명 → 은행명 합산)
     const grouped = new Map<string, number>()
-    for (const i of latestInvests) {
+    for (const i of bankInvests) {
       const key = normBank(i.bank)
       grouped.set(key, (grouped.get(key) ?? 0) + (i.amount || 0))
     }
 
-    // 2. 마스터 등록 기관도 포함 (운용 잔고 없으면 0)
+    // 2. 마스터 등록 기관도 포함 (은행만, 운용 잔고 없으면 0)
     for (const l of limits.data) {
       const key = normBank(l.bank_name)
+      if (!key.includes('은행')) continue
       if (!grouped.has(key)) grouped.set(key, 0)
     }
 
@@ -101,7 +115,7 @@ export default function BankLimitsTab({ company, investments, isMaster, userLabe
           registered: !!limitRec,
         }
       })
-  }, [latestInvests, limits.data, totalAmt])
+  }, [bankInvests, limits.data, totalAmt])
 
   // ── 기관 등록/한도 설정 ─────────────────────────────────────────────────
   function openEdit(bank: string, row?: BankRow) {

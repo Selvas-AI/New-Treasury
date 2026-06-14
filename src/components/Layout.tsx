@@ -33,7 +33,7 @@ export default function Layout() {
   if (!user) return <Navigate to="/login" replace />
 
   return (
-    <div className="flex h-screen bg-gray-100 dark:bg-gray-950 overflow-hidden">
+    <div className="app-shell flex h-screen bg-gray-100 dark:bg-gray-950 overflow-hidden">
 
       {/* 모바일 오버레이 */}
       {drawerOpen && (

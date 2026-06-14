@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
-import { supabase } from '../lib/supabase'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { supabase, restInsert, restUpdate, restDelete, restUpdateIn, withTimeout } from '../lib/supabase'
 import { useAuth } from './useAuth'
+import { generateUUID } from '../lib/format'
 import type { Company, InvestmentRecord, UseQueryResult } from '../types'
 
 // ── DB snake_case → TypeScript camelCase ─────────────────────────────────────
@@ -36,6 +37,8 @@ function fromDb(row: DbRow): InvestmentRecord {
 // TypeScript camelCase → DB snake_case (insert / update 페이로드용)
 function toDb(record: Partial<InvestmentRecord>): DbRow {
   const row: DbRow = { ...record }
+  // insert 시 id가 undefined/null이면 DB auto-generate를 위해 제거
+  if (!row.id) delete row.id
   // camelCase 필드를 snake_case로 이동
   if ('bondName'   in record) { row.bond_name   = record.bondName;   delete row.bondName   }
   if ('bondTicker' in record) { row.bond_ticker = record.bondTicker; delete row.bondTicker }
@@ -84,8 +87,12 @@ export function useInvestments(activeOnly = false): UseQueryResult<InvestmentRec
 
   const fetchCompany = user?.role === 'company' ? user.company : currentCompany
 
+  // fetchCompany 변경 시 진행 중인 이전 요청 결과를 무시하기 위한 ref
+  const fetchIdRef = useRef(0)
+
   const fetch = useCallback(async () => {
     if (!fetchCompany) return
+    const myId = ++fetchIdRef.current
     setLoading(true)
     setData([])
     setError(null)
@@ -95,10 +102,16 @@ export function useInvestments(activeOnly = false): UseQueryResult<InvestmentRec
       .eq('company', fetchCompany)
       .order('maturity', { ascending: true })
     if (activeOnly) query = query.eq('active', true)
-    const { data: rows, error: err } = await query
-    if (err) setError(err.message)
-    else setData((rows ?? []).map(r => fromDb(r as DbRow)))
-    setLoading(false)
+    try {
+      const { data: rows, error: err } = await withTimeout(query)
+      if (fetchIdRef.current !== myId) return  // 더 최신 요청이 있으면 데이터 반영 생략
+      if (err) setError(err.message)
+      else setData((rows ?? []).map(r => fromDb(r as DbRow)))
+    } catch (e) {
+      if (fetchIdRef.current === myId) setError(e instanceof Error ? e.message : '조회 실패')
+    } finally {
+      if (fetchIdRef.current === myId) setLoading(false)
+    }
   }, [fetchCompany, activeOnly])
 
   useEffect(() => { void fetch() }, [fetch])
@@ -107,24 +120,26 @@ export function useInvestments(activeOnly = false): UseQueryResult<InvestmentRec
   const nonBonds = useMemo(() => data.filter(i => i.product !== '국채'), [data])
 
   async function save(record: Omit<InvestmentRecord, 'id'> & { id?: string }): Promise<string | null> {
-    const payload = toDb(record)
+    // insert 시 id가 없으면 클라이언트에서 UUID 생성 (DB default 설정 유무 무관)
+    const recordWithId = record.id ? record : { ...record, id: generateUUID() }
+    const payload = toDb(recordWithId)
     const { error: err } = record.id
-      ? await supabase.from('investments').update(payload).eq('id', record.id)
-      : await supabase.from('investments').insert(payload)
+      ? await restUpdate('investments', payload, { id: record.id })
+      : await restInsert('investments', payload)
     if (err) return err.message
     await fetch()
     return null
   }
 
   async function remove(id: string): Promise<string | null> {
-    const { error: err } = await supabase.from('investments').delete().eq('id', id)
+    const { error: err } = await restDelete('investments', { id })
     if (err) return err.message
     setData(prev => prev.filter(r => r.id !== id))
     return null
   }
 
   async function setActive(id: string, active: boolean): Promise<string | null> {
-    const { error: err } = await supabase.from('investments').update({ active }).eq('id', id)
+    const { error: err } = await restUpdate('investments', { active }, { id })
     if (err) return err.message
     setData(prev => prev.map(r => r.id === id ? { ...r, active } : r))
     return null
@@ -132,10 +147,7 @@ export function useInvestments(activeOnly = false): UseQueryResult<InvestmentRec
 
   /** 과거 이력 일괄 취득가액 반영 */
   async function updateAcquisitionCost(ids: string[], cost: number): Promise<string | null> {
-    const { error: err } = await supabase
-      .from('investments')
-      .update(toDb({ acquisition_cost: cost }))
-      .in('id', ids)
+    const { error: err } = await restUpdateIn('investments', toDb({ acquisition_cost: cost }), 'id', ids)
     if (err) return err.message
     setData(prev => prev.map(r => ids.includes(r.id) ? { ...r, acquisition_cost: cost } : r))
     return null

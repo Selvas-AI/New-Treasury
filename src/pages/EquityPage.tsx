@@ -9,9 +9,9 @@ import EquityHistoryPanel from '../components/equity/EquityHistoryPanel'
 import BondHistoryPanel from '../components/equity/BondHistoryPanel'
 import NewEquityForm from '../components/equity/NewEquityForm'
 import NewBondForm from '../components/equity/NewBondForm'
+import { getCompanyNames } from '../hooks/useCompanies'
 import type { Company } from '../types'
 
-const VALID_COMPANIES: Company[] = ['셀바스에이아이', '셀바스헬스케어', '메디아나']
 type TabKey = 'stock' | 'bond' | 'unlisted'
 
 export default function EquityPage() {
@@ -26,9 +26,15 @@ export default function EquityPage() {
     running: boolean; done: number; total: number; errors: string[]
   }>({ running: false, done: 0, total: 0, errors: [] })
 
+  // ─── 취득가액 일괄입력 팝업 ──────────────────────────────
+  const [acqPopupOpen, setAcqPopupOpen] = useState(false)
+  const [acqInputs, setAcqInputs]       = useState<Record<string, string>>({})
+  const [acqSaving, setAcqSaving]       = useState(false)
+  const [acqErrors, setAcqErrors]       = useState<string[]>([])
+
   useEffect(() => {
     if (!paramCompany || user?.role === 'company') return
-    if (VALID_COMPANIES.includes(paramCompany as Company)) setCurrentCompany(paramCompany as Company)
+    if (getCompanyNames().includes(paramCompany)) setCurrentCompany(paramCompany as Company)
   }, [paramCompany, user?.role, setCurrentCompany])
 
   // 딥링크로 종목명 진입 시 패널 자동 오픈
@@ -41,6 +47,36 @@ export default function EquityPage() {
   // ─── 지분(주식) ──────────────────────────────────────────
   const stocks    = useMemo(() => getLatestEquities(eq.data.filter(e => e.market !== '비상장')), [eq.data])
   const unlisted  = useMemo(() => getLatestEquities(eq.data.filter(e => e.market === '비상장')), [eq.data])
+
+  // 취득가액 미입력 종목 (지분 + 비상장, 국채 제외)
+  const acqMissing = useMemo(() =>
+    [...stocks, ...unlisted].filter(e => !(e.acquisition_cost > 0)),
+  [stocks, unlisted])
+
+  function openAcqPopup() {
+    const init: Record<string, string> = {}
+    acqMissing.forEach(e => { init[e.name] = '' })
+    setAcqInputs(init)
+    setAcqErrors([])
+    setAcqPopupOpen(true)
+  }
+
+  async function handleAcqBulkSave() {
+    const entries = Object.entries(acqInputs).filter(([, v]) => v.trim() !== '')
+    if (entries.length === 0) { setAcqPopupOpen(false); return }
+    setAcqSaving(true)
+    setAcqErrors([])
+    const errs: string[] = []
+    for (const [name, raw] of entries) {
+      const cost = Number(raw.replace(/,/g, ''))
+      if (!cost || cost <= 0) { errs.push(`${name}: 올바른 금액을 입력하세요`); continue }
+      const err = await eq.updateAcquisitionCost(name, cost)
+      if (err) errs.push(`${name}: ${err}`)
+    }
+    setAcqSaving(false)
+    if (errs.length === 0) setAcqPopupOpen(false)
+    else setAcqErrors(errs)
+  }
 
   // ─── 국채 ────────────────────────────────────────────────
   const bonds     = useMemo(() => getLatestBonds(inv.bonds), [inv.bonds])
@@ -125,19 +161,29 @@ export default function EquityPage() {
     <div className="space-y-5 max-w-5xl mx-auto">
 
       {/* 헤더 */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100">지분/장기투자</h2>
-        {isEditable && (
-          <button
-            onClick={() => tab === 'bond' ? void bulkRefreshBonds() : void bulkRefreshStocks()}
-            disabled={bulkState.running || (tab === 'unlisted')}
-            className="text-sm border border-blue-200 text-blue-600 px-3 py-1.5 rounded-lg hover:bg-blue-50 disabled:opacity-40 transition-colors dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-950/30"
-          >
-            {bulkState.running
-              ? `갱신 중... (${bulkState.done}/${bulkState.total})`
-              : tab === 'bond' ? '🔄 전체 기준가 갱신' : '🔄 전체 시세 갱신'}
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {isEditable && acqMissing.length > 0 && (
+            <button
+              onClick={openAcqPopup}
+              className="text-sm border border-amber-300 text-amber-700 bg-amber-50 px-3 py-1.5 rounded-lg hover:bg-amber-100 transition-colors dark:border-amber-700 dark:text-amber-300 dark:bg-amber-950/30 dark:hover:bg-amber-950/50"
+            >
+              💰 취득가액 미입력 {acqMissing.length}건
+            </button>
+          )}
+          {isEditable && (
+            <button
+              onClick={() => tab === 'bond' ? void bulkRefreshBonds() : void bulkRefreshStocks()}
+              disabled={bulkState.running || (tab === 'unlisted')}
+              className="text-sm border border-blue-200 text-blue-600 px-3 py-1.5 rounded-lg hover:bg-blue-50 disabled:opacity-40 transition-colors dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-950/30"
+            >
+              {bulkState.running
+                ? `갱신 중... (${bulkState.done}/${bulkState.total})`
+                : tab === 'bond' ? '🔄 전체 기준가 갱신' : '🔄 전체 시세 갱신'}
+            </button>
+          )}
+        </div>
       </div>
       {/* 일괄 갱신 결과 */}
       {!bulkState.running && bulkState.total > 0 && (
@@ -200,6 +246,7 @@ export default function EquityPage() {
               company={currentCompany ?? ''}
               onSave={eq.save}
               isEditable={isEditable}
+              existingRecords={eq.data}
             />
             {eq.loading ? (
               <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-8">로딩 중...</p>
@@ -257,6 +304,7 @@ export default function EquityPage() {
               company={currentCompany ?? ''}
               onSave={inv.save}
               isEditable={isEditable}
+              existingBonds={inv.bonds}
             />
             {inv.loading ? (
               <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-8">로딩 중...</p>
@@ -324,6 +372,7 @@ export default function EquityPage() {
               fixedMarket="비상장"
               onSave={eq.save}
               isEditable={isEditable}
+              existingRecords={eq.data}
             />
             {eq.loading ? (
               <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-8">로딩 중...</p>
@@ -373,6 +422,103 @@ export default function EquityPage() {
           </div>
         )}
       </div>
+
+      {/* ─── 취득가액 일괄 입력 팝업 ─── */}
+      {acqPopupOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+          onClick={() => !acqSaving && setAcqPopupOpen(false)}>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden"
+            onClick={e => e.stopPropagation()}>
+
+            {/* 헤더 */}
+            <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100">취득가액 일괄 입력</h3>
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+                  입력 후 저장하면 해당 종목의 전체 이력에 일괄 반영됩니다.
+                </p>
+              </div>
+              {!acqSaving && (
+                <button onClick={() => setAcqPopupOpen(false)}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xl leading-none">×</button>
+              )}
+            </div>
+
+            {/* 테이블 */}
+            <div className="overflow-y-auto max-h-[60vh]">
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 bg-gray-50 dark:bg-gray-700/60">
+                  <tr>
+                    <th className="text-left text-xs text-gray-400 font-medium px-5 py-2.5">종목명</th>
+                    <th className="text-right text-xs text-gray-400 font-medium px-3 py-2.5">현재가</th>
+                    <th className="text-right text-xs text-gray-400 font-medium px-3 py-2.5">주수</th>
+                    <th className="text-right text-xs text-gray-400 font-medium px-5 py-2.5">취득가액 (원)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {acqMissing.map(e => (
+                    <tr key={e.name} className="border-t border-gray-50 dark:border-gray-700/50">
+                      <td className="px-5 py-3">
+                        <p className="font-medium text-gray-800 dark:text-gray-100 text-xs">{e.name}</p>
+                        <p className="text-[10px] text-gray-400 dark:text-gray-500">{e.market}</p>
+                      </td>
+                      <td className="px-3 py-3 text-right text-xs tabular-nums text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                        {e.price > 0 ? e.price.toLocaleString() + '원' : '—'}
+                      </td>
+                      <td className="px-3 py-3 text-right text-xs tabular-nums text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                        {e.shares > 0 ? e.shares.toLocaleString() + '주' : '—'}
+                      </td>
+                      <td className="px-5 py-3">
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={acqInputs[e.name] ?? ''}
+                          placeholder="예: 75,900,000"
+                          onChange={ev => {
+                            const raw = ev.target.value.replace(/[^0-9]/g, '')
+                            setAcqInputs(prev => ({
+                              ...prev,
+                              [e.name]: raw ? Number(raw).toLocaleString() : '',
+                            }))
+                          }}
+                          className="w-full text-right text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-amber-400 dark:bg-gray-700 dark:text-gray-100 tabular-nums"
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* 오류 */}
+            {acqErrors.length > 0 && (
+              <div className="px-6 py-3 bg-red-50 dark:bg-red-950/30 border-t border-red-100 dark:border-red-900">
+                {acqErrors.map((e, i) => (
+                  <p key={i} className="text-xs text-red-600 dark:text-red-400">{e}</p>
+                ))}
+              </div>
+            )}
+
+            {/* 푸터 */}
+            <div className="px-6 py-4 border-t border-gray-100 dark:border-gray-700 flex gap-2">
+              <button
+                onClick={() => setAcqPopupOpen(false)}
+                disabled={acqSaving}
+                className="flex-1 text-sm border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded-xl py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50">
+                취소
+              </button>
+              <button
+                onClick={() => void handleAcqBulkSave()}
+                disabled={acqSaving || Object.values(acqInputs).every(v => !v)}
+                className="flex-[2] text-sm bg-amber-500 text-white rounded-xl py-2.5 hover:bg-amber-600 disabled:opacity-50 font-medium transition-colors">
+                {acqSaving
+                  ? '저장 중...'
+                  : `일괄 저장 (${Object.values(acqInputs).filter(v => v).length}건)`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

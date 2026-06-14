@@ -16,6 +16,22 @@ interface Props {
   isEditable: boolean
 }
 
+// 정수 필드 천단위 포맷 헬퍼
+function fmtInt(val: string): string {
+  const n = val.replace(/[^0-9]/g, '')
+  return n ? Number(n).toLocaleString() : ''
+}
+function parseIntStr(val: string): number {
+  return Number(val.replace(/[^0-9]/g, '')) || 0
+}
+// 주가: 정수 천단위 포맷
+function fmtPrice(val: string): string {
+  return fmtInt(val)
+}
+function parsePriceStr(val: string): number {
+  return parseIntStr(val)
+}
+
 const EMPTY = {
   date: new Date().toISOString().slice(0, 10),
   shares: '',
@@ -25,25 +41,38 @@ const EMPTY = {
   available: '가용' as '가용' | '불가용',
 }
 
+function prefillFromHistory(history: EquityRecord[]) {
+  if (!history.length) return { ...EMPTY }
+  const latest = history.reduce((best, r) => (r.date > best.date ? r : best))
+  return {
+    date:             new Date().toISOString().slice(0, 10),
+    shares:           latest.shares           > 0 ? Number(latest.shares).toLocaleString()           : '',
+    price:            '',
+    acquisition_cost: latest.acquisition_cost > 0 ? Number(latest.acquisition_cost).toLocaleString() : '',
+    purpose:          latest.purpose ?? '',
+    available:        latest.available ?? '가용' as '가용' | '불가용',
+  }
+}
+
 export default function EquityHistoryPanel({
   name, ticker, market, company, history, onSave, onRemove, onBulkAcq, isEditable,
 }: Props) {
-  const [form, setForm] = useState({ ...EMPTY })
+  const [form, setForm] = useState(() => prefillFromHistory(history))
   const [editId, setEditId] = useState<string | null>(null)
   const [fetching, setFetching] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const totalValue = Number(form.shares) * Number(form.price) || 0
-  const retPreview = calcReturn(totalValue, Number(form.acquisition_cost) || 0)
+  const totalValue = parseIntStr(form.shares) * parsePriceStr(form.price)
+  const retPreview = calcReturn(totalValue, parseIntStr(form.acquisition_cost))
 
   function loadRecord(rec: EquityRecord) {
     setEditId(rec.id)
     setForm({
       date:             rec.date,
-      shares:           String(rec.shares           || ''),
-      price:            String(rec.price            || ''),
-      acquisition_cost: String(rec.acquisition_cost || ''),
+      shares:           rec.shares           ? Number(rec.shares).toLocaleString()           : '',
+      price:            rec.price            ? Number(rec.price).toLocaleString()            : '',
+      acquisition_cost: rec.acquisition_cost ? Number(rec.acquisition_cost).toLocaleString() : '',
       purpose:          rec.purpose || '',
       available:        rec.available,
     })
@@ -51,7 +80,7 @@ export default function EquityHistoryPanel({
 
   function resetForm() {
     setEditId(null)
-    setForm({ ...EMPTY })
+    setForm(prefillFromHistory(history))
     setError(null)
   }
 
@@ -60,8 +89,12 @@ export default function EquityHistoryPanel({
     setFetching(true)
     setError(null)
     try {
-      const res = await fetchStockPrice(ticker)
-      setForm(f => ({ ...f, price: String(res.price), date: res.date }))
+      // 기준일자가 오늘이 아니면 해당 날짜의 과거 종가 조회
+      const todayStr = new Date().toISOString().slice(0, 10)
+      const basDt = form.date && form.date !== todayStr ? form.date : undefined
+      const res = await fetchStockPrice(ticker, basDt)
+      // 가격만 업데이트 (기준일자는 사용자가 설정한 값 유지, API 반환 날짜 참고용)
+      setForm(f => ({ ...f, price: Number(res.price).toLocaleString() }))
     } catch (e) {
       setError(e instanceof Error ? e.message : '시세 조회 실패')
     }
@@ -74,8 +107,8 @@ export default function EquityHistoryPanel({
     setSaving(true)
     setError(null)
 
-    const shares = Number(form.shares) || 0
-    const price  = Number(form.price)  || 0
+    const shares = parseIntStr(form.shares)
+    const price  = parsePriceStr(form.price)
     const record = {
       ...(editId ? { id: editId } : {}),
       company:          company as EquityRecord['company'],
@@ -85,7 +118,7 @@ export default function EquityHistoryPanel({
       shares, price,
       total_value:      shares * price,
       date:             form.date,
-      acquisition_cost: Number(form.acquisition_cost) || 0,
+      acquisition_cost: parseIntStr(form.acquisition_cost),
     }
 
     const err = await onSave(record)
@@ -127,16 +160,16 @@ export default function EquityHistoryPanel({
             </div>
             <div>
               <label className="block text-xs text-gray-400 mb-1">보유 주수</label>
-              <input type="number" min="0" value={form.shares}
-                onChange={e => setForm(f => ({ ...f, shares: e.target.value }))}
+              <input type="text" inputMode="numeric" value={form.shares}
+                onChange={e => setForm(f => ({ ...f, shares: fmtInt(e.target.value) }))}
                 placeholder="0"
                 className="w-full border border-gray-200 rounded px-2 py-1.5 text-xs text-right focus:outline-none focus:ring-1 focus:ring-blue-400" />
             </div>
             <div>
               <label className="block text-xs text-gray-400 mb-1">주가 (원)</label>
               <div className="flex gap-1">
-                <input type="number" min="0" value={form.price}
-                  onChange={e => setForm(f => ({ ...f, price: e.target.value }))}
+                <input type="text" inputMode="numeric" value={form.price}
+                  onChange={e => setForm(f => ({ ...f, price: fmtPrice(e.target.value) }))}
                   placeholder="0"
                   className="flex-1 min-w-0 border border-gray-200 rounded px-2 py-1.5 text-xs text-right focus:outline-none focus:ring-1 focus:ring-blue-400" />
                 {market !== '비상장' && ticker && (
@@ -149,8 +182,8 @@ export default function EquityHistoryPanel({
             </div>
             <div>
               <label className="block text-xs text-gray-400 mb-1">취득가액 (총액)</label>
-              <input type="number" min="0" value={form.acquisition_cost}
-                onChange={e => setForm(f => ({ ...f, acquisition_cost: e.target.value }))}
+              <input type="text" inputMode="numeric" value={form.acquisition_cost}
+                onChange={e => setForm(f => ({ ...f, acquisition_cost: fmtInt(e.target.value) }))}
                 placeholder="0"
                 className="w-full border border-gray-200 rounded px-2 py-1.5 text-xs text-right focus:outline-none focus:ring-1 focus:ring-blue-400" />
             </div>

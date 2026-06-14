@@ -16,12 +16,13 @@ export default function AssetCompositionCard({ kpi, fxKrw, onItemClick }: Props)
   const krwRatio = 100 - fxRatio
 
   const donutData = [
-    { name: '운전자금', value: kpi.operatingCash,    color: '#3b82f6' },
-    { name: '가용운용', value: investTotal,           color: '#10b981' },
-    { name: '불가용',   value: kpi.unavailableAssets, color: '#f59e0b' },
+    { name: '운전자금',   value: kpi.operatingCash,    color: '#3b82f6' },
+    { name: '가용운용',   value: investTotal,           color: '#10b981' },
+    { name: '지분(가용)', value: kpi.equityAvail,       color: '#8b5cf6' },
+    { name: '불가용',     value: kpi.unavailableAssets, color: '#f59e0b' },
   ].filter(d => d.value > 0)
 
-  const totalAssets = kpi.availableCash + kpi.unavailableAssets || 1
+  const totalAssets = kpi.availableCash + kpi.equityAvail + kpi.unavailableAssets || 1
   const pctOf = (v: number) => Math.round((v / totalAssets) * 100)
 
   const tooltipStyle = isDark
@@ -63,6 +64,9 @@ export default function AssetCompositionCard({ kpi, fxKrw, onItemClick }: Props)
         {[
           { name: '운전자금', color: '#3b82f6', value: kpi.operatingCash },
           { name: '가용운용', color: '#10b981', value: investTotal },
+          ...(kpi.equityAvail > 0
+            ? [{ name: '지분(가용)', color: '#8b5cf6', value: kpi.equityAvail }]
+            : []),
           ...(kpi.unavailableAssets > 0
             ? [{ name: '불가용', color: '#f59e0b', value: kpi.unavailableAssets }]
             : []),

@@ -1,11 +1,12 @@
-import { useMemo, useCallback } from 'react'
+import { useMemo, useCallback, useEffect } from 'react'
 import { useDaily } from './useDaily'
 import { useInvestments, getLatestInvestments, getLatestBonds } from './useInvestments'
 import { useLoans } from './useLoans'
 import { useEquities } from './useEquities'
 import { useIssues, makeIssueKey } from './useIssues'
 import { useFx } from './useFx'
-import { calcReturn, calcBondValue, calcDday, isBusinessDay } from '../lib/format'
+import { calcReturn, calcBondValue, calcDday } from '../lib/format'
+import { isTodayBusinessDay } from '../lib/bizDay'
 
 export interface BondSummary {
   name:             string
@@ -33,6 +34,7 @@ export interface KpiData {
   investCash: number          // 운용자금 가용 (비국채)
   bondCash: number            // 국채 가용
   totalLoan: number           // 차입금 합계
+  equityAvail: number         // 지분(상장·가용) 평가액 — 가용자금/순현금엔 미포함, 별도 표시용
 }
 
 export interface IssueItem {
@@ -51,6 +53,9 @@ export function useDashboard() {
   const issues   = useIssues()
   const fx       = useFx()
 
+  // 외화 운용자금 환산에 필요한 환율 (Sidebar와 별도 인스턴스이므로 자체 fetch)
+  useEffect(() => { void fx.fetchRates() }, [fx.fetchRates])
+
   const loading = daily.loading || invest.loading || loans.loading || equities.loading
 
   // ─── 운전자금 최신 1건 ───────────────────────────────────
@@ -67,20 +72,26 @@ export function useDashboard() {
 
   // ─── 워터폴 + KPI ────────────────────────────────────────
   const kpi = useMemo<KpiData>(() => {
+    // 외화 운용자금 KRW 환산 (currency='USD' 등은 fx.toKRW로 변환)
+    const toKRWAmt = (amount: number, currency: string): number => {
+      if (!currency || currency === 'KRW') return amount
+      return fx.toKRW(amount, currency as Parameters<typeof fx.toKRW>[1])
+    }
+
     // 운전자금
     const d = latestDaily
     const operatingCash = d
       ? (d.krw_demand || 0) + (d.krw_govt || 0) + (d.krw_mmda || 0) + (d.fx_krw || 0)
       : 0
 
-    // 운용자금
+    // 운용자금 (외화 포함 KRW 환산)
     const investAvail = latestInvests
       .filter(i => i.product !== '국채' && i.available === '가용')
-      .reduce((s, i) => s + (i.amount || 0), 0)
+      .reduce((s, i) => s + toKRWAmt(i.amount || 0, i.currency || 'KRW'), 0)
 
     const investUnavail = latestInvests
       .filter(i => i.product !== '국채' && i.available === '불가용')
-      .reduce((s, i) => s + (i.amount || 0), 0)
+      .reduce((s, i) => s + toKRWAmt(i.amount || 0, i.currency || 'KRW'), 0)
 
     // 국채
     const bondAvail = latestInvests
@@ -104,9 +115,14 @@ export function useDashboard() {
     // 차입금
     const totalLoan = loans.data.reduce((s, l) => s + (l.amount || 0), 0)
 
-    // 지분 불가용 (취득가액 기준)
+    // 지분 불가용 (평가액 기준)
     const equityUnavail = equities.latest
       .filter(e => e.available === '불가용')
+      .reduce((s, e) => s + (e.total_value || 0), 0)
+
+    // 지분 가용 (상장·가용) — 별도 표시용, 가용자금/순현금엔 미포함
+    const equityAvail = equities.latest
+      .filter(e => e.available === '가용')
       .reduce((s, e) => s + (e.total_value || 0), 0)
 
     const availableCash   = operatingCash + investAvail + bondAvail
@@ -121,8 +137,9 @@ export function useDashboard() {
       bondCash: bondAvail,
       totalLoan,
       unavailableAssets,
+      equityAvail,
     }
-  }, [latestDaily, latestInvests, loans.data, equities.latest])
+  }, [latestDaily, latestInvests, loans.data, equities.latest, fx.rates])
 
   const waterfall = useMemo<WaterfallItem[]>(() => [
     { label: '운전자금 (가용)',   value: kpi.operatingCash, sign: '+' },
@@ -137,7 +154,7 @@ export function useDashboard() {
     const result: IssueItem[] = []
 
     // 1. 오늘 운전자금 미입력 (영업일만)
-    if (isBusinessDay()) {
+    if (isTodayBusinessDay()) {
       const today = new Date().toISOString().slice(0, 10)
       const todayInput = daily.data.find(d => d.date === today)
       if (!todayInput) {

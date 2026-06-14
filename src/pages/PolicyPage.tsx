@@ -1,10 +1,11 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { usePolicyMeetings } from '../hooks/usePolicyMeetings'
 import { usePolicyDecisions } from '../hooks/usePolicyDecisions'
 import { usePolicyThreads } from '../hooks/usePolicyThreads'
-import { usePolicyParams } from '../hooks/usePolicyParams'
-import { usePolicyDashboard, type PolicyRealData } from '../hooks/usePolicyDashboard'
+import { usePolicyParams, usePolicyParamsReadMap, type PolicyParamReader } from '../hooks/usePolicyParams'
+import { usePolicyDashboards, type PolicyRealData } from '../hooks/usePolicyDashboard'
+import { useCompanies } from '../hooks/useCompanies'
 import { getLatestBonds } from '../hooks/useInvestments'
 import FxPolicyTab from '../components/policy/FxPolicyTab'
 import FvplRiskTab from '../components/policy/FvplRiskTab'
@@ -16,18 +17,31 @@ import type { Company, DecisionStatus, PolicyDecision } from '../types'
 
 type PolicyTab = 'decisions' | 'fx' | 'fvpl' | 'banks' | 'forecast' | 'plan_c'
 
-const COMPANIES: Company[] = ['셀바스에이아이', '셀바스헬스케어', '메디아나']
-
 const STATUS_META: Record<DecisionStatus, { label: string; cls: string }> = {
   pending:     { label: '대기',   cls: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300' },
   in_progress: { label: '진행중', cls: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' },
   completed:   { label: '완료',   cls: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' },
 }
 
-const COMPANY_TAG: Record<Company, string> = {
-  '셀바스에이아이': 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300',
-  '셀바스헬스케어': 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300',
-  '메디아나':       'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
+// 법인별 태그 색상 — 알려진 법인은 고정, 신규 법인은 이름 해시로 팔레트 순환
+const COMPANY_TAG_PALETTE = [
+  'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300',
+  'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300',
+  'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
+  'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+  'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300',
+  'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300',
+]
+const COMPANY_TAG_FIXED: Record<string, string> = {
+  '셀바스에이아이': COMPANY_TAG_PALETTE[0],
+  '셀바스헬스케어': COMPANY_TAG_PALETTE[1],
+  '메디아나':       COMPANY_TAG_PALETTE[2],
+}
+function companyTag(company: string): string {
+  if (COMPANY_TAG_FIXED[company]) return COMPANY_TAG_FIXED[company]
+  let h = 0
+  for (let i = 0; i < company.length; i++) h = (h * 31 + company.charCodeAt(i)) >>> 0
+  return COMPANY_TAG_PALETTE[3 + (h % (COMPANY_TAG_PALETTE.length - 3))]
 }
 
 type ParamApi = ReturnType<typeof usePolicyParams>
@@ -376,7 +390,8 @@ function LoanStatusCard({
 // ── 운용자금 집중도 카드 ──────────────────────────────────────────────────
 function InvestConcentrationCard({ data, onNavigate }: { data: PolicyRealData; onNavigate?: () => void }) {
   const LIMIT_PCT = 30
-  const total = data.investAvail + data.investUnavail
+  // 은행 기관만 집계 (investByBank는 이미 은행만 포함)
+  const total = data.investByBank.reduce((s, b) => s + b.amount, 0)
   const over = data.investByBank.filter(b => total > 0 && (b.amount / total) * 100 > LIMIT_PCT)
 
   const status: 'ok' | 'warn' | 'over' | 'na' =
@@ -394,9 +409,9 @@ function InvestConcentrationCard({ data, onNavigate }: { data: PolicyRealData; o
 
       <div className="grid grid-cols-2 gap-2 text-xs">
         <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-2">
-          <p className="text-gray-400">총 운용자금</p>
+          <p className="text-gray-400">은행 운용자금</p>
           <p className="font-semibold text-gray-900 dark:text-white mt-0.5">{fmtKRW(total)}</p>
-          <p className="text-gray-400 mt-0.5">가용 {fmtKRW(data.investAvail)}</p>
+          <p className="text-gray-400 mt-0.5">{data.investByBank.length}개 은행</p>
         </div>
         <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-2">
           <p className="text-gray-400">집중도 한도</p>
@@ -446,22 +461,25 @@ function InvestConcentrationCard({ data, onNavigate }: { data: PolicyRealData; o
 
 // ── 전체 법인 요약 행 ─────────────────────────────────────────────────────
 function AllCompanySummary({
-  dataMap, paramsMap,
+  dataMap, paramsMap, companies,
 }: {
   dataMap: Record<Company, PolicyRealData>
-  paramsMap: Record<Company, ParamApi>
+  paramsMap: Record<Company, PolicyParamReader>
+  companies: Company[]
 }) {
   return (
     <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
       <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700">
-        <h3 className="text-sm font-semibold text-gray-800 dark:text-white">3사 정책 현황 요약</h3>
+        <h3 className="text-sm font-semibold text-gray-800 dark:text-white">
+          {companies.length === 3 ? '3사' : `${companies.length}개 법인`} 정책 현황 요약
+        </h3>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
             <tr className="bg-gray-50 dark:bg-gray-700/50 text-gray-500 dark:text-gray-400">
               <th className="px-4 py-2 text-left font-medium">항목</th>
-              {COMPANIES.map(c => (
+              {companies.map(c => (
                 <th key={c} className="px-4 py-2 text-right font-medium">{c}</th>
               ))}
             </tr>
@@ -470,7 +488,7 @@ function AllCompanySummary({
             {/* 운전자금 */}
             <tr>
               <td className="px-4 py-2.5 text-gray-500 dark:text-gray-400">💧 운전자금(원화)</td>
-              {COMPANIES.map(c => {
+              {companies.map(c => {
                 const d = dataMap[c]; const p = paramsMap[c]
                 const min = (p.get('liquidity_fixed_cost_monthly') ?? 0) * (p.get('liquidity_min_months') ?? 2)
                 const ok = min === 0 ? null : d.operatingCash >= min
@@ -489,7 +507,7 @@ function AllCompanySummary({
             {/* 외화 비중 */}
             <tr>
               <td className="px-4 py-2.5 text-gray-500 dark:text-gray-400">💱 외화 비중</td>
-              {COMPANIES.map(c => {
+              {companies.map(c => {
                 const d = dataMap[c]; const p = paramsMap[c]
                 const total = d.operatingCashWithFx
                 const ratio = total > 0 ? (d.fxKrw / total) * 100 : 0
@@ -512,7 +530,7 @@ function AllCompanySummary({
             {/* 운용자금 */}
             <tr>
               <td className="px-4 py-2.5 text-gray-500 dark:text-gray-400">📊 운용자금(가용)</td>
-              {COMPANIES.map(c => (
+              {companies.map(c => (
                 <td key={c} className="px-4 py-2.5 text-right font-medium text-gray-800 dark:text-white">
                   {fmtKRW(dataMap[c].investAvail)}
                 </td>
@@ -521,7 +539,7 @@ function AllCompanySummary({
             {/* 차입금 */}
             <tr>
               <td className="px-4 py-2.5 text-gray-500 dark:text-gray-400">🏦 차입금</td>
-              {COMPANIES.map(c => {
+              {companies.map(c => {
                 const d = dataMap[c]; const p = paramsMap[c]
                 const tf = p.get('fx_total_fund') ?? d.totalFundEstimate
                 const ratio = tf > 0 ? (d.totalLoan / tf) * 100 : 0
@@ -549,7 +567,7 @@ function AllCompanySummary({
 // ── 의결사항 관련 정책 지표 패널 (인라인) ────────────────────────────────
 function DecisionPolicyPanel({
   decision, params, data,
-}: { decision: PolicyDecision; params: ParamApi; data: PolicyRealData }) {
+}: { decision: PolicyDecision; params: PolicyParamReader; data: PolicyRealData }) {
   const title = decision.title.toLowerCase()
   const isFx       = /fx|외화|환율|헤지|헷지|band/.test(title)
   const isLiquidity = /유동성|현금|버킷|cash/.test(title)
@@ -618,9 +636,17 @@ const EMPTY_DECISION = {
 }
 
 export default function PolicyPage() {
-  const { user, setCurrentCompany, currentCompany } = useAuth()
+  const { user, setCurrentCompany, currentCompany, hasCompany } = useAuth()
+  const { names: companyNames } = useCompanies()
   const isMaster  = user?.role === 'master'
   const userLabel = user?.label ?? '알 수 없음'
+
+  // 이 계정이 접근 가능한 법인만 (master/admin은 companies 미설정 시 전체)
+  const accessibleCompanies = useMemo(
+    () => companyNames.filter(c => hasCompany(c)),
+    [companyNames, hasCompany],
+  )
+  const canSeeAll = accessibleCompanies.length > 1
 
   // ── 회의·의결 훅 ──────────────────────────────────────────────────────
   const meetings = usePolicyMeetings()
@@ -634,7 +660,15 @@ export default function PolicyPage() {
 
   // ── 정책 유형 탭 + 법인 탭 ────────────────────────────────────────────
   const [policyTab, setPolicyTab]   = useState<PolicyTab>('decisions')
+  // 단일 법인 계정은 '전체' 없이 해당 법인으로 고정
   const [companyTab, setCompanyTab] = useState<Company | 'all'>('all')
+
+  // 접근 가능한 법인이 1개뿐이면 해당 법인으로 자동 고정
+  useEffect(() => {
+    if (accessibleCompanies.length === 1) {
+      setCompanyTab(accessibleCompanies[0])
+    }
+  }, [accessibleCompanies])
 
   // 세부 정책 탭: 법인 자동 연동 (currentCompany 우선 사용)
   const isDetailTab = (tab: PolicyTab) => tab !== 'decisions'
@@ -649,39 +683,27 @@ export default function PolicyPage() {
   }
 
   function handleCompanyTab(company: Company | 'all') {
+    // 접근 권한 없는 법인 선택 차단
+    if (company !== 'all' && !hasCompany(company)) return
     setCompanyTab(company)
     if (policyTab !== 'decisions' && company !== 'all') {
       setCurrentCompany(company as Company)
     }
   }
 
-  // ── 3사 실데이터 + 정책 파라미터 (unconditional hooks) ───────────────
-  const aiData   = usePolicyDashboard('셀바스에이아이')
-  const hcData   = usePolicyDashboard('셀바스헬스케어')
-  const mdData   = usePolicyDashboard('메디아나')
-  const aiParams = usePolicyParams('셀바스에이아이')
-  const hcParams = usePolicyParams('셀바스헬스케어')
-  const mdParams = usePolicyParams('메디아나')
+  // ── 접근 가능 법인 전체 실데이터 + 정책 파라미터 (동적 법인 지원) ───────
+  const dataMap      = usePolicyDashboards(accessibleCompanies)
+  const paramsReadMap = usePolicyParamsReadMap(accessibleCompanies)
 
-  const dataMap: Record<Company, PolicyRealData> = useMemo(() => ({
-    '셀바스에이아이': aiData,
-    '셀바스헬스케어': hcData,
-    '메디아나':       mdData,
-  }), [aiData, hcData, mdData])
-
-  const paramsMap: Record<Company, ParamApi> = {
-    '셀바스에이아이': aiParams,
-    '셀바스헬스케어': hcParams,
-    '메디아나':       mdParams,
-  }
-
-  const selectedData   = companyTab !== 'all' ? dataMap[companyTab]   : null
-  const selectedParams = companyTab !== 'all' ? paramsMap[companyTab] : null
+  // 선택된 단일 법인의 편집 가능한 파라미터 (set 필요 — FVPL Duration 등)
+  const selectedCompany = companyTab !== 'all' ? companyTab : null
+  const selectedParams  = usePolicyParams(selectedCompany)
+  const selectedData    = companyTab !== 'all' ? (dataMap[companyTab] ?? null) : null
 
   // FVPL: 선택된 법인의 국채 최신 1건
   const fvplBonds = useMemo(() =>
-    companyTab !== 'all' ? getLatestBonds(dataMap[companyTab].bonds) : [],
-  [companyTab, dataMap])
+    selectedData ? getLatestBonds(selectedData.bonds) : [],
+  [selectedData])
 
   // ── 의결사항 필터 ─────────────────────────────────────────────────────
   const displayDecisions = useMemo(() => {
@@ -803,10 +825,13 @@ export default function PolicyPage() {
         ))}
       </div>
 
-      {/* ── 법인 탭 (세부 탭에서는 전체 숨김) ──────────────────────────── */}
+      {/* ── 법인 탭 (세부 탭에서는 '전체' 숨김, 단일 법인 계정은 탭 미표시) ── */}
       <div className="flex gap-1.5 flex-wrap items-center">
-        {(isDetailTab(policyTab) ? COMPANIES : ['all', ...COMPANIES] as const).map(c => (
-          <button key={c} onClick={() => handleCompanyTab(c)}
+        {(isDetailTab(policyTab)
+          ? accessibleCompanies
+          : (canSeeAll ? (['all', ...accessibleCompanies] as const) : accessibleCompanies)
+        ).map(c => (
+          <button key={c} onClick={() => handleCompanyTab(c as Company | 'all')}
             className={`text-sm px-3 py-1 rounded-full transition-colors ${
               companyTab === c
                 ? 'bg-blue-600 text-white'
@@ -908,7 +933,7 @@ export default function PolicyPage() {
 
       {/* 정책 현황 패널 */}
       {companyTab === 'all' ? (
-        <AllCompanySummary dataMap={dataMap} paramsMap={paramsMap} />
+        <AllCompanySummary dataMap={dataMap} paramsMap={paramsReadMap} companies={accessibleCompanies} />
       ) : selectedData && selectedParams && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <LiquidityCard data={selectedData} params={selectedParams} isMaster={isMaster} userLabel={userLabel} />
@@ -1009,9 +1034,9 @@ export default function PolicyPage() {
           const dday      = d.due_date
             ? Math.ceil((new Date(d.due_date).getTime() - Date.now()) / 86400000)
             : null
-          // 해당 의결사항 법인의 실데이터 + 파라미터
+          // 해당 의결사항 법인의 실데이터 + 파라미터 (접근 불가 법인이면 undefined)
           const cardData   = dataMap[d.company]
-          const cardParams = paramsMap[d.company]
+          const cardParams = paramsReadMap[d.company]
 
           return (
             <div key={d.id}
@@ -1020,7 +1045,7 @@ export default function PolicyPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap mb-1">
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${COMPANY_TAG[d.company]}`}>
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${companyTag(d.company)}`}>
                         {d.company}
                       </span>
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${sm.cls}`}>
@@ -1062,12 +1087,14 @@ export default function PolicyPage() {
                   <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{d.decision}</p>
                 </div>
 
-                {/* 관련 정책 지표 (키워드 매칭) */}
-                <DecisionPolicyPanel
-                  decision={d}
-                  params={cardParams}
-                  data={cardData}
-                />
+                {/* 관련 정책 지표 (키워드 매칭) — 접근 가능 법인만 */}
+                {cardData && cardParams && (
+                  <DecisionPolicyPanel
+                    decision={d}
+                    params={cardParams}
+                    data={cardData}
+                  />
+                )}
 
                 <div className="mt-2 flex items-center gap-4 text-xs text-gray-400 dark:text-gray-500">
                   {d.owner && <span>담당: <span className="text-gray-600 dark:text-gray-300">{d.owner}</span></span>}
@@ -1314,7 +1341,7 @@ export default function PolicyPage() {
                     onChange={e => setDecisionForm(p => ({ ...p, company: e.target.value as Company }))}
                     className="mt-1 w-full text-sm border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2
                                bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
-                    {COMPANIES.map(c => <option key={c} value={c}>{c}</option>)}
+                    {accessibleCompanies.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
                 <div>

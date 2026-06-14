@@ -2,9 +2,8 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useStockTicker } from '../hooks/useStockTicker'
 import { useDarkMode } from '../hooks/useDarkMode'
+import { useCompanies } from '../hooks/useCompanies'
 import type { Company } from '../types'
-
-const COMPANIES: Company[] = ['셀바스에이아이', '셀바스헬스케어', '메디아나']
 
 /** GAS 자동 갱신 스케줄: 09:15 / 12:15 / 15:45 */
 function getNextRefresh(): string {
@@ -55,6 +54,7 @@ export default function TopBar({ onMenuClick }: Props) {
   const { user, currentCompany, setCurrentCompany, logout } = useAuth()
   const { tickers, loading, lastAt } = useStockTicker()
   const { dark, toggle: toggleDark } = useDarkMode()
+  const { names: companyNames } = useCompanies()
   const navigate = useNavigate()
 
   const activeTickers = tickers.filter(t => t.price > 0)
@@ -92,15 +92,49 @@ export default function TopBar({ onMenuClick }: Props) {
             onChange={e => setCurrentCompany(e.target.value as Company)}
             className="border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-1.5 text-sm bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-400 max-w-[9rem] sm:max-w-none"
           >
-            {COMPANIES.map(c => <option key={c} value={c}>{c}</option>)}
+            {companyNames.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
         ) : (
           <span className="text-sm font-semibold text-gray-700 dark:text-gray-200 truncate max-w-[8rem]">{currentCompany}</span>
         )}
       </div>
 
-      {/* ── 중앙 flex 공간 ─────────────────────────────────── */}
-      <div className="flex-1 min-w-0" />
+      {/* ── 중앙: 주가 마퀴 티커 ─────────────────────────── */}
+      <div className="flex-1 min-w-0 overflow-hidden relative hidden sm:block mx-1">
+        {/* edge fade */}
+        <div className="absolute inset-y-0 left-0 w-6 bg-gradient-to-r from-white dark:from-gray-900 to-transparent z-10 pointer-events-none" />
+        <div className="absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-white dark:from-gray-900 to-transparent z-10 pointer-events-none" />
+        {hasPrices && (
+          <div className="stock-ticker-track">
+            {[0, 1, 2, 3].map(pass => (
+              <span key={pass} className="flex items-center gap-1.5 px-6">
+                {activeTickers.map((t, idx) => {
+                  const pct = t.changePct ?? 0
+                  const up  = pct > 0; const dn = pct < 0
+                  const col = up ? 'text-red-500' : dn ? 'text-blue-500' : 'text-gray-400 dark:text-gray-500'
+                  return (
+                    <span key={`${pass}-${t.code}`} className="flex items-center gap-1 shrink-0 whitespace-nowrap">
+                      {idx > 0 && <span className="text-gray-300 dark:text-gray-600 mx-1">·</span>}
+                      <span className="text-xs text-gray-500 dark:text-gray-400">{t.shortName}</span>
+                      <span className="text-xs font-semibold text-gray-800 dark:text-gray-100 tabular-nums">{t.price.toLocaleString()}원</span>
+                      <span className={`text-xs tabular-nums font-medium ${col}`}>
+                        {up ? '▲' : dn ? '▼' : '─'}{Math.abs(pct).toFixed(2)}%
+                      </span>
+                    </span>
+                  )
+                })}
+                {lastAt && <span className="text-[10px] text-gray-300 dark:text-gray-600 tabular-nums ml-3">{lastAt}</span>}
+              </span>
+            ))}
+          </div>
+        )}
+        {loading && !hasPrices && (
+          <div className="flex items-center gap-2 animate-pulse px-2 h-full">
+            <div className="h-3 w-24 bg-gray-200 dark:bg-gray-700 rounded" />
+            <div className="h-3 w-20 bg-gray-200 dark:bg-gray-700 rounded" />
+          </div>
+        )}
+      </div>
 
       {/* ── 우측 정보/액션 (반응형) ───────────────────────── */}
       <div className="flex items-center gap-1.5 shrink-0">
@@ -119,49 +153,6 @@ export default function TopBar({ onMenuClick }: Props) {
         <span className={`text-xs font-semibold px-2 py-0.5 rounded-full leading-none shrink-0 ${roleBadge[user?.role ?? 'company'] ?? ''}`}>
           {user?.role === 'master' ? 'Master' : user?.role === 'ceo' ? 'CEO' : user?.label ?? ''}
         </span>
-
-        <Divider />
-
-        {/* ── 주가 티커: xl 이상에서 텍스트, sm~xl 에서 아이콘+툴팁 ── */}
-        {loading && !hasPrices ? (
-          <div className="hidden sm:flex items-center gap-1 animate-pulse">
-            <div className="h-3 w-16 bg-gray-200 dark:bg-gray-700 rounded" />
-          </div>
-        ) : hasPrices ? (
-          <>
-            {/* xl 이상: 풀텍스트 */}
-            <div className="hidden xl:flex items-center gap-2">
-              {activeTickers.map((t, idx) => {
-                const pct = t.changePct ?? 0
-                const up  = pct > 0; const dn = pct < 0
-                const col = up ? 'text-red-500' : dn ? 'text-blue-500' : 'text-gray-400 dark:text-gray-500'
-                return (
-                  <span key={t.code} className="flex items-center gap-1 shrink-0 whitespace-nowrap">
-                    {idx > 0 && <span className="text-gray-300 dark:text-gray-600">•</span>}
-                    <span className="text-xs text-gray-500 dark:text-gray-400">{t.shortName}</span>
-                    <span className="text-xs font-semibold text-gray-800 dark:text-gray-100 tabular-nums">{t.price.toLocaleString()}원</span>
-                    <span className={`text-xs tabular-nums font-medium ${col}`}>{up ? '▲' : dn ? '▼' : '─'}{Math.abs(pct).toFixed(2)}%</span>
-                  </span>
-                )
-              })}
-              {lastAt && <span className="text-[10px] text-gray-300 dark:text-gray-600 tabular-nums">{lastAt}</span>}
-            </div>
-            {/* sm~xl: 아이콘+툴팁 */}
-            <div className="flex xl:hidden items-center">
-              {activeTickers.map(t => {
-                const pct = t.changePct ?? 0
-                const up  = pct > 0; const dn = pct < 0
-                const col = up ? 'text-red-500' : dn ? 'text-blue-500' : 'text-gray-400'
-                const tip = `${t.shortName} ${t.price.toLocaleString()}원 ${up?'▲':dn?'▼':'─'}${Math.abs(pct).toFixed(2)}%`
-                return (
-                  <span key={t.code} title={tip} className={`text-[11px] tabular-nums font-bold px-1 ${col} cursor-default`}>
-                    {up ? '▲' : dn ? '▼' : '─'}
-                  </span>
-                )
-              })}
-            </div>
-          </>
-        ) : null}
 
         <Divider />
 

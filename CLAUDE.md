@@ -1,6 +1,6 @@
 # CLAUDE.md — Selvas Treasury (New-Treasury)
 > 신규 세션 시작 시 이 파일을 먼저 읽어 컨텍스트를 복원하세요.
-> 최종 업데이트: 2026-06-05 (세션3차 — 버그수정 + 기능고도화)
+> 최종 업데이트: 2026-06-12 (세션9차 — 접근성 점검 + TopBar 티커 + 동적 회사 관리)
 
 ---
 
@@ -18,8 +18,10 @@
 | 작업 경로 | `D:\workspace\claude\New-Treasury` |
 | Node.js | v24.15.0 |
 | 패키지 매니저 | pnpm v11.4.0 |
-| Dev 서버 | `pnpm dev` → `http://localhost:5175/New-Treasury` |
+| Dev 서버 | `pnpm dev` → `http://localhost:5175/New-Treasury` (LAN: `http://192.168.22.241:5175/New-Treasury`) |
 | 빌드 | `pnpm build` |
+| LAN 접속 주소 | `http://192.168.22.241:5175/New-Treasury/` (같은 사내망/192.168.22.x) — 포트 고정(strictPort) |
+| LAN 설정 | `vite.config.ts` → `server: { port: 5175, host: true }` |
 | Preview 도구 서버 이름 | `vite-dev` (`.claude/launch.json` 참조) |
 
 ---
@@ -44,10 +46,35 @@ zustand               (설치됨, 아직 미사용)
 
 ## 4. 인증 체계
 
-- Supabase `access_codes` 테이블에서 접근 코드 조회
-- 로그인 후 `sessionStorage['treasury_user']`에 TreasuryUser 저장
-- 권한: `master` (전체 편집) | `ceo` (전체 열람만) | `company` (자사만)
-- `useAuth()` 훅으로 전역 접근
+### Supabase Auth 기반 (세션6차 전환 완료)
+- **로그인**: 이메일 + 비밀번호 (`supabase.auth.signInWithPassword`)
+- **세션**: Supabase Auth JWT (localStorage 자동 관리, sessionStorage 불사용)
+- **권한 프로필**: `treasury_users` 테이블 (email → 권한 로드)
+- **최초 계정 설정**: Admin이 `treasury_users`에 이메일 사전 등록 → 사용자가 LoginPage "최초 계정 설정" 탭에서 비밀번호 설정
+
+### 역할 계층 (master > admin > editor > viewer)
+| 역할 | 설명 |
+|------|------|
+| `master` | 전체 권한 (사용자 관리 포함) |
+| `admin` | 편집·결재·정책 (사용자 관리 제외) |
+| `editor` | 데이터 입력·편집 |
+| `viewer` | 읽기 전용 |
+> `ceo` / `company` — 레거시 역할, 기존 코드 호환용 (신규 미사용)
+
+### useAuth() 헬퍼
+- `canEdit()` — 편집 가능 여부
+- `canDelete()` — 삭제 가능 여부 (master 또는 can_delete=true)
+- `canApprove()` — 결재 가능 여부
+- `hasMenu(slug)` — 메뉴 접근 가능 여부
+- `hasCompany(c)` — 법인 접근 가능 여부
+
+### 사전 등록 DDL
+`docs/db/treasury_users.sql` — Supabase SQL Editor에서 실행 필요
+
+### SSO 추후 계획
+- 셀바스에이아이: Azure AD (별도 테넌트)
+- 메디아나: Azure AD (별도 테넌트)
+- 셀바스헬스케어: Google Workspace (@selvashc.com)
 
 ---
 
@@ -57,7 +84,7 @@ zustand               (설치됨, 아직 미사용)
 src/
 ├── components/
 │   ├── Layout.tsx          ← Sidebar + TopBar + Outlet
-│   ├── Sidebar.tsx         ← 접기/이슈배지/환율팝업/얇은스크롤바
+│   ├── Sidebar.tsx         ← 섹션 트리 접기/펴기 + 접기/이슈배지/환율팝업/얇은스크롤바
 │   ├── TopBar.tsx          ← 법인선택 + 주가티커 + 반응형 아이콘버튼
 │   └── common/
 │       └── NotionTable.tsx ← 공통 노션형 테이블 (컬럼 토글·정렬·Supabase 저장)
@@ -384,7 +411,7 @@ VITE_GAS_API_URL=https://script.google.com/macros/s/AKfycbwZ.../exec
 - Supabase DDL: `docs/supabase_policy_tables.sql` 추가
 - `usePolicyBankLimits.ts` — CRUD 훅
 - `BankLimitsTab.tsx` — 기관별 잔고·비중·한도 테이블, 마스터 등록 모달
-  - `normBank()` — `기업은행(007)` → `기업은행` 괄호 suffix 정규화·합산
+  - `normBank()` — 은행명 정규화·합산: `국민은행(231)-2` → `국민은행` (은행 키워드까지 추출), `기업은행(007)` → `기업은행` (괄호 suffix 제거). **신규 페이지에서도 반드시 이 함수 재사용** (`import { normBank } from '../../components/policy/BankLimitsTab'`)
   - 마스터 등록 기관 vs 운용 기관 통합 표시 (미운용 기관 "미운용" 표시)
   - 미등록 기관 "미등록" 뱃지
 - `policy_bank_limits`를 **거래 금융기관 마스터** 테이블로 격상
@@ -411,6 +438,223 @@ VITE_GAS_API_URL=https://script.google.com/macros/s/AKfycbwZ.../exec
 
 ---
 
+---
+
+### 2026-06-09 세션 (버그수정 + UI 개선)
+
+#### Bug Fix — 데이터 정확성
+- **레이스 컨디션 (`bonds.length=0`)**: `fetchIdRef` 패턴 → `useInvestments/useEquities/useDaily/useLoans` 4개 훅 적용. `setLoading(false)`를 stale-check 이전으로 이동 (무한 로딩 방지)
+- **`null value in column "id"` insert 오류**: `crypto.randomUUID()` 클라이언트 생성으로 해결
+- **외화 운용자금 KRW 미환산**: `useDashboard`에서 `toKRWAmt(amount, currency)` 헬퍼 추가, `useEffect(() => fx.fetchRates())` 자체 호출. USD/EUR 정기예금 91.7억원 누락 수정 (메디아나 기준)
+
+#### BondHistoryPanel / EquityHistoryPanel 개선
+- **히스토리 패널 prefill**: 패널 열 때 최신 레코드 → 좌수·취득가액·가용여부 자동입력 (기준가·주가는 비워둠)
+- **천단위 구분 `,`**: `fmtInt/fmtDecimal` 헬퍼로 모든 숫자 입력 필드 적용
+- **기준일 날짜별 시세조회**: `basDt = form.priceDate` 전달, 조회 후 priceDate 덮어쓰기 제거
+- **동일 기준일 중복 저장 방지**: `existingByDate` upsert — 같은 날짜 기존 레코드 발견 시 update 분기
+- **취득가액 팝업 범위 제한**: `isNewInsert && hasAcqMismatch` 조건 (단순 날짜 추가 시 팝업 미표시)
+
+#### 기관한도 (BankLimitsTab) 개선
+- **normBank() 강화**: `국민은행(231)-2` → `국민은행` (은행 키워드까지 추출, 계좌번호·suffix 제거)
+- **은행 전용 필터**: 은행 키워드 없는 기관(증권사·보험사 등) 제외
+- **totalAmt 은행만 집계**: `bankInvests.filter(i => normBank(i.bank).includes('은행'))`
+- **usePolicyDashboard `investByBank`**: normBank + 은행 필터 동일 적용 → 회의·의결 탭 운용자금 집중도 카드 정합
+
+#### EquityPage 취득가액 일괄 입력 (B안)
+- **"💰 취득가액 미입력 N건"** 배너 버튼 (취득가액 미입력 지분·비상장 종목 있을 때만 표시)
+- 클릭 시 팝업: 미입력 종목만 표시 (종목명/시장/현재가/주수 + 취득가액 입력 필드)
+- 천단위 자동 포맷, "일괄 저장 (N건)" 버튼 → `eq.updateAcquisitionCost(name, cost)` 종목 전체 이력 반영
+- 저장 성공 시 팝업 자동 닫힘, 배너 사라짐
+
+#### Sidebar 섹션 트리 구조 (NAV_GROUPS)
+- 플랫 리스트 `NAV_ITEMS` → 섹션 그룹 `NAV_GROUPS`로 전환
+- 섹션 헤더 클릭으로 접기/펴기 (`openSections` state, `max-h` transition)
+- 현재 경로가 속한 섹션 자동 열림 (`getDefaultOpen`)
+- 섹션 구성:
+  - **DASHBOARD**: 통합 상황판, 자금정책
+  - **자금입력**: 운전자금, 운용자금, 차입금, 지분/장기투자
+  - **이력관리**: 자금 변동 이력, 이슈 이력, 환율 현황
+  - **관리** (master 전용): 코드 변경, 사용자 관리, 데이터 관리
+- "자금정책 관리" → "자금정책" 레이블 변경
+- collapsed(w-14) 상태: 섹션 토글 비활성화, 아이콘 전체 상시 표시
+
+---
+
+### 2026-06-09 세션 2차 (자금일보 기획 + UI 개선)
+
+#### EquityCard 인터랙티브 개선
+- **종목 클릭 → 차트 전환**: 리스트 행 클릭 시 해당 종목의 평가 추이 차트로 전환
+- **Ctrl+클릭 복수 선택**: `selected: Set<string>` 상태, Ctrl/⌘ 누르면 토글 다중 선택, 차트는 선택 항목 합산 추이 표시
+- **고정 카드 크기**: 리스트 영역 `h-44` 고정 높이 + `overflow-y-auto`, 선택 여부 관계없이 항상 전체 종목 표시
+- **select 드롭다운 제거**: 클릭 인터랙션으로 대체, `✕ 전체` 버튼은 헤더로 이동
+- **지분/국채 구분선**: `── 국채/채권 ──` 인라인 구분선으로 시각 분리
+- `Ctrl+클릭으로 복수 선택` 힌트 문구 (전체 보기 + 2개 이상 종목 시 표시)
+
+#### Sidebar 브랜딩 개선
+- `Selvas Treasury` → `SELVAS TREASURY` (대문자, `tracking-widest`)
+- 클릭 시 `/dashboard`(통합 상황판) 이동 + hover 시 `text-blue-300` 색상 변화
+
+#### 자금일보 (DailyReportPage) 기획 확정
+- **데이터 반영 정책**: C안 확정 — 입력 즉시 임시 반영, 승인 시 `confirmed=true` 확정
+- **결재선**: 팀장 1단계 Default, `daily_report_approval_config` 테이블로 유연 추가/삭제
+- **입금 7종**: 매출채권 회수, 미수금 회수, 국책자금 회수, 선수금, 투자금 회수(연동), 차입금 실행(연동), 기타(스레드)
+- **출금 5종**: 미지급금, 선급금, 투자집행(연동), 차입금 상환(연동), 기타(스레드)
+- **검증 공식**: `입금합계 - 출금합계 - (당일잔액 - 전일잔액) = 0` → 통과 시 상신 버튼 활성
+- **산출 문서**: `docs/pages/DailyReportPage.md`, `docs/db/daily_report_tables.sql`
+- **S1 개발 시작 예정** (DB DDL → 라우트 → 페이지 골격)
+
+---
+
+### 2026-06-10 세션 (자금일보 S1~S3 구현 + 날짜 모델 재정립)
+
+#### 자금일보 날짜 모델 확정 (⭐ docs/pages/DailyReportPage.md §0)
+- **핵심 전제**: `daily[D]` = 담당자가 D일 아침 입력 = **전일(D-1영업일) 마감잔액**
+- `selectedDate`(작성일, picker, 기본=오늘) / `reportDate = prevBizDay(selectedDate)`(보고대상일=라벨)
+- **현금**: 마감 = `daily[selectedDate]`(오늘 입력), 기초 = `daily[prevBizDay(selectedDate)]`(직전영업일 입력)
+- **지분/국채**: 거래일(종가) 기준 — 마감 = `reportDate` 종가, 기초 = 그 이전 영업일 종가
+- 라벨(기초·마감) 모두 `reportDate`. 리포트 키 = `selectedDate`
+- `useDailyReportSummary`: `prevBizDayStr()` 헬퍼로 영업일 stepping (주말 skip)
+
+#### 자금현황 ↔ 입출금 연동 (S2)
+- `liveItemSums`(itemHook.items 실시간 집계) → `byAccount`/`byEquityName`/`byBondLabel`
+- 입금/출금 항목 저장 시 자금현황 입금액·출금액 컬럼 즉시 반영
+- 지분·국채 평가손익 **자동 기재**: 전일 변동분 → `@auto:`/`@auto:bond:` memo, in=이익/out=손실
+  - 기존 잘못 저장된 항목 direction/category 자동 교정 로직 포함
+
+#### BusinessDatePicker (커스텀 영업일 캘린더)
+- 일~토 배열, 주말(토·일) 비활성, 작성일 상한 = 오늘(`snapToBizDay(today)`)
+- 녹색 dot = 해당 작성일의 보고대상일(`prevBizDay`)에 운전자금 데이터 존재
+- 전/다음 영업일 네비 버튼 (주말 자동 skip)
+
+#### 컬럼 헤더
+- "마감잔액"(전일 제거), Δ 컬럼 → "Δ 차액 / (마감−기초)" 중앙 2줄
+- 지분 행 종목명 열 `whitespace-nowrap` (배지 줄바꿈 방지)
+
+---
+
+### 2026-06-10 세션 2차 (자금일보 S4~S5 + Supabase Auth + 공휴일)
+
+#### Supabase Auth 전환 (세션6차 확정)
+- 이메일+비밀번호 로그인 (`supabase.auth.signInWithPassword`) 전환
+- `LoginPage.tsx` 재설계: 2×2 그리드 탭 (이메일 로그인 / 접근 코드 / 최초 설정 / 비밀번호 찾기), `max-w-md` 카드
+- Supabase RLS: `anon` + `authenticated` 역할 양쪽에 동일 정책 부여 (DROP+recreate)
+- `legacyRef` 패턴으로 기존 접근코드 방식과 dual-auth 호환
+
+#### 공휴일 처리 (bizDay.ts)
+- `src/lib/bizDay.ts` 전면 재작성: 2025~2028년 공휴일 하드코딩 + GAS 프록시 + localStorage 캐싱
+- `fetchAndCacheHolidays(year)` — GAS `?type=holidays&year=YYYY`, 캐시키 `treasury_holidays_{YEAR}`
+- `useHolidays()` 훅 신규 → `App.tsx`에서 현재+내년 자동 사전 로드
+- `format.ts`에서 구 `isBusinessDay(Date)` 제거, `bizDay.ts`로 일원화
+- `Code.gs`: `fetchKoreanHolidays_(e)` 추가, `HOLIDAY_API_KEY` 스크립트 속성 필요
+
+#### 자금일보 S4 연동 팝업
+- `invest_return` → 운용자금/지분 목록 팝업, `loan_drawdown` → 차입금 신규 팝업
+- `invest_execute` → 운용자금 신규, `loan_repayment` → 상환 팝업
+- 날짜 모델 확정: `selectedDate`(작성일) / `reportDate=prevBizDay(selectedDate)`(보고대상일)
+- `BusinessDatePicker` 커스텀 영업일 캘린더 (주말 비활성, 녹색 dot = 데이터 존재)
+
+#### 자금일보 S5 검증 + 결재 워크플로우
+- `validation useMemo` 추출: 입금합계 - 출금합계 - 잔액증감 = 0 검증
+- 상신/승인/반려 버튼 활성화, 결재선 설정 모달 (master 전용)
+- `approveReport(step, comment)` / `rejectReport(comment)` 연결
+- 3개 모달: 승인 확인, 반려 사유 입력, 결재선 설정(법인별 step/직책/코드 추가·삭제)
+
+---
+
+### 2026-06-10 세션 3차 (네비게이션 재편 + 신규 페이지)
+
+#### Sidebar 5섹션 재편
+- 기존: DASHBOARD(상황판·일보·정책) + 자금입력 + 이력관리 + 관리
+- 변경: **DASHBOARD**(상황판·정책) / **자금입력**(운전·운용·지분·차입) / **자금일보**(작성·목록) / **이력관리**(변동·이슈·환율이력) / **관리**(코드·사용자·데이터·조직도)
+- 환율 현황 → **환율 이력** 레이블 변경
+
+#### 일별 자금일보 목록 (`DailyReportListPage.tsx`)
+- 라우트: `/daily-report-list/:company?`
+- 영업일 역산 목록 (최근 30/60/90영업일), 날짜×법인 현황 표시
+- 상태 배지: 미작성 / 작성 중 / 결재 중 / 승인 완료 / 반려
+- 클릭 시 해당 날짜 자금일보 바로 열기 / 미작성일 → 작성 진입
+
+#### 조직도 관리 (`OrgChartPage.tsx`)
+- 라우트: `/admin/org-chart` (master 전용)
+- 법인별 결재선(step/직책/결재자코드) CRUD
+- `useApprovalConfig`(`useDailyReport.ts`) 재사용
+- 향후 조직 계층 시각화 예정 (Azure AD / Google Workspace SSO 연동)
+
+---
+
+### 2026-06-12 세션 (로그인 데드락 + 자금일보 안정화 + CMS 다중 PDF)
+
+#### Bug Fix 1: 로그인 "처리 중..." 무한 행 — 영구 차단 ⭐[CRITICAL]
+- **원인**: supabase-js v2가 모든 auth 작업을 `navigator.locks` exclusive 락으로 감쌈 → 이전 탭/새로고침 중 락 점유 상태가 남으면 이후 `signInWithPassword` 무한 대기
+- **진단**: `await navigator.locks.query()` → held에 `lock:sb-...-auth-token` 존재 확인
+- **해결**: `src/lib/supabase.ts` — `createClient` `auth.lock`에 no-op 함수 주입으로 Web Locks 완전 우회
+  ```typescript
+  async function noopLock<R>(_n: string, _t: number, fn: () => Promise<R>): Promise<R> { return fn() }
+  createClient(url, key, { auth: { lock: noopLock, persistSession: true, ... } })
+  ```
+- `AuthContext.tsx` — `login()` 에서 `signInWithPassword` 응답의 `data.user` 직접 사용, 불필요한 `getUser()` 2차 네트워크 호출 제거
+- 로그인 화면 flash 방지: 기존 세션 있을 때 profile 로드 완료까지 `loading=true` 유지, 5초 hard timeout 추가
+
+#### Bug Fix 2: 자금일보 무한 로딩 — 렌더 루프 2단계 근본 차단 ⭐[CRITICAL]
+- **1단계** (`useFx.ts`): `toKRW` → `useCallback([rates])`, 반환 객체 → `useMemo([rates,...,toKRW])` 메모이즈로 참조 안정화
+- **2단계** (`DailyReportPage.tsx`): 지분·국채 평가손익 자동기재 effects 의존성 재설계
+  - `summary.equityGroups`, `summary.investGroups` 배열을 deps에서 완전 제거
+  - **`useRef` latest-value 패턴** 적용: 배열은 ref에 저장, effect 내부에서 `.current`로 읽음
+  - deps는 안정적인 primitive만 유지: `[dr.report?.id, resolvedCompany, selectedDate, summary.loading]`
+  - 배열 참조가 렌더마다 교체되어도 effect 재실행 없음 → 무한 루프 완전 차단
+- `useFx` 단독 수정으로 충분하지 않은 이유: `useDailyReportSummary`의 `investGroups/equityGroups`가 `toKRW`를 dep으로 가진 `useMemo`를 통해 파생되므로, deps 배열 자체도 안정화 필요
+
+#### CmsVerificationModal 전면 재설계 (다중 PDF + 페이지 점프)
+- **Props 변경**: 단일 `cmsVerifyUrl: string` → `pdfs: PdfSource[]`, `initialIndex?: number`
+- **다중 PDF 탭**: 업로드된 모든 PDF를 탭으로 표시, 스캔본은 `⚠` 표시
+- **크로스 PDF 금액 매칭**: 마운트 시 모든 PDF에서 금액 추출 → `allHits: Hit[]` (pdfIndex, fileName, page 포함)
+  ```typescript
+  type Hit = { amount: number; pdfIndex: number; fileName: string; page: number }
+  ```
+- **카드 클릭 → PDF 점프**: 매칭된 PDF 탭 자동 전환 + 해당 페이지로 스크롤 + 추출 목록 항목 노란 강조
+  - 불안정한 캔버스 하이라이트 완전 제거 (pdfjs span 분리 문제로 신뢰도 낮음)
+  - 텍스트는 드래그 선택 가능(`cursor: text`)
+- **자동 매칭 결과 표시**: `🟢 CMS_A.pdf p.2 에서 일치 · 클릭해 이동` 형태
+- **대사 완료 출처 기록**: `VState.source`에 확인 PDF 파일명 저장 → 접힌 카드에 `📎 출처: CMS_A.pdf` 표시
+- **상태 영속**: localStorage `cms_verify_{company}_{reportDate}` — 창 닫아도 대사 상태 유지
+- **카드 접기/펴기**: 대사 완료 카드 `vs.collapsed` 토글
+- `DailyReportPage.tsx` 연동: `cmsVerifyUrl` 단일 URL → `cmsVerifyPdfs` 배열 + `cmsInitialIdx` 상태로 전환
+
+#### FX 외화 입출금 native 표시
+- `ItemSums.byAccount` 타입 확장: `{ inKrw, outKrw, inRaw, outRaw }` (외화 원단위 별도 추적)
+- `useDailyReportSummary.ts` + `DailyReportPage.tsx` liveItemSums: inRaw/outRaw 집계 추가
+- `ReportSummaryTable.tsx` `FxRow`: 입금/출금 컬럼 → `fmtFx(inRaw, code)` 표시 (원화환산 컬럼 제거)
+- 효과: `전일잔액(USD) + 입금(USD) − 출금(USD) = 마감잔액(USD)` 단순 계산 일치
+
+---
+
+### 2026-06-12 세션 9차 (접근성 점검 + TopBar 티커 + 동적 회사 관리)
+
+#### 접근성 전수 점검 (메뉴·법인 권한)
+- **Sidebar 메뉴 필터링**: `NavItem.slug` 추가 → `hasMenu(slug)` 로 항목 필터, 빈 섹션 전체 숨김
+- **PolicyPage 법인 제한**: `accessibleCompanies = COMPANIES.filter(hasCompany)` → 단일 법인 계정은 탭/요약이 본인 법인만 표시, 타사 정보 차단
+- **UsersPage 역할 툴팁**: master/admin/editor/viewer 카드 hover 시 상세 권한 목록 표시
+
+#### TopBar 주가 티커 오버플로 수정
+- 우측 `shrink-0` 컨테이너 안 티커 → **중앙 `flex-1` 마퀴**(`stock-ticker-track`, 4x 콘텐츠 `-25%` 루프, hover 일시정지)로 이동
+- 좌우 페이드 그라디언트, 로그아웃·코드관리 등 우측 버튼 항상 표시 보장
+- `index.css` `@keyframes stock-ticker-scroll` 추가
+
+#### Sidebar 섹션 상태 영속화
+- 유저별 `localStorage` 키 `sidebar_sections_{sb_id}` 에 접기/펴기 상태 저장·복원
+- 복원 시 현재 경로가 속한 섹션은 강제 열기
+
+#### 동적 회사 관리 (master 전용) ⭐
+- **`Company` 타입**: 하드코딩 union → `string` (DB-driven)
+- **`companies` 테이블** 신규 (`docs/db/companies.sql`): name/short_name/active/sort_order, RLS(전체 읽기·master 쓰기)
+- **`useCompanies()` 훅** (`src/hooks/useCompanies.ts`): 모듈 캐시 + `invalidateCompanies()` + 비훅 헬퍼 `getCompanyNames()`. 테이블 미생성 시 3법인 FALLBACK
+- **`CompaniesPage.tsx`** (`/admin/companies`): 법인 추가/비활성화/삭제, Sidebar "🏢 회사 관리" 메뉴 분리 (사용자 관리와 별도 페이지)
+- **전 페이지 하드코딩 제거**: Dashboard/Input/Invest/Loans/Equity/History/DailyReport(List)/DataPage/OrgChart 의 `VALID_COMPANIES`/`COMPANIES` → `getCompanyNames()`·`useCompanies().names`
+  - master/admin은 `hasCompanyCheck`(빈 companies=전체)로 신규 법인 자동 접근, editor/viewer는 사용자 관리에서 법인 지정
+- **[CRITICAL] hang 수정**: `fetchWithTimeout` 12s abort 시 supabase 호출이 reject → `load()`/회사추가 핸들러에 **try/catch/finally** 필수 (없으면 `setLoading(false)` 미실행 → 무한 로딩/"추가 중" 멈춤). companies 테이블 미생성이 직접 원인이었음
+
+---
+
 ## 8. 미완료 / 추후 작업
 
 ### GAS 스크립트 현황
@@ -423,6 +667,7 @@ VITE_GAS_API_URL=https://script.google.com/macros/s/AKfycbwZ.../exec
 | 종목명으로 주식 검색 | `?name=셀바스에이아이` | ✅ 운영 중 |
 | 채권명으로 채권 검색 | `?type=bond&bondName=국고채` | ✅ 운영 중 (KRX IP 제한 시 ISIN 직접 입력 fallback) |
 | FX 표준편차 자동계산 | `?type=fxstddev` | ✅ 운영 중 (ECOS API, 스크립트속성 ECOS_API_KEY 필요) |
+| 공휴일 조회 | `?type=holidays&year=YYYY` | ✅ 운영 중 (스크립트속성 HOLIDAY_API_KEY 필요) |
 
 **GAS 실제 응답 형식 (확인됨):**
 ```json
@@ -520,6 +765,53 @@ const columns: ColumnDef<MyRecord, unknown>[] = [
 
 ## 10. ⚠️ 중요 시행착오 & 금지사항 (구 §9)
 
+### [CRITICAL] supabase-js Web Locks 데드락 → 로그인 '처리 중...' 무한 행
+```
+증상: 로그인 버튼 클릭 시 "처리 중..." 에서 영구 멈춤 (Chrome·미리보기 동일)
+      캐시 삭제하면 일시 해결되나 재발. signInWithPassword 가 반환 안 함.
+원인: supabase-js v2 는 모든 auth 작업(signIn/getSession/토큰갱신)을
+      navigator.locks 의 exclusive 락 `lock:sb-{ref}-auth-token` 으로 감싼다.
+      락 보유자가 한 번 멈추면(탭전환·새로고침 중 갱신 중단 등) 락이 영구 점유 →
+      이후 모든 auth 호출이 같은 락을 무한 대기.
+진단: preview_eval 로 `await navigator.locks.query()` → held 에
+      `lock:sb-..-auth-token` 이 남아 있으면 확정.
+해결: createClient 의 auth.lock 을 no-op 으로 교체 (src/lib/supabase.ts).
+      단일 탭 앱이라 크로스탭 락 조정 불필요 → 데드락 원천 차단.
+      async function noopLock(_n,_t,fn){ return fn() }
+      createClient(url,key,{ auth:{ lock:noopLock, persistSession:true,
+        autoRefreshToken:true, detectSessionInUrl:true }, global:{fetch:fetchWithTimeout} })
+금지: getUser() 등 signIn 직후 불필요한 2차 네트워크 호출 추가 — hang 위험 가중.
+      signInWithPassword 응답의 data.user 를 그대로 사용할 것.
+```
+
+### [CRITICAL] 훅 반환 객체·함수 미메모이즈 → 무한 렌더 루프 (자금일보 무한 로딩)
+```
+증상: 자금일보 작성 페이지 재진입 시 "일보 데이터 불러오는 중…" 영구 멈춤 + 콘솔 에러 다수
+원인: useFx() 가 매 렌더마다 새 객체 { rates, ..., toKRW } 와 새 toKRW 함수를 반환.
+      → useDailyReportSummary 의 toKRW(useCallback dep [fx])·investGroups/equityGroups
+        (useMemo dep [toKRW]) 가 매 렌더 새 참조 생성
+      → 이 배열을 deps로 가진 자동기재 useEffect 가 매 렌더 실행 + setState
+      → "Maximum update depth exceeded" → React 가 커밋 중단, 스피너 상태로 프리즈
+진단: REST 쿼리는 정상(200, 빠름)인데 스피너만 멈춤 + 콘솔 에러 누적이면 렌더 루프 의심.
+
+해결 1 — 훅 메모이즈 (useFx.ts):
+      toKRW → useCallback([rates]), 반환객체 → useMemo([rates,...,toKRW]).
+      커스텀 훅이 반환하는 객체·콜백은 반드시 useMemo/useCallback 으로 메모이즈.
+
+해결 2 — useRef latest-value 패턴 (DailyReportPage.tsx):
+      파생 배열(equityGroups, investGroups)이 deps에 있는 effect는 배열 교체 시마다 재실행.
+      → useRef 로 최신값만 보관하고 effect 내부에서 .current 로 읽어 deps에서 제거.
+      const equityGroupsLatest = useRef(summary.equityGroups)
+      equityGroupsLatest.current = summary.equityGroups   // 렌더마다 갱신, effect 재실행 없음
+      // effect deps: [dr.report?.id, resolvedCompany, selectedDate, summary.loading]
+      → 배열 참조가 매 렌더 교체되어도 effect 비실행 → 루프 근본 차단.
+      useFx 메모이즈만으로 부족할 수 있음 — 두 해결책을 함께 적용해야 완전히 차단됨.
+
+원칙: 여러 컴포넌트가 구독하는 훅의 반환값은 참조 안정성 필수.
+      useMemo/useEffect deps에 들어가는 함수·배열·객체는 반드시 안정화.
+      deps에서 제거하면 stale closure가 되는 값은 useRef latest-value 패턴 사용.
+```
+
 ### [CRITICAL] useRef + @types/node 타입 충돌 → React 19 앱 전체 크래시
 ```
 증상: "An error occurred in the <TopBar> component" → root 빈 상태
@@ -542,6 +834,29 @@ useEffect(() => {
   const timer = window.setInterval(() => void run(), INTERVAL)
   return () => { cancelled = true; window.clearInterval(timer) }
 }, [])
+```
+
+### [CRITICAL] RLS 정책에서 auth.users 참조 → 'permission denied for table users' 403
+```
+증상: companies 등 신규 테이블 INSERT/UPDATE 시 403 "permission denied for table users".
+      UI는 "추가 중..." 에서 멈춘 것처럼 보임(이전 시도의 stale 렌더 상태와 겹치면 영구 멈춤).
+원인: RLS 정책에서 master 체크용으로 auth.users 를 서브쿼리 참조
+      (select email from auth.users where id = auth.uid()) →
+      authenticated 역할은 auth.users 에 SELECT 권한이 없어 정책 평가 자체가 실패.
+진단: preview_eval 로 supabase.from('테이블').insert(...) 직접 호출 →
+      { status: 403, error: 'permission denied for table users' } 확인.
+해결: ① 정책에서 auth.users 직접 참조 금지. 이메일 클레임이 필요하면 auth.jwt() ->> 'email' 사용.
+      ② 본 앱은 anon 키로 동작(레거시 접근코드 사용자는 실제 auth.users 아님)하고
+         master 체크는 클라이언트(라우트 가드+UI)에서 수행 → 다른 테이블처럼
+         anon+authenticated 양쪽에 permissive 정책(using/​with check true) 부여가 정석.
+         (docs/db/companies.sql 의 companies_all 정책 참조)
+방어: 클라이언트 비동기 핸들러는 try/catch/finally 로 감싸 버튼이 영구 멈추지 않게 한다.
+근본조치: 쓰기(INSERT/UPDATE/DELETE)는 supabase-js 대신 raw fetch 기반 REST 헬퍼 사용.
+      → src/lib/supabase.ts 의 restInsert/restUpdate/restDelete (fetchWithTimeout 12s 내장,
+        PostgREST 직접 호출, supabase-js 재시도/토큰갱신 wedge 자체가 발생 안 함).
+      관리자 쓰기(CompaniesPage·UsersPage)에 적용 완료. 읽기(SELECT)는 supabase.from() 유지.
+      ⚠ supabase-js 의 .insert()/.update()/.delete() 는 한번 403 받으면 wedge 되어
+        같은 클라이언트의 이후 SELECT 까지 멈출 수 있으므로, RLS 의존 쓰기는 REST 헬퍼 권장.
 ```
 
 ### HMR 캐시 문제
@@ -602,9 +917,16 @@ useEffect(() => {
 | `policy_params` | 정책 파라미터 Key-Value (company+param_key unique) |
 | `policy_bank_limits` | **거래 금융기관 마스터** + 한도 설정 (company+bank_name unique) |
 | `cashflow_plan` | 12주 롤링 포캐스트 (company+week_start unique) |
+| `companies` | **법인 마스터** (name unique, short_name/active/sort_order) — 동적 회사 관리. `docs/db/companies.sql` |
 | `user_table_views` | NotionTable 컬럼 토글·정렬 설정 (sb_id+table_id unique) |
+| `daily_reports` | 자금일보 헤더 (company+date unique, status: draft/submitted/approved) |
+| `daily_report_items` | 입출금 라인 아이템 (direction: in/out, category, amount, linked_type/id) |
+| `daily_report_threads` | 기타 항목 사유 스레드 (item_id FK) |
+| `daily_report_approvals` | 결재 행위 로그 (submit/approve/reject/withdraw) |
+| `daily_report_approval_config` | 법인별 결재선 설정 (company+step unique, 팀장=step1 Default) |
 
-> **Supabase 신규 DDL 실행 필요**: `docs/supabase_policy_tables.sql`
+> **Supabase 신규 DDL 실행 필요**: `docs/supabase_policy_tables.sql`  
+> **자금일보 DDL**: `docs/db/daily_report_tables.sql` (S1 착수 전 실행)
 > (`policy_bank_limits`, `cashflow_plan` 테이블 포함)
 
 **국채 평가금액**: `bondQty × (bondPrice ÷ 10)` (`calcBondValue` 함수 사용)
@@ -615,6 +937,7 @@ useEffect(() => {
 
 ```
 /dashboard/:company?
+/daily-report/:company?/:date?  ← 자금일보 (S1 개발 예정)
 /input/:company?/:date?
 /invest/:company?/:id?
 /loans/:company?/:id?
@@ -623,7 +946,7 @@ useEffect(() => {
 /history/:company?/:from?/:to?
 /issue-history/:issueKey?
 /fx/:currency?
-/admin/mycode | /admin/users | /admin/data
+/admin/mycode | /admin/companies | /admin/users | /admin/data | /admin/org-chart
 ```
 
 basename: `/New-Treasury`
@@ -672,7 +995,37 @@ basename: `/New-Treasury`
 
 ---
 
-## 15. 개발 시 체크리스트
+## 15. LAN 테스트 접속 가이드
+
+### 설정 현황
+- `vite.config.ts`: `server: { port: 5175, host: true }` — 모든 네트워크 인터페이스 바인딩
+- 개발 PC IP: `192.168.22.241` (사내망)
+
+### 접속 방법
+1. 개발 PC에서 `pnpm dev` 실행
+2. 다른 PC(**같은 사내망 192.168.22.x**)에서 브라우저 열기
+3. 주소창에 입력:
+   ```
+   http://192.168.22.241:5175/New-Treasury/
+   ```
+   > 포트 고정(`strictPort: true`) — 5175 점유 시 자동 변경 없이 실패하므로 링크가 항상 5175로 일정
+   > ⚠ 끝의 `/New-Treasury/` 경로 필수. 상대방은 반드시 **192.168.22.x 대역**에 있어야 함
+   > (개발 PC는 이더넷 192.168.22.241 / Wi-Fi 172.30.0.154 두 망에 동시 연결 — 상대 망에 맞는 IP 사용)
+
+### 방화벽 차단 시 포트 허용 (관리자 PowerShell — 최초 1회)
+```powershell
+New-NetFirewallRule -DisplayName "Vite Dev 5175" -Direction Inbound -Protocol TCP -LocalPort 5175 -Action Allow -Profile Any
+```
+> Node 기본 인바운드 규칙은 Domain 프로필에만 있어, 비도메인망(Wi-Fi 172.30.x 등) 접속 시 차단됨 → 위 규칙으로 전 프로필 허용
+
+### 주의사항
+- Supabase는 브라우저→클라우드 직접 연결 → 접속 PC에 관계없이 **동일 DB** 사용 (실데이터 공유)
+- 개발 서버는 인증 없이 소스맵 접근 가능 → **사내 LAN에서만** 사용 권장
+- 외부망 접근이 필요하면 `ngrok http 5175` 으로 임시 터널 생성 가능 (세션마다 주소 변경)
+
+---
+
+## 17. 개발 시 체크리스트
 
 새 세션에서 작업 시작 전:
 - [ ] `pnpm dev` 로 개발 서버 기동 확인 (port 5175)
@@ -682,7 +1035,7 @@ basename: `/New-Treasury`
 
 ---
 
-## 16. 참고 문서 (docs/ 폴더)
+## 18. 참고 문서 (docs/ 폴더)
 
 | 문서 | 내용 |
 |------|------|

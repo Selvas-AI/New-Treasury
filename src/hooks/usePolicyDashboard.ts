@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Company, DailyRecord, InvestmentRecord, LoanRecord } from '../types'
 import { calcBondValue } from '../lib/format'
+import { normBank } from '../components/policy/BankLimitsTab'
 
 // ── DB row → InvestmentRecord (간소화 버전) ───────────────────────────────
 type DbRow = Record<string, unknown>
@@ -55,87 +56,126 @@ export interface PolicyRealData {
   loading: boolean
 }
 
+interface RawCompanyData {
+  daily: DailyRecord[]
+  invest: InvestmentRecord[]
+  loan: LoanRecord[]
+}
+
+/** 한 법인의 raw 데이터 fetch (daily 최신1 + active 운용 + active 차입) */
+async function fetchCompanyRaw(company: Company): Promise<RawCompanyData> {
+  const [d, i, l] = await Promise.all([
+    supabase.from('daily').select('*').eq('company', company)
+      .order('date', { ascending: false }).limit(1),
+    supabase.from('investments').select('*').eq('company', company).eq('active', true),
+    supabase.from('loans').select('*').eq('company', company).eq('active', true),
+  ])
+  return {
+    daily:  (d.data ?? []) as DailyRecord[],
+    invest: (i.data ?? []).map(r => investFromDb(r as DbRow)),
+    loan:   (l.data ?? []) as LoanRecord[],
+  }
+}
+
+/** raw 데이터 → PolicyRealData 집계 (단일/멀티 훅 공용) */
+function computePolicyData(raw: RawCompanyData, loading: boolean): PolicyRealData {
+  const { daily: dailyData, invest: investData, loan: loanData } = raw
+  const latestDaily = dailyData[0] ?? null
+
+  const operatingCash = latestDaily
+    ? (latestDaily.krw_demand || 0) + (latestDaily.krw_govt || 0) + (latestDaily.krw_mmda || 0)
+    : 0
+  const fxKrw = latestDaily?.fx_krw || 0
+  const operatingCashWithFx = operatingCash + fxKrw
+
+  const nonBonds = investData.filter(i => i.product !== '국채')
+  const bonds    = investData.filter(i => i.product === '국채')
+
+  const investAvail   = nonBonds.filter(i => i.available === '가용').reduce((s, i) => s + (i.amount || 0), 0)
+  const investUnavail = nonBonds.filter(i => i.available === '불가용').reduce((s, i) => s + (i.amount || 0), 0)
+
+  const bondAvail = bonds.filter(i => i.available === '가용').reduce((s, i) => {
+    const qty = i.bondQty ?? 0; const price = i.bondPrice ?? 0
+    return s + (qty && price ? calcBondValue(qty, price) : (i.amount || 0))
+  }, 0)
+
+  const totalLoan = loanData.reduce((s, l) => s + (l.amount || 0), 0)
+
+  // 금융기관별 운용자금 집계 — 은행만, normBank로 계좌별 등록명 합산
+  const bankMap = new Map<string, number>()
+  nonBonds.forEach(i => {
+    const key = normBank(i.bank)
+    if (!key.includes('은행')) return
+    bankMap.set(key, (bankMap.get(key) ?? 0) + (i.amount || 0))
+  })
+  const investByBank = [...bankMap.entries()].map(([bank, amount]) => ({ bank, amount }))
+    .sort((a, b) => b.amount - a.amount)
+
+  // 금융기관별 차입금 집계
+  const loanBankMap = new Map<string, number>()
+  loanData.forEach(l => loanBankMap.set(l.lender, (loanBankMap.get(l.lender) ?? 0) + (l.amount || 0)))
+  const loanByBank = [...loanBankMap.entries()].map(([bank, amount]) => ({ bank, amount }))
+    .sort((a, b) => b.amount - a.amount)
+
+  const totalFundEstimate = operatingCashWithFx + investAvail + investUnavail + bondAvail
+
+  return {
+    latestDaily, operatingCash, operatingCashWithFx, fxKrw,
+    investments: nonBonds, investAvail, investUnavail, investByBank,
+    bonds, bondAvail, loans: loanData, totalLoan, loanByBank,
+    totalFundEstimate, loading,
+  }
+}
+
+const EMPTY_RAW: RawCompanyData = { daily: [], invest: [], loan: [] }
+
 /** 특정 법인의 실데이터를 직접 fetching — auth company와 독립적 */
 export function usePolicyDashboard(company: Company | null): PolicyRealData {
-  const [dailyData, setDailyData]   = useState<DailyRecord[]>([])
-  const [investData, setInvestData] = useState<InvestmentRecord[]>([])
-  const [loanData, setLoanData]     = useState<LoanRecord[]>([])
-  const [loading, setLoading]       = useState(false)
+  const [raw, setRaw]         = useState<RawCompanyData>(EMPTY_RAW)
+  const [loading, setLoading] = useState(false)
 
   const fetch = useCallback(async () => {
-    if (!company) {
-      setDailyData([]); setInvestData([]); setLoanData([])
-      return
-    }
+    if (!company) { setRaw(EMPTY_RAW); return }
     setLoading(true)
-    const [d, i, l] = await Promise.all([
-      supabase.from('daily').select('*').eq('company', company)
-        .order('date', { ascending: false }).limit(1),
-      supabase.from('investments').select('*').eq('company', company)
-        .eq('active', true),
-      supabase.from('loans').select('*').eq('company', company)
-        .eq('active', true),
-    ])
-    setDailyData((d.data ?? []) as DailyRecord[])
-    setInvestData((i.data ?? []).map(r => investFromDb(r as DbRow)))
-    setLoanData((l.data ?? []) as LoanRecord[])
+    setRaw(await fetchCompanyRaw(company))
     setLoading(false)
   }, [company])
 
   useEffect(() => { void fetch() }, [fetch])
 
-  return useMemo<PolicyRealData>(() => {
-    const latestDaily = dailyData[0] ?? null
+  return useMemo(() => computePolicyData(raw, loading), [raw, loading])
+}
 
-    const operatingCash = latestDaily
-      ? (latestDaily.krw_demand || 0) + (latestDaily.krw_govt || 0) + (latestDaily.krw_mmda || 0)
-      : 0
-    const fxKrw = latestDaily?.fx_krw || 0
-    const operatingCashWithFx = operatingCash + fxKrw
+/**
+ * 여러 법인의 실데이터를 한 훅에서 fetch — 동적 법인 목록 지원.
+ * Rules of Hooks 준수: 내부에서 Promise.all 루프로 fetch (훅을 루프에서 호출하지 않음).
+ */
+export function usePolicyDashboards(companies: Company[]): Record<Company, PolicyRealData> {
+  const [rawMap, setRawMap]   = useState<Record<Company, RawCompanyData>>({})
+  const [loading, setLoading] = useState(false)
+  const key = companies.join('|')
 
-    const nonBonds = investData.filter(i => i.product !== '국채')
-    const bonds    = investData.filter(i => i.product === '국채')
-
-    const investAvail   = nonBonds.filter(i => i.available === '가용').reduce((s, i) => s + (i.amount || 0), 0)
-    const investUnavail = nonBonds.filter(i => i.available === '불가용').reduce((s, i) => s + (i.amount || 0), 0)
-
-    const bondAvail = bonds.filter(i => i.available === '가용').reduce((s, i) => {
-      const qty = i.bondQty ?? 0; const price = i.bondPrice ?? 0
-      return s + (qty && price ? calcBondValue(qty, price) : (i.amount || 0))
-    }, 0)
-
-    const totalLoan = loanData.reduce((s, l) => s + (l.amount || 0), 0)
-
-    // 금융기관별 운용자금 집계
-    const bankMap = new Map<string, number>()
-    nonBonds.forEach(i => bankMap.set(i.bank, (bankMap.get(i.bank) ?? 0) + (i.amount || 0)))
-    const investByBank = [...bankMap.entries()].map(([bank, amount]) => ({ bank, amount }))
-      .sort((a, b) => b.amount - a.amount)
-
-    // 금융기관별 차입금 집계
-    const loanBankMap = new Map<string, number>()
-    loanData.forEach(l => loanBankMap.set(l.lender, (loanBankMap.get(l.lender) ?? 0) + (l.amount || 0)))
-    const loanByBank = [...loanBankMap.entries()].map(([bank, amount]) => ({ bank, amount }))
-      .sort((a, b) => b.amount - a.amount)
-
-    const totalFundEstimate = operatingCashWithFx + investAvail + investUnavail + bondAvail
-
-    return {
-      latestDaily,
-      operatingCash,
-      operatingCashWithFx,
-      fxKrw,
-      investments: nonBonds,
-      investAvail,
-      investUnavail,
-      investByBank,
-      bonds,
-      bondAvail,
-      loans: loanData,
-      totalLoan,
-      loanByBank,
-      totalFundEstimate,
-      loading,
+  useEffect(() => {
+    let cancelled = false
+    async function run() {
+      if (companies.length === 0) { setRawMap({}); return }
+      setLoading(true)
+      const entries = await Promise.all(
+        companies.map(async c => [c, await fetchCompanyRaw(c)] as const),
+      )
+      if (cancelled) return
+      setRawMap(Object.fromEntries(entries) as Record<Company, RawCompanyData>)
+      setLoading(false)
     }
-  }, [dailyData, investData, loanData, loading])
+    void run()
+    return () => { cancelled = true }
+  }, [key]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  return useMemo(() => {
+    const out: Record<Company, PolicyRealData> = {}
+    for (const c of companies) {
+      out[c] = computePolicyData(rawMap[c] ?? EMPTY_RAW, loading)
+    }
+    return out
+  }, [rawMap, loading, key]) // eslint-disable-line react-hooks/exhaustive-deps
 }

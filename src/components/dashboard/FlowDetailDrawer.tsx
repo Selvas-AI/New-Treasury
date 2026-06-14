@@ -32,6 +32,7 @@ const TITLES: Record<FlowItemKey, string> = {
   unavailable: '불가용 자산',
   available:   '가용자금 합계',
   asset:       '자산 구성 상세',
+  equity_avail: '지분(가용) 상세',
 }
 
 export default function FlowDetailDrawer({ itemKey, kpi, latestDaily, latestInvests, loans, equities, company, onClose }: Props) {
@@ -72,21 +73,26 @@ export default function FlowDetailDrawer({ itemKey, kpi, latestDaily, latestInve
           {itemKey === 'unavailable' && <UnavailableDetail kpi={kpi} latestInvests={latestInvests} equities={equities} />}
           {itemKey === 'available'  && <AvailableDetail kpi={kpi} daily={latestDaily} latestInvests={latestInvests} />}
           {itemKey === 'asset'      && <AssetDetail kpi={kpi} fxKrw={latestDaily?.fx_krw ?? 0} />}
+          {itemKey === 'equity_avail' && <EquityAvailDetail equities={equities.filter(e => e.available === '가용')} total={kpi.equityAvail} />}
         </div>
 
         {/* 하단 바로가기 */}
-        {(itemKey === 'operating' || itemKey === 'invest' || itemKey === 'loan' || itemKey === 'available') && (
+        {(itemKey === 'operating' || itemKey === 'invest' || itemKey === 'loan' || itemKey === 'available' || itemKey === 'equity_avail') && (
           <div className="shrink-0 px-4 py-3 border-t border-gray-100 dark:border-gray-700">
             <button
               onClick={() => {
                 onClose()
                 if (itemKey === 'operating' || itemKey === 'available') navigate(`/input/${company}`)
-                if (itemKey === 'invest')    navigate(`/invest/${company}`)
-                if (itemKey === 'loan')      navigate(`/loans/${company}`)
+                if (itemKey === 'invest')      navigate(`/invest/${company}`)
+                if (itemKey === 'loan')        navigate(`/loans/${company}`)
+                if (itemKey === 'equity_avail') navigate(`/equity/${company}`)
               }}
               className="w-full text-xs text-blue-600 dark:text-blue-400 hover:underline text-center py-1"
             >
-              {(itemKey === 'operating' || itemKey === 'available') ? '운전자금 입력 →' : itemKey === 'invest' ? '운용자금 관리 →' : '차입금 관리 →'}
+              {(itemKey === 'operating' || itemKey === 'available') ? '운전자금 입력 →'
+                : itemKey === 'invest' ? '운용자금 관리 →'
+                : itemKey === 'equity_avail' ? '지분/장기투자 →'
+                : '차입금 관리 →'}
             </button>
           </div>
         )}
@@ -157,6 +163,35 @@ function LoanDetail({ loans, kpi }: { loans: LoanRecord[]; kpi: KpiData }) {
       <div className="flex justify-between items-center border-t border-gray-100 dark:border-gray-700 pt-2 mt-1 px-2">
         <span className="text-xs font-semibold text-gray-600 dark:text-gray-300">합계</span>
         <span className="text-sm font-bold text-red-500 tabular-nums">{fmtKRW(kpi.totalLoan)}</span>
+      </div>
+    </div>
+  )
+}
+
+// ── 지분(가용) 상세 ──────────────────────────────────────────
+function EquityAvailDetail({ equities, total }: { equities: EquityItem[]; total: number }) {
+  if (equities.length === 0) return <p className="text-xs text-gray-400 py-4 text-center">가용 지분이 없습니다</p>
+  return (
+    <div>
+      <p className="text-[10px] text-gray-400 dark:text-gray-500 mb-1">상장 지분(가용) — 순현금 미포함, 참고용</p>
+      <div className="divide-y divide-gray-50 dark:divide-gray-700">
+        {equities.map((e, i) => (
+          <div key={i} className="flex justify-between items-center py-2 gap-2">
+            <span className="text-[11px] text-gray-500 dark:text-gray-300 truncate">{e.name}</span>
+            <span className="flex items-center gap-1.5 shrink-0">
+              <span className="text-xs tabular-nums font-semibold text-gray-700 dark:text-gray-200">{fmtKRW(e.total_value)}</span>
+              {e.returnRate != null && (
+                <span className={`text-[10px] tabular-nums font-medium ${e.returnRate >= 0 ? 'text-red-500' : 'text-blue-500'}`}>
+                  {e.returnRate >= 0 ? '+' : ''}{e.returnRate.toFixed(1)}%
+                </span>
+              )}
+            </span>
+          </div>
+        ))}
+        <div className="flex justify-between items-center py-2">
+          <span className="text-xs font-semibold text-gray-600 dark:text-gray-300">합계</span>
+          <span className="text-sm font-bold text-violet-600 dark:text-violet-400 tabular-nums">{fmtKRW(total)}</span>
+        </div>
       </div>
     </div>
   )

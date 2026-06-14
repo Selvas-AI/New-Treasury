@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { fmtKRW, fmtReturn, returnBadgeClass, calcReturn, calcBondValue, normDate } from '../../lib/format'
+import { fmtKRW, fmtReturn, returnBadgeClass, calcReturn, calcBondValue } from '../../lib/format'
 import { fetchBondPrice } from '../../hooks/useGas'
 import type { InvestmentRecord } from '../../types'
 import { NotionTable, type ColumnDef } from '../common/NotionTable'
@@ -15,6 +15,27 @@ interface Props {
   isEditable: boolean
 }
 
+// 정수 필드 천단위 포맷 헬퍼
+function fmtInt(val: string): string {
+  const n = val.replace(/[^0-9]/g, '')
+  return n ? Number(n).toLocaleString() : ''
+}
+function parseIntStr(val: string): number {
+  return Number(val.replace(/[^0-9]/g, '')) || 0
+}
+// 소수점 허용 천단위 포맷 (기준가용)
+function fmtDecimal(val: string): string {
+  const clean = val.replace(/[^0-9.]/g, '')
+  const dotIdx = clean.indexOf('.')
+  if (dotIdx === -1) return clean ? Number(clean).toLocaleString() : ''
+  const intPart = clean.slice(0, dotIdx)
+  const decPart = clean.slice(dotIdx + 1).replace(/\./g, '')
+  return `${intPart ? Number(intPart).toLocaleString() : '0'}.${decPart}`
+}
+function parseDecimalStr(val: string): number {
+  return Number(val.replace(/,/g, '')) || 0
+}
+
 const EMPTY = {
   priceDate: new Date().toISOString().slice(0, 10),
   bondQty: '',
@@ -23,32 +44,46 @@ const EMPTY = {
   available: '가용' as '가용' | '불가용',
 }
 
+function prefillFromHistory(history: InvestmentRecord[]) {
+  if (!history.length) return { ...EMPTY }
+  const latest = history.reduce((best, r) =>
+    (r.priceDate ?? r.start ?? '') > (best.priceDate ?? best.start ?? '') ? r : best
+  )
+  return {
+    priceDate: new Date().toISOString().slice(0, 10),
+    bondQty:          latest.bondQty          ? Number(latest.bondQty).toLocaleString()          : '',
+    bondPrice:        '',
+    acquisition_cost: latest.acquisition_cost > 0 ? Number(latest.acquisition_cost).toLocaleString() : '',
+    available:        latest.available ?? '가용' as '가용' | '불가용',
+  }
+}
+
 export default function BondHistoryPanel({
   bondName, isin, company, history, onSave, onRemove, onBulkAcq, isEditable,
 }: Props) {
-  const [form, setForm]     = useState({ ...EMPTY })
+  const [form, setForm]     = useState(() => prefillFromHistory(history))
   const [editId, setEditId] = useState<string | null>(null)
   const [fetching, setFetching] = useState(false)
   const [saving, setSaving]   = useState(false)
   const [error, setError]     = useState<string | null>(null)
 
-  const evalAmt  = calcBondValue(Number(form.bondQty) || 0, Number(form.bondPrice) || 0)
-  const retPreview = calcReturn(evalAmt, Number(form.acquisition_cost) || 0)
+  const evalAmt  = calcBondValue(parseIntStr(form.bondQty), parseDecimalStr(form.bondPrice))
+  const retPreview = calcReturn(evalAmt, parseIntStr(form.acquisition_cost))
 
   function loadRecord(rec: InvestmentRecord) {
     setEditId(rec.id)
     setForm({
       priceDate:        rec.priceDate || rec.maturity || '',
-      bondQty:          String(rec.bondQty          || ''),
-      bondPrice:        String(rec.bondPrice         || ''),
-      acquisition_cost: String(rec.acquisition_cost || ''),
+      bondQty:          rec.bondQty          ? Number(rec.bondQty).toLocaleString()          : '',
+      bondPrice:        rec.bondPrice        ? fmtDecimal(String(rec.bondPrice))             : '',
+      acquisition_cost: rec.acquisition_cost ? Number(rec.acquisition_cost).toLocaleString() : '',
       available:        rec.available,
     })
   }
 
   function resetForm() {
     setEditId(null)
-    setForm({ ...EMPTY })
+    setForm(prefillFromHistory(history))
     setError(null)
   }
 
@@ -57,10 +92,13 @@ export default function BondHistoryPanel({
     setFetching(true)
     setError(null)
     try {
-      const res = await fetchBondPrice(isin)
-      setForm(f => ({ ...f, bondPrice: String(res.price), priceDate: normDate(res.date) }))
+      // 기준일을 YYYYMMDD 형식으로 전달 → 해당 날짜의 기준가 조회
+      const basDt = form.priceDate.replace(/-/g, '')
+      const res = await fetchBondPrice(isin, basDt)
+      // 기준가만 업데이트, 기준일은 사용자가 선택한 날짜 유지
+      setForm(f => ({ ...f, bondPrice: fmtDecimal(String(res.price)) }))
     } catch (e) {
-      setError(e instanceof Error ? e.message : '채권 시세 조회 실패 (T+1 제공)')
+      setError(e instanceof Error ? e.message : `기준가 없음 — 해당 날짜(${form.priceDate})는 공휴일·주말이거나 아직 집계 전(T+1)입니다`)
     }
     setFetching(false)
   }
@@ -71,11 +109,16 @@ export default function BondHistoryPanel({
     setSaving(true)
     setError(null)
 
-    const qty   = Number(form.bondQty)   || 0
-    const price = Number(form.bondPrice) || 0
-    const acq   = Number(form.acquisition_cost) || 0
+    const qty   = parseIntStr(form.bondQty)
+    const price = parseDecimalStr(form.bondPrice)
+    const acq   = parseIntStr(form.acquisition_cost)
+
+    // 동일 기준일 기존 레코드 → update(upsert), 없으면 insert
+    const existingByDate = history.find(h => (h.priceDate ?? h.start ?? '') === form.priceDate)
+    const saveId = editId ?? existingByDate?.id
+
     const record = {
-      ...(editId ? { id: editId } : {}),
+      ...(saveId ? { id: saveId } : {}),
       company:          company as InvestmentRecord['company'],
       bank:             bondName,
       product:          '국채' as const,
@@ -98,9 +141,12 @@ export default function BondHistoryPanel({
     setSaving(false)
     if (err) { setError(err); return }
 
-    if (acq > 0 && !editId) {
+    // 취득가액이 있고, 신규 insert이고, 기존 이력 중 다른 취득가액이 있는 경우만 일괄반영 팝업
+    const isNewInsert = !saveId
+    const hasAcqMismatch = history.some(h => h.acquisition_cost !== acq)
+    if (acq > 0 && isNewInsert && hasAcqMismatch) {
       const ids = history.map(h => h.id)
-      if (ids.length > 0 && confirm(`"${bondName}" 취득가액을 전체 이력에 반영하시겠습니까?`)) {
+      if (ids.length > 0 && confirm(`"${bondName}" 취득가액(${acq.toLocaleString()}원)을 전체 이력에 반영하시겠습니까?`)) {
         await onBulkAcq(ids, acq)
       }
     }
@@ -133,8 +179,8 @@ export default function BondHistoryPanel({
             </div>
             <div>
               <label className="block text-xs text-gray-400 mb-1">보유 좌수</label>
-              <input type="number" min="0" value={form.bondQty}
-                onChange={e => setForm(f => ({ ...f, bondQty: e.target.value }))}
+              <input type="text" inputMode="numeric" value={form.bondQty}
+                onChange={e => setForm(f => ({ ...f, bondQty: fmtInt(e.target.value) }))}
                 placeholder="0"
                 className="w-full border border-gray-200 rounded px-2 py-1.5 text-xs text-right focus:outline-none focus:ring-1 focus:ring-blue-400" />
             </div>
@@ -144,8 +190,8 @@ export default function BondHistoryPanel({
                 {fetching && <span className="ml-1 text-blue-400 animate-pulse">조회 중…</span>}
               </label>
               <div className="flex gap-1">
-                <input type="number" min="0" step="0.01" value={form.bondPrice}
-                  onChange={e => setForm(f => ({ ...f, bondPrice: e.target.value }))}
+                <input type="text" inputMode="decimal" value={form.bondPrice}
+                  onChange={e => setForm(f => ({ ...f, bondPrice: fmtDecimal(e.target.value) }))}
                   placeholder="0"
                   className="flex-1 min-w-0 border border-gray-200 rounded px-2 py-1.5 text-xs text-right focus:outline-none focus:ring-1 focus:ring-blue-400" />
                 <button type="button" onClick={handleFetchPrice} disabled={fetching}
@@ -157,8 +203,8 @@ export default function BondHistoryPanel({
             </div>
             <div>
               <label className="block text-xs text-gray-400 mb-1">취득가액 (총액)</label>
-              <input type="number" min="0" value={form.acquisition_cost}
-                onChange={e => setForm(f => ({ ...f, acquisition_cost: e.target.value }))}
+              <input type="text" inputMode="numeric" value={form.acquisition_cost}
+                onChange={e => setForm(f => ({ ...f, acquisition_cost: fmtInt(e.target.value) }))}
                 placeholder="0"
                 className="w-full border border-gray-200 rounded px-2 py-1.5 text-xs text-right focus:outline-none focus:ring-1 focus:ring-blue-400" />
             </div>

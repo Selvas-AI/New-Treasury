@@ -148,6 +148,45 @@
 
 ---
 
+## 🏦 기관한도 탭 (`BankLimitsTab`)
+
+**파일**: `src/components/policy/BankLimitsTab.tsx`
+
+### 데이터 소스
+- `policy_bank_limits` 테이블 → `usePolicyBankLimits(company)`
+- `investments` (active, 최신 1건) → `getLatestInvestments()` → **은행 기관만 필터**
+
+### normBank — 금융기관명 정규화 (공통 표준)
+
+운용자금 메뉴에서 계좌별로 기관이 등록될 수 있어 **동일 은행이 다른 이름으로 분산** 저장됨.
+`normBank()` 함수로 정규화하여 합산.
+
+```ts
+// src/components/policy/BankLimitsTab.tsx — export function normBank()
+normBank("국민은행(231)-2") → "국민은행"   // 은행 이름까지만 추출
+normBank("기업은행(007)")   → "기업은행"   // 괄호 suffix 제거
+normBank("산업은행")        → "산업은행"   // 그대로
+normBank("미래에셋증권")    → "미래에셋증권" // 은행 아니면 괄호 suffix만 제거
+```
+
+**규칙**: `bank.indexOf('은행')` ≥ 0이면 `bank.slice(0, idx+2)`, 없으면 `replace(/\s*\([^)]*\)\s*$/, '')`
+
+> **신규 페이지 구현 시 반드시 이 함수를 import하여 동일 로직 적용**.
+> `import { normBank } from '../../components/policy/BankLimitsTab'`
+
+### 은행 전용 필터링
+기관한도 관리는 **은행에만 적용** (자금운용관리규정). 집계 시 아래 패턴 준수:
+```ts
+// ✅ 올바른 패턴
+const bankInvests = latestInvests.filter(i => normBank(i.bank).includes('은행'))
+const totalAmt    = bankInvests.reduce((s, i) => s + (i.amount || 0), 0)
+
+// ❌ 잘못된 패턴 (증권사·보험사 포함됨)
+const totalAmt = latestInvests.reduce((s, i) => s + (i.amount || 0), 0)
+```
+
+---
+
 ## 컴포넌트 구조
 
 ```
@@ -156,6 +195,11 @@ PolicyPage
 │   (usePolicyParams + useDaily + useFx 내부 사용)
 ├── FvplRiskTab          ← src/components/policy/FvplRiskTab.tsx
 │   (props: bonds, params, isMaster, userLabel)
+├── BankLimitsTab        ← src/components/policy/BankLimitsTab.tsx
+│   (props: company, investments, isMaster, userLabel)
+│   (usePolicyBankLimits 내부 사용)
+├── CashflowForecastTab  ← src/components/policy/CashflowForecastTab.tsx
+├── PolicyCTab           ← src/components/policy/PolicyCTab.tsx
 └── 인라인 컴포넌트들
     ├── LiquidityCard
     ├── FxStatusCard

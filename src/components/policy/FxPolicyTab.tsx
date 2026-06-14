@@ -1,11 +1,13 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useAuth } from '../../hooks/useAuth'
 import { useDaily } from '../../hooks/useDaily'
-import { useInvestments, getLatestInvestments } from '../../hooks/useInvestments'
+import { useInvestments, getLatestInvestments, getLatestBonds } from '../../hooks/useInvestments'
 import { useFx } from '../../hooks/useFx'
 import { usePolicyParams } from '../../hooks/usePolicyParams'
 import { fetchFxStdDev } from '../../hooks/useGas'
 import { fmtKRW, fmtNumber } from '../../lib/format'
+import { restInsert } from '../../lib/supabase'
+import { generateUUID } from '../../lib/format'
 import type { Company, FxCode } from '../../types'
 
 const FX_META: Record<FxCode, { name: string; flag: string }> = {
@@ -52,7 +54,7 @@ export default function FxPolicyTab({ company }: { company: Company }) {
   const [autoCalcState, setAutoCalcState] = useState<'idle' | 'loading' | 'done' | 'error'>('idle')
   const [autoCalcMsg, setAutoCalcMsg] = useState<string | null>(null)
   // Target Band 자동설정
-  const [bandPreview, setBandPreview] = useState<{ min: number; max: number } | null>(null)
+  const [bandPreview, setBandPreview] = useState<{ min: number; max: number; bandWidth: number } | null>(null)
   const [draftBase, setDraftBase] = useState({
     fx_risk_portion: riskPortion, fx_target_min: targetMin, fx_target_max: targetMax,
     fx_operating_profit: operatingProfit, fx_interest_income: interestIncome,
@@ -99,7 +101,7 @@ export default function FxPolicyTab({ company }: { company: Company }) {
     }
   }
 
-  // Target Band 자동설정: Max = optimalFxRatio(반올림), Min = Max - 5%p
+  // Target Band 자동설정: Max = optimalFxRatio(반올림), Min = Max - 동적 폭
   const [bandError, setBandError] = useState<string | null>(null)
   function previewAutoBand() {
     setBandError(null)
@@ -114,15 +116,37 @@ export default function FxPolicyTab({ company }: { company: Company }) {
       )
       return
     }
-    const max = Math.round(optimalFxRatio * 10) / 10   // 소수 1자리 반올림
-    const min = Math.round((max - 5) * 10) / 10
-    setBandPreview({ min: Math.max(0, min), max })
+    const max = Math.round(optimalFxRatio * 10) / 10
+    // Band 폭: 최대환율변동폭(%) × 2 기반, 최소 2%p ~ 최대 10%p 클램핑
+    const dynamicBandWidth = Math.min(Math.max(Math.round(maxRateChange * 2 * 1000) / 10, 2), 10)
+    const min = Math.round((max - dynamicBandWidth) * 10) / 10
+    setBandPreview({ min: Math.max(0, min), max, bandWidth: dynamicBandWidth })
   }
 
   async function applyAutoBand() {
     if (!bandPreview) return
+    // 거버넌스: Target Band는 자금정책위원회 의결 사항 — 저장 전 확인 필수
+    const confirmed = window.confirm(
+      `[자금정책위원회 의결 사항]\n\n` +
+      `FX Target Band를 다음과 같이 변경합니다.\n` +
+      `  기존: ${targetMin}% ~ ${targetMax}%\n` +
+      `  변경: ${bandPreview.min}% ~ ${bandPreview.max}%\n\n` +
+      `위원회 의결 후 저장하세요. 계속하시겠습니까?`
+    )
+    if (!confirmed) return
+
+    const prevMin = targetMin
+    const prevMax = targetMax
     await params.set('fx_target_min', bandPreview.min, null, user?.label ?? '')
     await params.set('fx_target_max', bandPreview.max, null, user?.label ?? '')
+
+    // 변경 이력을 issue_comments에 자동 기록
+    await restInsert('issue_comments', {
+      id: generateUUID(),
+      issue_key: `policy_fx_band_${company}`,
+      body: `📋 FX Target Band 변경 (${user?.label ?? ''})\n이전: ${prevMin}%~${prevMax}% → 변경: ${bandPreview.min}%~${bandPreview.max}%\n근거: 적정 외화보유 비율 ${optimalFxRatio.toFixed(1)}%, 변동폭 기반 Band 폭 ${bandPreview.bandWidth}%p`,
+      created_by: user?.label ?? '',
+    })
     setBandPreview(null)
   }
 
@@ -153,8 +177,17 @@ export default function FxPolicyTab({ company }: { company: Company }) {
       .reduce((s, i) => s + (i.amount || 0), 0)
   }, [invest.data])
 
-  // ── 전체 자금 총액 = 운전자금 + 운용자금 (실데이터 자동계산)
-  const totalFund = operatingCash + investCash
+  // ── 국채 평가금액 (종목별 최신 1건 × bondQty × bondPrice ÷ 10)
+  const bondCash = useMemo(() => {
+    const latestBonds = getLatestBonds(invest.data)
+    return latestBonds.reduce((s, b) => {
+      if (b.bondQty && b.bondPrice) return s + b.bondQty * b.bondPrice / 10
+      return s + (b.amount || 0)
+    }, 0)
+  }, [invest.data])
+
+  // ── 전체 자금 총액 = 운전자금 + 운용자금(비국채) + 국채 평가금액
+  const totalFund = operatingCash + investCash + bondCash
 
   const currentFxKrw   = latestDaily?.fx_krw ?? 0
   // 현재 외화비중 = 외화잔액 / 전체 자금(운전+운용) — optimalFxRatio와 동일 기준
@@ -168,6 +201,20 @@ export default function FxPolicyTab({ company }: { company: Company }) {
     USD: latestDaily?.fx_usd ?? 0, EUR: latestDaily?.fx_eur ?? 0,
     JPY: latestDaily?.fx_jpy ?? 0, GBP: latestDaily?.fx_gbp ?? 0, CNY: latestDaily?.fx_cny ?? 0,
   }
+
+  // 실보유 비율 계산 (외화별 원화환산 / 전체 외화잔액)
+  // 테이블 표시 전용 — 표준편차 계산은 currencyRows(정책 가중치) 사용
+  const individualFxKrwTotal = currencyRows.reduce(
+    (s, r) => s + fx.toKRW(fxBalances[r.code as FxCode] ?? 0, r.code as FxCode), 0
+  )
+  // 개별 통화 잔액이 입력되지 않고 합산 fx_krw만 있는 경우 실비율 계산 불가
+  const hasIndividualFxData = individualFxKrwTotal > currentFxKrw * 0.1
+  const currencyRowsWithActual = currencyRows.map(r => {
+    const actualKrw = fx.toKRW(fxBalances[r.code as FxCode] ?? 0, r.code as FxCode)
+    const actualWgt = hasIndividualFxData && currentFxKrw > 0 ? actualKrw / currentFxKrw : null
+    const wgtDrift  = actualWgt !== null && Math.abs(r.wgt - actualWgt) > 0.15
+    return { ...r, actualWgt, wgtDrift }
+  })
 
   // 게이지: 0~100% 고정 스케일
   // Target Band가 100% 초과이면 게이지에 표시하지 않음
@@ -237,7 +284,7 @@ export default function FxPolicyTab({ company }: { company: Company }) {
                 <p className="text-xs text-blue-600 dark:text-blue-400">
                   적정 외화보유 비율 {optimalFxRatio.toFixed(1)}% 기준
                   → <strong>Min {bandPreview.min}%</strong> ~ <strong>Max {bandPreview.max}%</strong>
-                  <span className="ml-1 text-blue-400">(Max − 5%p = Min)</span>
+                  <span className="ml-1 text-blue-400">(Band 폭 {bandPreview.bandWidth}%p = 변동폭 {(maxRateChange * 100).toFixed(1)}% × 2)</span>
                 </p>
                 <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">
                   ⚠️ Target Band는 자금정책위원회 의결 사항입니다. 저장 전 반드시 확인하세요.
@@ -401,21 +448,42 @@ export default function FxPolicyTab({ company }: { company: Company }) {
               <tr className="border-b border-gray-100 dark:border-gray-700 text-xs text-gray-400">
                 <th className="text-left pb-2 pr-4">통화</th>
                 <th className="text-right pb-2 pr-4">연간 표준편차</th>
-                <th className="text-right pb-2 pr-4">보유 비율(가중치)</th>
+                <th className="text-right pb-2 pr-2">
+                  정책 가중치
+                  <span className="text-gray-300 dark:text-gray-600 ml-1 font-normal">(계산 기준)</span>
+                </th>
+                <th className="text-right pb-2 pr-4">
+                  실보유 비율
+                  <span className="text-gray-300 dark:text-gray-600 ml-1 font-normal">(참고)</span>
+                </th>
                 <th className="text-right pb-2">가중 표준편차</th>
               </tr>
             </thead>
             <tbody>
-              {currencyRows.map(r => (
+              {currencyRowsWithActual.map(r => (
                 <tr key={r.code} className="border-b border-gray-50 dark:border-gray-700/50">
                   <td className="py-2 pr-4 font-medium text-gray-700 dark:text-gray-200">
-                    {FX_META[r.code].flag} {r.code}
+                    {FX_META[r.code as FxCode].flag} {r.code}
                   </td>
                   <td className="py-2 pr-4 text-right tabular-nums text-gray-600 dark:text-gray-300">
                     {(r.std * 100).toFixed(4)}%
                   </td>
-                  <td className="py-2 pr-4 text-right tabular-nums text-gray-600 dark:text-gray-300">
+                  <td className="py-2 pr-2 text-right tabular-nums text-gray-600 dark:text-gray-300">
                     {(r.wgt * 100).toFixed(0)}%
+                  </td>
+                  <td className="py-2 pr-4 text-right tabular-nums">
+                    {r.actualWgt === null ? (
+                      <span className="text-gray-300 dark:text-gray-600 text-xs">—</span>
+                    ) : (
+                      <span className={r.wgtDrift
+                        ? 'text-amber-500 dark:text-amber-400 font-medium'
+                        : 'text-gray-500 dark:text-gray-400'}>
+                        {(r.actualWgt * 100).toFixed(0)}%
+                        {r.wgtDrift && (
+                          <span className="ml-1" title="정책 가중치와 15%p 이상 괴리">⚠️</span>
+                        )}
+                      </span>
+                    )}
                   </td>
                   <td className="py-2 text-right tabular-nums text-gray-700 dark:text-gray-200">
                     {(r.wgt * r.std * 100).toFixed(4)}%
@@ -425,13 +493,13 @@ export default function FxPolicyTab({ company }: { company: Company }) {
             </tbody>
             <tfoot>
               <tr className="border-t border-gray-200 dark:border-gray-600">
-                <td colSpan={3} className="pt-2 text-xs text-gray-500 font-medium">전체 통화 변동율 (가중합)</td>
+                <td colSpan={4} className="pt-2 text-xs text-gray-500 font-medium">전체 통화 변동율 (가중합)</td>
                 <td className="pt-2 text-right tabular-nums font-semibold text-gray-700 dark:text-gray-200">
                   {(weightedStdSum * 100).toFixed(4)}%
                 </td>
               </tr>
               <tr>
-                <td colSpan={3} className="pt-1 pb-2 text-xs text-blue-600 dark:text-blue-400 font-medium">
+                <td colSpan={4} className="pt-1 pb-2 text-xs text-blue-600 dark:text-blue-400 font-medium">
                   최대 환율 변동폭 (×Z<sub>95%</sub>={Z_95})
                 </td>
                 <td className="pt-1 pb-2 text-right tabular-nums font-bold text-blue-700 dark:text-blue-300 text-base">
@@ -440,6 +508,11 @@ export default function FxPolicyTab({ company }: { company: Company }) {
               </tr>
             </tfoot>
           </table>
+          {!hasIndividualFxData && currentFxKrw > 0 && (
+            <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">
+              ※ 실보유 비율 — 운전자금 입력 시 통화별 잔액(USD/EUR/JPY 등)을 별도 입력해야 계산됩니다.
+            </p>
+          )}
         </div>
       </div>
 
@@ -464,7 +537,7 @@ export default function FxPolicyTab({ company }: { company: Company }) {
               <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">전체 자금 총액 (자동계산)</p>
               <p className="text-sm font-bold text-gray-900 dark:text-white">{fmtKRW(totalFund)}</p>
               <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
-                운전자금 {fmtKRW(operatingCash)} + 운용자금 {fmtKRW(investCash)}
+                운전 {fmtKRW(operatingCash)} + 운용 {fmtKRW(investCash)} + 국채 {fmtKRW(bondCash)}
               </p>
             </div>
 
@@ -526,7 +599,7 @@ export default function FxPolicyTab({ company }: { company: Company }) {
               <div>
                 <span className="text-gray-400">전체 자금 대비 비율</span>
                 <div className="text-gray-300 dark:text-gray-600 mt-0.5">
-                  {fmtKRW(operatingCash)} 운전 + {fmtKRW(investCash)} 운용 = {fmtKRW(totalFund)}
+                  운전 {fmtKRW(operatingCash)} + 운용 {fmtKRW(investCash)} + 국채 {fmtKRW(bondCash)} = {fmtKRW(totalFund)}
                 </div>
               </div>
               <span className="font-bold text-blue-600 dark:text-blue-400">{optimalFxRatio.toFixed(2)}%</span>

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { supabase } from '../../lib/supabase'
+import { getCompanyNames } from '../../hooks/useCompanies'
 
 interface TableStat {
   table: string
@@ -18,11 +19,11 @@ const TABLE_DEFS = [
   { table: 'issue_comments', label: '이슈 코멘트' },
 ]
 
-const COMPANIES = ['셀바스에이아이', '셀바스헬스케어', '메디아나']
-
 export default function DataPage() {
   const { user } = useAuth()
   if (user?.role !== 'master') return <Navigate to="/dashboard" replace />
+
+  const COMPANIES = getCompanyNames()
 
   const [stats,   setStats]   = useState<TableStat[]>([])
   const [loading, setLoading] = useState(true)
@@ -34,25 +35,30 @@ export default function DataPage() {
 
   async function loadStats() {
     setLoading(true)
-    const results: TableStat[] = []
-
-    for (const def of TABLE_DEFS) {
-      const companies: { company: string; count: number }[] = []
-      for (const co of COMPANIES) {
-        const { count } = await supabase
-          .from(def.table)
-          .select('*', { count: 'exact', head: true })
-          .eq('company', co)
-        companies.push({ company: co, count: count ?? 0 })
+    try {
+      const results: TableStat[] = []
+      const companyNames = getCompanyNames()
+      for (const def of TABLE_DEFS) {
+        const companies: { company: string; count: number }[] = []
+        for (const co of companyNames) {
+          const { count } = await supabase
+            .from(def.table)
+            .select('*', { count: 'exact', head: true })
+            .eq('company', co)
+          companies.push({ company: co, count: count ?? 0 })
+        }
+        results.push({
+          ...def,
+          companies,
+          total: companies.reduce((s, c) => s + c.count, 0),
+        })
       }
-      results.push({
-        ...def,
-        companies,
-        total: companies.reduce((s, c) => s + c.count, 0),
-      })
+      setStats(results)
+    } catch {
+      setStats([])
+    } finally {
+      setLoading(false)
     }
-    setStats(results)
-    setLoading(false)
   }
 
   async function handleClean() {

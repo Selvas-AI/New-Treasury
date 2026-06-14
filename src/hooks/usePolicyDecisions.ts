@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
-import { supabase } from '../lib/supabase'
+import { supabase, restInsert, restUpdate, restDelete, withTimeout } from '../lib/supabase'
+import { generateUUID } from '../lib/format'
 import type { PolicyDecision, DecisionStatus } from '../types'
 
 export function usePolicyDecisions(meetingId: string | null) {
@@ -11,14 +12,17 @@ export function usePolicyDecisions(meetingId: string | null) {
     if (!meetingId) { setData([]); return }
     setLoading(true)
     setError(null)
-    const { data: rows, error: err } = await supabase
-      .from('policy_decisions')
-      .select('*')
-      .eq('meeting_id', meetingId)
-      .order('created_at', { ascending: true })
-    if (err) setError(err.message)
-    else setData((rows ?? []) as PolicyDecision[])
-    setLoading(false)
+    try {
+      const { data: rows, error: err } = await withTimeout(
+        supabase.from('policy_decisions').select('*').eq('meeting_id', meetingId).order('created_at', { ascending: true }),
+      )
+      if (err) setError(err.message)
+      else setData((rows ?? []) as PolicyDecision[])
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '조회 실패')
+    } finally {
+      setLoading(false)
+    }
   }, [meetingId])
 
   useEffect(() => { void fetch() }, [fetch])
@@ -26,7 +30,7 @@ export function usePolicyDecisions(meetingId: string | null) {
   async function addDecision(
     d: Omit<PolicyDecision, 'id' | 'created_at'>,
   ): Promise<string | null> {
-    const { error: err } = await supabase.from('policy_decisions').insert(d)
+    const { error: err } = await restInsert('policy_decisions', { ...d, id: generateUUID() })
     if (err) return err.message
     await fetch()
     return null
@@ -36,7 +40,7 @@ export function usePolicyDecisions(meetingId: string | null) {
     id: string,
     patch: Partial<Pick<PolicyDecision, 'title' | 'decision' | 'owner' | 'due_date' | 'status'>>,
   ): Promise<string | null> {
-    const { error: err } = await supabase.from('policy_decisions').update(patch).eq('id', id)
+    const { error: err } = await restUpdate('policy_decisions', patch, { id })
     if (err) return err.message
     setData(prev => prev.map(d => d.id === id ? { ...d, ...patch } : d))
     return null
@@ -47,7 +51,7 @@ export function usePolicyDecisions(meetingId: string | null) {
   }
 
   async function removeDecision(id: string): Promise<string | null> {
-    const { error: err } = await supabase.from('policy_decisions').delete().eq('id', id)
+    const { error: err } = await restDelete('policy_decisions', { id })
     if (err) return err.message
     setData(prev => prev.filter(d => d.id !== id))
     return null

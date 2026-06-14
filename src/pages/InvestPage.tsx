@@ -4,9 +4,8 @@ import { useAuth } from '../hooks/useAuth'
 import { useInvestments } from '../hooks/useInvestments'
 import { usePolicyBankLimits } from '../hooks/usePolicyBankLimits'
 import { fmtKRW, calcDday, fmtReturn, returnBadgeClass, calcReturn } from '../lib/format'
+import { getCompanyNames } from '../hooks/useCompanies'
 import type { InvestmentRecord, Company } from '../types'
-
-const VALID_COMPANIES: Company[] = ['셀바스에이아이', '셀바스헬스케어', '메디아나']
 
 const PRODUCT_OPTIONS = ['정기예금', 'RP', 'MMF', '발행어음', 'CMA', '채권', '기타']
 const CURRENCY_OPTIONS = ['KRW', 'USD', 'EUR', 'JPY', 'GBP', 'CNY']
@@ -41,7 +40,7 @@ export default function InvestPage() {
 
   useEffect(() => {
     if (!paramCompany || user?.role === 'company') return
-    if (VALID_COMPANIES.includes(paramCompany as Company)) setCurrentCompany(paramCompany as Company)
+    if (getCompanyNames().includes(paramCompany)) setCurrentCompany(paramCompany as Company)
   }, [paramCompany, user?.role, setCurrentCompany])
 
   useEffect(() => {

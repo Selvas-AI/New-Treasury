@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { supabase } from '../lib/supabase'
+import { supabase, restInsert, restUpdate, restDelete, withTimeout } from '../lib/supabase'
 import { useAuth } from './useAuth'
+import { generateUUID } from '../lib/format'
 import type { IssueComment, IssueStatus, UseQueryResult } from '../types'
 
 /** 이슈 식별자 생성 — D-day 없이 안정화된 키 */
@@ -34,14 +35,17 @@ export function useIssues(): UseQueryResult<IssueComment> & {
     setLoading(true)
     setData([])
     setError(null)
-    const { data: rows, error: err } = await supabase
-      .from('issue_comments')
-      .select('*')
-      .eq('company', fetchCompany)
-      .order('created_at', { ascending: false })
-    if (err) setError(err.message)
-    else setData((rows ?? []) as IssueComment[])
-    setLoading(false)
+    try {
+      const { data: rows, error: err } = await withTimeout(
+        supabase.from('issue_comments').select('*').eq('company', fetchCompany).order('created_at', { ascending: false }),
+      )
+      if (err) setError(err.message)
+      else setData((rows ?? []) as IssueComment[])
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '조회 실패')
+    } finally {
+      setLoading(false)
+    }
   }, [fetchCompany])
 
   useEffect(() => { void fetch() }, [fetch])
@@ -64,17 +68,14 @@ export function useIssues(): UseQueryResult<IssueComment> & {
   async function addComment(
     comment: Omit<IssueComment, 'id' | 'created_at'>,
   ): Promise<string | null> {
-    const { error: err } = await supabase.from('issue_comments').insert(comment)
+    const { error: err } = await restInsert('issue_comments', { ...comment, id: generateUUID() })
     if (err) return err.message
     await fetch()
     return null
   }
 
   async function updateStatus(id: string, status: IssueStatus): Promise<string | null> {
-    const { error: err } = await supabase
-      .from('issue_comments')
-      .update({ status })
-      .eq('id', id)
+    const { error: err } = await restUpdate('issue_comments', { status }, { id })
     if (err) return err.message
     setData(prev => prev.map(c => c.id === id ? { ...c, status } : c))
     return null
@@ -85,17 +86,14 @@ export function useIssues(): UseQueryResult<IssueComment> & {
     body: string,
     status: IssueStatus,
   ): Promise<string | null> {
-    const { error: err } = await supabase
-      .from('issue_comments')
-      .update({ body, status })
-      .eq('id', id)
+    const { error: err } = await restUpdate('issue_comments', { body, status }, { id })
     if (err) return err.message
     setData(prev => prev.map(c => c.id === id ? { ...c, body, status } : c))
     return null
   }
 
   async function remove(id: string): Promise<string | null> {
-    const { error: err } = await supabase.from('issue_comments').delete().eq('id', id)
+    const { error: err } = await restDelete('issue_comments', { id })
     if (err) return err.message
     setData(prev => prev.filter(c => c.id !== id))
     return null

@@ -9,7 +9,7 @@
   color: #f9fafb;
 }
 
-/* ── 주가 전광판 marquee ─────────────────────────────── */
+/* ── 이슈 전광판 marquee (이슈 ticker용, 2x content) ─── */
 @keyframes ticker-scroll {
   from { transform: translateX(0); }
   to   { transform: translateX(-50%); }
@@ -22,6 +22,22 @@
 }
 
 .ticker-track:hover {
+  animation-play-state: paused;
+}
+
+/* ── 주가 마퀴 (4x content → -25% = 1 pass, seamless) ── */
+@keyframes stock-ticker-scroll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-25%); }
+}
+
+.stock-ticker-track {
+  display: flex;
+  width: max-content;
+  animation: stock-ticker-scroll 40s linear infinite;
+}
+
+.stock-ticker-track:hover {
   animation-play-state: paused;
 }
 
@@ -67,6 +83,89 @@
 .sidebar-scroll::-webkit-scrollbar-thumb:hover { background: #4b5563; }
 /* Firefox */
 .sidebar-scroll { scrollbar-width: thin; scrollbar-color: #374151 transparent; }
+
+/* ── 인쇄 전용 요소 — 화면에서 숨김 ─────────────────── */
+.print-only      { display: none; }
+.print-only-flex { display: none; }
+
+/* ── body.is-printing — beforeprint JS 이벤트로 주입
+   Chrome 미리보기 엔진이 @media print 적용 전에 레이아웃을 계산하므로
+   JS 이벤트로 class를 먼저 추가해 overflow / height 를 해제한다.  */
+/* 1단계: app-shell 레이아웃 잠금 해제 */
+body.is-printing .app-shell,
+body.is-printing .app-shell > *,
+body.is-printing .app-shell > * > * {
+  display: block !important;
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+/* 2단계: 화면 전용 요소 숨김 — .app-shell 내부 경로로 specificity 높여 위 규칙 override */
+body.is-printing .app-shell aside,
+body.is-printing .app-shell header,
+body.is-printing aside,
+body.is-printing header,
+body.is-printing .no-print   { display: none  !important; }
+body.is-printing .print-only { display: block !important; }
+
+/* ══════════════════════════════════════════════════════
+   자금일보 인쇄 (S6) — A4 가로 2페이지 레이아웃
+   인쇄 전용 섹션은 inline style로 구성하므로 CSS override 최소화.
+   Page 1: 컬러 헤더 + 결재란 + 자금현황
+   Page 2: 컬러 헤더 + 입출금 2열 + 검증 바(하단)
+   ══════════════════════════════════════════════════════ */
+@media print {
+  /* A4 가로 (297 × 210mm), 사방 10mm 여백 */
+  @page { size: A4 landscape; margin: 10mm 12mm; }
+
+  /* 앱 셸 3단계 block 전환 — print-only 내부 inline style에는 영향 없음 */
+  .app-shell,
+  .app-shell > *,
+  .app-shell > * > * {
+    display: block !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  /* 화면 전용 요소 숨김 — .app-shell 경로로 specificity를 높여 위 규칙 override */
+  .app-shell aside, .app-shell header,
+  aside, header, .no-print { display: none !important; }
+
+  /* 인쇄 전용 요소 표시 */
+  .print-only { display: block !important; }
+
+  /* 페이지 구분 */
+  .print-page-break { page-break-before: always !important; break-before: page !important; }
+  .print-no-break   { page-break-inside: avoid;  break-inside:  avoid; }
+
+  /* 컬러 배경 보존 */
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+  /* ── 자금현황 테이블 인쇄 스타일 ── */
+  .print-summary-table table { width: 100%; border-collapse: collapse; font-size: 9pt; }
+  .print-summary-table th    { background: #dbeafe !important; color: #1e3a5f !important; font-size: 8pt; padding: 3px 6px; border: 0.5px solid #bfdbfe; text-align: right; }
+  .print-summary-table th:first-child { text-align: left; }
+  .print-summary-table td    { padding: 2.5px 6px; border: 0.5px solid #e2e8f0; vertical-align: middle; font-size: 8.5pt; }
+  .print-summary-table tr.print-section-header td {
+    background: #f0f4f8 !important;
+    font-weight: 700;
+    font-size: 8pt;
+    color: #1e3a5f !important;
+    padding: 2px 8px;
+  }
+  .print-summary-table tr.print-subtotal td { background: #f0f9ff !important; font-weight: 700; }
+  .print-summary-table tr.print-total td   { background: #dbeafe !important; font-weight: 700; border-top: 1.5px solid #93c5fd !important; }
+  .print-summary-table td:not(:first-child) { text-align: right; }
+  .print-in-amt    { color: #166534 !important; }
+  .print-out-amt   { color: #991b1b !important; }
+  .print-delta-pos { color: #1d4ed8 !important; }
+  .print-delta-neg { color: #b91c1c !important; }
+
+  /* ReportSummaryTable 하단 안내문/환율 div 숨김 */
+  .print-summary-table > div > div[class*="border-t"] { display: none !important; }
+  .print-only .no-print { display: none !important; }
+}
 
 /* ── 커스텀 씬 스크롤바 ──────────────────────────────── */
 .custom-scrollbar {

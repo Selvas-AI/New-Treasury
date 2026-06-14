@@ -9,9 +9,8 @@ import { useDaily } from '../hooks/useDaily'
 import { useInvestments, getLatestInvestments } from '../hooks/useInvestments'
 import { useLoans } from '../hooks/useLoans'
 import { fmtKRW, fmtDateShort, calcBondValue } from '../lib/format'
+import { getCompanyNames } from '../hooks/useCompanies'
 import type { Company } from '../types'
-
-const VALID_COMPANIES: Company[] = ['셀바스에이아이', '셀바스헬스케어', '메디아나']
 
 type Period = 7 | 30 | 90 | 365
 const PERIODS: { label: string; value: Period }[] = [
@@ -45,7 +44,7 @@ export default function HistoryPage() {
 
   useEffect(() => {
     if (!paramCompany || user?.role === 'company') return
-    if (VALID_COMPANIES.includes(paramCompany as Company)) setCurrentCompany(paramCompany as Company)
+    if (getCompanyNames().includes(paramCompany)) setCurrentCompany(paramCompany as Company)
   }, [paramCompany, user?.role, setCurrentCompany])
 
   // URL 파라미터로 날짜 범위 지정 시 맞는 Period 선택

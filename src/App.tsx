@@ -12,9 +12,14 @@ import HistoryPage from './pages/HistoryPage'
 import IssueHistoryPage from './pages/IssueHistoryPage'
 import FxPage from './pages/FxPage'
 import PolicyPage from './pages/PolicyPage'
+import DailyReportPage from './pages/DailyReportPage'
 import MyCodePage from './pages/admin/MyCodePage'
 import UsersPage from './pages/admin/UsersPage'
+import CompaniesPage from './pages/admin/CompaniesPage'
 import DataPage from './pages/admin/DataPage'
+import OrgChartPage from './pages/admin/OrgChartPage'
+import DailyReportListPage from './pages/DailyReportListPage'
+import { useHolidays } from './hooks/useHolidays'
 
 /**
  * 라우팅 구조
@@ -29,6 +34,7 @@ import DataPage from './pages/admin/DataPage'
  *   /daily/셀바스에이아이/2026-05-29   → 특정 날짜 운전자금
  */
 export default function App() {
+  useHolidays()
   return (
     <AuthProvider>
       <IssueCountProvider>
@@ -43,6 +49,11 @@ export default function App() {
             {/* 통합 상황판 */}
             <Route path="/dashboard"           element={<DashboardPage />} />
             <Route path="/dashboard/:company"  element={<DashboardPage />} />
+
+            {/* 자금일보 */}
+            <Route path="/daily-report"                       element={<DailyReportPage />} />
+            <Route path="/daily-report/:company"              element={<DailyReportPage />} />
+            <Route path="/daily-report/:company/:date"        element={<DailyReportPage />} />
 
             {/* 운전자금 */}
             <Route path="/input"                element={<InputPage />} />
@@ -84,10 +95,16 @@ export default function App() {
             <Route path="/policy"          element={<PolicyPage />} />
             <Route path="/policy/:company" element={<PolicyPage />} />
 
+            {/* 자금일보 목록 */}
+            <Route path="/daily-report-list"           element={<DailyReportListPage />} />
+            <Route path="/daily-report-list/:company"  element={<DailyReportListPage />} />
+
             {/* 관리 */}
-            <Route path="/admin/mycode" element={<MyCodePage />} />
-            <Route path="/admin/users"  element={<UsersPage />} />
-            <Route path="/admin/data"   element={<DataPage />} />
+            <Route path="/admin/mycode"     element={<MyCodePage />} />
+            <Route path="/admin/users"      element={<UsersPage />} />
+            <Route path="/admin/companies"  element={<CompaniesPage />} />
+            <Route path="/admin/data"       element={<DataPage />} />
+            <Route path="/admin/org-chart"  element={<OrgChartPage />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

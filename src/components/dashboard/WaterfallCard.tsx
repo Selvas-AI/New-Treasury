@@ -1,7 +1,7 @@
 import { fmtKRW } from '../../lib/format'
 import type { KpiData } from '../../hooks/useDashboard'
 
-export type FlowItemKey = 'operating' | 'invest' | 'fx' | 'loan' | 'net' | 'unavailable' | 'available' | 'asset'
+export type FlowItemKey = 'operating' | 'invest' | 'fx' | 'loan' | 'net' | 'unavailable' | 'available' | 'asset' | 'equity_avail'
 
 interface Props {
   kpi:               KpiData
@@ -168,18 +168,36 @@ export default function WaterfallCard({ kpi, fxKrw, prevOperatingCash, onItemCli
           </div>
         </div>
 
-        {/* 불가용 */}
-        {kpi.unavailableAssets > 0 && (
-          <div className="pt-1 border-t border-gray-100 dark:border-gray-700">
-            <BarRow
-              label="불가용"
-              badge={<Badge label="불가" color="bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400" />}
-              value={kpi.unavailableAssets}
-              barColor="bg-amber-500"
-              maxVal={maxVal}
-              onClick={onItemClick ? () => onItemClick('unavailable') : undefined}
-              active={activeItem === 'unavailable'}
-            />
+        {/* 참고 자산 (순현금 미포함) — 지분(가용) · 불가용 */}
+        {(kpi.equityAvail > 0 || kpi.unavailableAssets > 0) && (
+          <div className="pt-1 border-t border-gray-100 dark:border-gray-700 space-y-2.5">
+            <p className="text-[10px] text-gray-400 dark:text-gray-500">참고 — 순현금 미포함</p>
+
+            {/* 지분(가용) — 상장주식, 현금성과 구분해 별도 표시 */}
+            {kpi.equityAvail > 0 && (
+              <BarRow
+                label="지분(가용)"
+                badge={<Badge label="지분" color="bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-400" />}
+                value={kpi.equityAvail}
+                barColor="bg-violet-500"
+                maxVal={maxVal}
+                onClick={onItemClick ? () => onItemClick('equity_avail') : undefined}
+                active={activeItem === 'equity_avail'}
+              />
+            )}
+
+            {/* 불가용 */}
+            {kpi.unavailableAssets > 0 && (
+              <BarRow
+                label="불가용"
+                badge={<Badge label="불가" color="bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400" />}
+                value={kpi.unavailableAssets}
+                barColor="bg-amber-500"
+                maxVal={maxVal}
+                onClick={onItemClick ? () => onItemClick('unavailable') : undefined}
+                active={activeItem === 'unavailable'}
+              />
+            )}
           </div>
         )}
       </div>

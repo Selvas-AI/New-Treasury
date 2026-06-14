@@ -12,9 +12,8 @@ import IssueDrawer from '../components/dashboard/IssueDrawer'
 import CashflowChart from '../components/dashboard/CashflowChart'
 import EquityCard from '../components/dashboard/EquityCard'
 import type { FlowItemKey } from '../components/dashboard/WaterfallCard'
+import { getCompanyNames } from '../hooks/useCompanies'
 import type { Company, IssueStatus } from '../types'
-
-const VALID_COMPANIES: Company[] = ['셀바스에이아이', '셀바스헬스케어', '메디아나']
 
 export default function DashboardPage() {
   const { company } = useParams<{ company?: string }>()
@@ -40,7 +39,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!company || user?.role === 'company') return
-    if (VALID_COMPANIES.includes(company as Company)) setCurrentCompany(company as Company)
+    if (getCompanyNames().includes(company)) setCurrentCompany(company as Company)
   }, [company, user?.role, setCurrentCompany])
 
   async function handleStatusChange(_key: string, _id: string, status: IssueStatus) {
@@ -173,9 +172,6 @@ export default function DashboardPage() {
             historyOf={db.equityHistoryOf}
             bonds={db.latestBonds}
             bondHistoryOf={db.bondHistoryOf}
-            activeKey={activeKey}
-            onHover={handleHover}
-            onFocus={handleFocus}
           />
         </div>
       </div>

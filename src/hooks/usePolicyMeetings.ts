@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
-import { supabase } from '../lib/supabase'
+import { supabase, restInsert, restUpdate, restDelete, withTimeout } from '../lib/supabase'
+import { generateUUID } from '../lib/format'
 import type { PolicyMeeting } from '../types'
 
 export function usePolicyMeetings() {
@@ -10,13 +11,17 @@ export function usePolicyMeetings() {
   const fetch = useCallback(async () => {
     setLoading(true)
     setError(null)
-    const { data: rows, error: err } = await supabase
-      .from('policy_meetings')
-      .select('*')
-      .order('held_at', { ascending: false })
-    if (err) setError(err.message)
-    else setData((rows ?? []) as PolicyMeeting[])
-    setLoading(false)
+    try {
+      const { data: rows, error: err } = await withTimeout(
+        supabase.from('policy_meetings').select('*').order('held_at', { ascending: false }),
+      )
+      if (err) setError(err.message)
+      else setData((rows ?? []) as PolicyMeeting[])
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '조회 실패')
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
   useEffect(() => { void fetch() }, [fetch])
@@ -24,7 +29,7 @@ export function usePolicyMeetings() {
   async function addMeeting(
     m: Omit<PolicyMeeting, 'id' | 'created_at'>,
   ): Promise<string | null> {
-    const { error: err } = await supabase.from('policy_meetings').insert(m)
+    const { error: err } = await restInsert('policy_meetings', { ...m, id: generateUUID() })
     if (err) return err.message
     await fetch()
     return null
@@ -34,14 +39,14 @@ export function usePolicyMeetings() {
     id: string,
     patch: Partial<Pick<PolicyMeeting, 'title' | 'meeting_type' | 'held_at'>>,
   ): Promise<string | null> {
-    const { error: err } = await supabase.from('policy_meetings').update(patch).eq('id', id)
+    const { error: err } = await restUpdate('policy_meetings', patch, { id })
     if (err) return err.message
     setData(prev => prev.map(m => m.id === id ? { ...m, ...patch } : m))
     return null
   }
 
   async function removeMeeting(id: string): Promise<string | null> {
-    const { error: err } = await supabase.from('policy_meetings').delete().eq('id', id)
+    const { error: err } = await restDelete('policy_meetings', { id })
     if (err) return err.message
     setData(prev => prev.filter(m => m.id !== id))
     return null

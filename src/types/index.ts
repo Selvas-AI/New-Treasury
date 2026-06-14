@@ -1,15 +1,29 @@
 // ─── 인증 ───────────────────────────────────────────────
-export type UserRole = 'master' | 'ceo' | 'company'
+// master > admin > editor > viewer (계층 순)
+// 'ceo' | 'company' 는 레거시 — 기존 코드 호환 유지, 신규 사용 금지
+export type UserRole = 'master' | 'admin' | 'editor' | 'viewer' | 'ceo' | 'company'
 
 export interface TreasuryUser {
-  role: UserRole
-  company: string | null
-  label: string
-  code: string
-  sb_id: string
+  // ── Supabase Auth 연동 ──
+  sb_id:   string           // auth.users.id (uuid)
+  email:   string
+
+  // ── treasury_users 프로필 ──
+  code:    string           // user_code (감사추적용 단축 식별자)
+  label:   string           // name (표시명)
+  role:    UserRole
+
+  // 법인 접근
+  company:   Company | null  // 대표 법인 (companies[0] 또는 null)
+  companies: string[]       // 접근 허용 법인 목록 (빈 배열=역할 기본값)
+
+  // 권한 플래그
+  menus:       string[] | null  // null=역할 기본값
+  can_delete:  boolean
+  can_approve: boolean
 }
 
-export type Company = '셀바스에이아이' | '셀바스헬스케어' | '메디아나'
+export type Company = string  // DB-driven (companies 테이블); 기존 하드코딩 레거시 제거
 
 // ─── 운전자금 (daily) ────────────────────────────────────
 export interface DailyRecord {

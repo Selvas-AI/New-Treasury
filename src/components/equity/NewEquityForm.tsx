@@ -8,7 +8,10 @@ interface Props {
   fixedMarket?: 'KOSPI' | 'KOSDAQ' | '비상장'
   onSave: (record: Omit<EquityRecord, 'id'> & { id?: string }) => Promise<string | null>
   isEditable: boolean
+  existingRecords?: EquityRecord[]   // 동일 법인의 전체 이력 — prefill용
 }
+
+const TODAY = new Date().toISOString().slice(0, 10)
 
 const EMPTY = {
   name: '',
@@ -22,7 +25,7 @@ const EMPTY = {
   available: '가용' as '가용' | '불가용',
 }
 
-export default function NewEquityForm({ company, fixedMarket, onSave, isEditable }: Props) {
+export default function NewEquityForm({ company, fixedMarket, onSave, isEditable, existingRecords }: Props) {
   const [open, setOpen]         = useState(false)
   const [form, setForm]         = useState({ ...EMPTY, market: fixedMarket ?? 'KOSPI' as 'KOSPI' | 'KOSDAQ' | '비상장' })
   const market                  = fixedMarket ?? form.market
@@ -30,6 +33,7 @@ export default function NewEquityForm({ company, fixedMarket, onSave, isEditable
   const [saving, setSaving]     = useState(false)
   const [error, setError]       = useState<string | null>(null)
   const [candidates, setCandidates] = useState<{ ticker: string; name: string; market: string }[]>([])
+  const [prefillNote, setPrefillNote] = useState<string | null>(null)
 
   const totalValue = Number(form.shares) * Number(form.price) || 0
   const retPreview = calcReturn(totalValue, Number(form.acquisition_cost) || 0)
@@ -38,27 +42,57 @@ export default function NewEquityForm({ company, fixedMarket, onSave, isEditable
     setForm({ ...EMPTY, market: fixedMarket ?? 'KOSPI' })
     setError(null)
     setCandidates([])
+    setPrefillNote(null)
     setOpen(false)
   }
 
-  /** 종목명 blur → GAS 이름 검색 → 티커/시장/주가 자동입력 */
+  /** 기존 이력에서 동일 종목(name 또는 ticker) 최신 레코드를 찾아 prefill */
+  function prefillFromExisting(name: string, ticker: string) {
+    if (!existingRecords?.length) return
+    const candidates = existingRecords.filter(r =>
+      (ticker && r.ticker === ticker) || r.name === name
+    )
+    if (!candidates.length) return
+    // 최신 date 기준
+    const latest = candidates.reduce((best, r) => (r.date > best.date ? r : best))
+    setForm(f => ({
+      ...f,
+      shares:           latest.shares > 0 ? String(latest.shares) : f.shares,
+      acquisition_cost: latest.acquisition_cost > 0 ? String(latest.acquisition_cost) : f.acquisition_cost,
+      available:        latest.available ?? f.available,
+    }))
+    setPrefillNote(`"${latest.name}" 최신 기록(${latest.date})에서 보유주수·취득가액·가용여부 불러옴`)
+  }
+
+  // 기준일이 과거면 그 날짜 종가 조회, 오늘이면 실시간 시세 (basDt 미전달)
+  const pastDt = form.date && form.date < TODAY ? form.date : undefined
+
+  /** 종목명 blur → GAS 이름 검색 → 티커/시장/주가 자동입력 (기준일 과거면 그 날 종가) */
   async function handleNameSearch() {
     if (!form.name.trim() || market === '비상장') return
     setFetching(true)
     setError(null)
     setCandidates([])
+    setPrefillNote(null)
     try {
-      const res = await fetchStockByName(form.name.trim())
+      const res = await fetchStockByName(form.name.trim(), pastDt)
+      // 과거 기준일이면 사용자가 고른 날짜 유지, 오늘이면 실시간 시세 날짜로 갱신
+      let price = res.price; let dateVal = pastDt ?? res.date
+      // 이름검색이 basDt를 무시할 수 있어, 과거 조회는 티커 기준 재조회로 보정
+      if (pastDt && res.ticker) {
+        try { const h = await fetchStockPrice(res.ticker, pastDt); price = h.price; dateVal = pastDt } catch { /* keep */ }
+      }
       setForm(f => ({
         ...f,
         ticker: res.ticker,
         market: (res.market === 'KOSDAQ' ? 'KOSDAQ' : 'KOSPI') as 'KOSPI' | 'KOSDAQ' | '비상장',
-        price:  String(res.price),
-        date:   res.date,
+        price:  String(price),
+        date:   dateVal,
       }))
-      // 후보가 2개 이상이면 선택 드롭다운 표시
       if (res.candidates.length > 1) {
         setCandidates(res.candidates)
+      } else {
+        prefillFromExisting(res.name || form.name.trim(), res.ticker)
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : '종목 조회 실패')
@@ -66,35 +100,39 @@ export default function NewEquityForm({ company, fixedMarket, onSave, isEditable
     setFetching(false)
   }
 
-  /** 후보 선택 → 해당 종목으로 주가 재조회 */
+  /** 후보 선택 → 해당 종목으로 주가 재조회 (기준일 과거면 그 날 종가) */
   async function handleCandidatePick(c: { ticker: string; name: string; market: string }) {
     setCandidates([])
     setFetching(true)
     setError(null)
+    setPrefillNote(null)
     try {
-      const res = await fetchStockPrice(c.ticker)
+      const res = await fetchStockPrice(c.ticker, pastDt)
       setForm(f => ({
         ...f,
         name:   c.name,
         ticker: c.ticker,
         market: (c.market as 'KOSPI' | 'KOSDAQ' | '비상장'),
         price:  String(res.price),
-        date:   res.date,
+        date:   pastDt ?? res.date,
       }))
+      prefillFromExisting(c.name, c.ticker)
     } catch (e) {
       setError(e instanceof Error ? e.message : '주가 조회 실패')
     }
     setFetching(false)
   }
 
-  /** 티커 blur → 주가만 재조회 (이름 검색 실패 후 수동 입력 대비) */
+  /** 티커 blur/↺ → 주가만 재조회 (기준일 과거면 그 날 종가) */
   async function handleTickerSearch() {
     if (!form.ticker || market === '비상장') return
     setFetching(true)
     setError(null)
     try {
-      const res = await fetchStockPrice(form.ticker)
-      setForm(f => ({ ...f, price: String(res.price), date: res.date }))
+      const res = await fetchStockPrice(form.ticker, pastDt)
+      setForm(f => ({ ...f, price: String(res.price), date: pastDt ?? res.date }))
+      // ticker 직접 입력 시에도 기존 데이터 prefill 시도
+      if (!prefillNote) prefillFromExisting(form.name, form.ticker)
     } catch (e) {
       setError(e instanceof Error ? e.message : '시세 조회 실패')
     }
@@ -148,6 +186,18 @@ export default function NewEquityForm({ company, fixedMarket, onSave, isEditable
             <button type="button" onClick={reset} className="text-xs text-gray-400 hover:text-red-400">취소</button>
           </div>
 
+          {/* 기존 기록 prefill 안내 */}
+          {prefillNote && (
+            <div className="flex items-center gap-1.5 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-lg">
+              <span className="text-emerald-600">✓</span>
+              <p className="text-xs text-emerald-700">{prefillNote}</p>
+              <button
+                type="button"
+                onClick={() => setPrefillNote(null)}
+                className="ml-auto text-emerald-400 hover:text-emerald-600 text-xs">✕</button>
+            </div>
+          )}
+
           {/* 종목 기본 정보 */}
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
             <div className="relative">
@@ -158,7 +208,7 @@ export default function NewEquityForm({ company, fixedMarket, onSave, isEditable
               <input
                 type="text"
                 value={form.name}
-                onChange={e => { setForm(f => ({ ...f, name: e.target.value })); setCandidates([]) }}
+                onChange={e => { setForm(f => ({ ...f, name: e.target.value })); setCandidates([]); setPrefillNote(null) }}
                 onBlur={handleNameSearch}
                 placeholder={market === '비상장' ? '예: 비상장법인명' : '예: 셀바스AI (입력 후 자동 조회)'}
                 required
@@ -229,15 +279,21 @@ export default function NewEquityForm({ company, fixedMarket, onSave, isEditable
           {/* 수량/가격 정보 */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">기준일 (자동입력)</label>
+              <label className="block text-xs text-gray-500 mb-1">기준일 (과거 선택 시 종가)</label>
               <input
                 type="date"
                 value={form.date}
+                max={TODAY}
                 onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
                 className="w-full border border-gray-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400" />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">보유 주수</label>
+              <label className="block text-xs text-gray-500 mb-1">
+                보유 주수
+                {prefillNote && Number(form.shares) > 0 && (
+                  <span className="ml-1 text-emerald-500 text-[10px]">↑ 자동입력</span>
+                )}
+              </label>
               <input
                 type="number" min="0"
                 value={form.shares}
@@ -265,7 +321,12 @@ export default function NewEquityForm({ company, fixedMarket, onSave, isEditable
               </div>
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">취득가액 (총액)</label>
+              <label className="block text-xs text-gray-500 mb-1">
+                취득가액 (총액)
+                {prefillNote && Number(form.acquisition_cost) > 0 && (
+                  <span className="ml-1 text-emerald-500 text-[10px]">↑ 자동입력</span>
+                )}
+              </label>
               <input
                 type="number" min="0"
                 value={form.acquisition_cost}
@@ -289,7 +350,12 @@ export default function NewEquityForm({ company, fixedMarket, onSave, isEditable
               </div>
             )}
             <div>
-              <label className="block text-xs text-gray-500 mb-1">가용 여부</label>
+              <label className="block text-xs text-gray-500 mb-1">
+                가용 여부
+                {prefillNote && (
+                  <span className="ml-1 text-emerald-500 text-[10px]">↑ 자동입력</span>
+                )}
+              </label>
               <select
                 value={form.available}
                 onChange={e => setForm(f => ({ ...f, available: e.target.value as '가용' | '불가용' }))}

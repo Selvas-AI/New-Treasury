@@ -1,6 +1,6 @@
 # Selvas Treasury — 문서 인덱스
 
-> 최종 업데이트: 2026-06-05
+> 최종 업데이트: 2026-06-09
 
 ---
 
@@ -55,6 +55,7 @@
 | 문서 | 라우트 | 데이터 테이블 |
 |------|--------|-------------|
 | [DashboardPage.md](./pages/DashboardPage.md) | `/dashboard` | daily + investments + loans + equities |
+| [DailyReportPage.md](./pages/DailyReportPage.md) | `/daily-report` | daily_reports + items + approvals (**S1 개발 예정**) |
 | [InputPage.md](./pages/InputPage.md) | `/input` | `daily` |
 | [InvestPage.md](./pages/InvestPage.md) | `/invest` | `investments` (비국채, FVPL 탭 제거) |
 | [LoansPage.md](./pages/LoansPage.md) | `/loans` | `loans` |
@@ -84,6 +85,7 @@
 |------|------|
 | [supabase_schema.md](./supabase_schema.md) | 전체 테이블 스키마 DDL 및 설계 의도 |
 | [supabase_policy_tables.sql](./supabase_policy_tables.sql) | Phase 2 자금정책 테이블 생성 SQL (policy_meetings/decisions/params) |
+| [db/daily_report_tables.sql](./db/daily_report_tables.sql) | 자금일보 테이블 DDL (daily_reports + items + approvals + config) |
 
 ---
 

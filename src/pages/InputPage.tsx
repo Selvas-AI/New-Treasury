@@ -3,10 +3,10 @@ import { useParams } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useDaily } from '../hooks/useDaily'
 import { useFx } from '../hooks/useFx'
-import { fmtKRW, normDate, isBusinessDay } from '../lib/format'
+import { fmtKRW, normDate } from '../lib/format'
+import { isTodayBusinessDay } from '../lib/bizDay'
+import { getCompanyNames } from '../hooks/useCompanies'
 import type { DailyRecord, Company, FxCode } from '../types'
-
-const VALID_COMPANIES: Company[] = ['셀바스에이아이', '셀바스헬스케어', '메디아나']
 
 const FX_FIELDS: { key: FxCode; label: string }[] = [
   { key: 'USD', label: 'USD' },
@@ -47,7 +47,7 @@ export default function InputPage() {
   // URL 파라미터로 법인 자동 전환
   useEffect(() => {
     if (!paramCompany || user?.role === 'company') return
-    if (VALID_COMPANIES.includes(paramCompany as Company)) {
+    if (getCompanyNames().includes(paramCompany)) {
       setCurrentCompany(paramCompany as Company)
     }
   }, [paramCompany, user?.role, setCurrentCompany])
@@ -142,13 +142,17 @@ export default function InputPage() {
       memo:       form.memo,
     }
 
-    const err = await upsert(record)
-    setSaving(false)
-    if (err) { setError(err); return }
-
-    setSuccess(true)
-    setTimeout(() => setSuccess(false), 2000)
-    resetForm()
+    try {
+      const err = await upsert(record)
+      if (err) { setError(err); return }
+      setSuccess(true)
+      setTimeout(() => setSuccess(false), 2000)
+      resetForm()
+    } catch (ex) {
+      setError(ex instanceof Error ? ex.message : '저장 중 오류가 발생했습니다.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function handleDelete(id: string) {
@@ -164,7 +168,7 @@ export default function InputPage() {
     <div className="space-y-6 max-w-3xl mx-auto">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100">운전자금 입력</h2>
-        {!isBusinessDay() && (
+        {!isTodayBusinessDay() && (
           <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 dark:bg-amber-950/30 dark:border-amber-800 px-2.5 py-1 rounded-md">
             오늘은 비영업일입니다
           </span>

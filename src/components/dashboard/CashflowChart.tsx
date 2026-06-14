@@ -22,9 +22,30 @@ const PERIODS: { label: string; value: Period }[] = [
   { label: '90일', value: 90 },
 ]
 
+type SeriesKey = 'operating' | 'investAvail' | 'investUnavail' | 'loan'
+const ALL_SERIES: SeriesKey[] = ['operating', 'investAvail', 'investUnavail', 'loan']
+
 export default function CashflowChart({ dailyRecords, investments, loans }: Props) {
   const isDark = typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
   const [period, setPeriod] = useState<Period>(7)
+
+  // 범례 선택: 빈 Set = 전체 표시. 클릭=단독, Ctrl/⌘+클릭=다중 토글
+  const [selected, setSelected] = useState<Set<SeriesKey>>(new Set())
+  const isVisible = (k: SeriesKey) => selected.size === 0 || selected.has(k)
+  function toggleSeries(k: SeriesKey, multi: boolean) {
+    setSelected(prev => {
+      if (multi) {
+        const next = new Set(prev.size === 0 ? ALL_SERIES : prev)
+        if (next.has(k)) next.delete(k); else next.add(k)
+        // 전체 선택과 동일해지면 빈 Set(=전체)로 정규화, 빈 Set이면 전체 복귀
+        if (next.size === 0 || next.size === ALL_SERIES.length) return new Set()
+        return next
+      }
+      // 단일 클릭: 이미 단독 선택된 항목 재클릭 시 전체 복귀
+      if (prev.size === 1 && prev.has(k)) return new Set()
+      return new Set([k])
+    })
+  }
 
   const chartData = useMemo(() => {
     const cutoff = new Date()
@@ -35,6 +56,11 @@ export default function CashflowChart({ dailyRecords, investments, loans }: Prop
       .filter(d => d.date >= cutoffStr)
       .sort((a, b) => a.date.localeCompare(b.date))
 
+    const valueOf = (i: InvestmentRecord) =>
+      i.product === '국채' && i.bondQty && i.bondPrice
+        ? calcBondValue(i.bondQty, i.bondPrice)
+        : (i.amount || 0)
+
     return inRange.map(d => {
       const operating =
         (d.krw_demand || 0) + (d.krw_govt || 0) + (d.krw_mmda || 0) + (d.fx_krw || 0)
@@ -43,23 +69,23 @@ export default function CashflowChart({ dailyRecords, investments, loans }: Prop
         i => (i.start || i.priceDate || '') <= d.date,
       )
       const latest = getLatestInvestments(investsUpTo)
-      const invest = latest.reduce((s, i) => {
-        const v = i.product === '국채' && i.bondQty && i.bondPrice
-          ? calcBondValue(i.bondQty, i.bondPrice)
-          : (i.amount || 0)
-        return s + v
-      }, 0)
+      // 가용/불가용 분리 집계
+      const investAvail   = latest.filter(i => i.available === '가용').reduce((s, i) => s + valueOf(i), 0)
+      const investUnavail = latest.filter(i => i.available === '불가용').reduce((s, i) => s + valueOf(i), 0)
 
       const loan = loans.reduce((s, l) => s + (l.amount || 0), 0)
 
       return {
         dateLabel: fmtDateShort(d.date),
-        opM:     Math.round(operating / 1_0000),
-        invM:    Math.round(invest    / 1_0000),
-        loanM:   Math.round(loan      / 1_0000),
-        opRaw:   operating,
-        invRaw:  invest,
-        loanRaw: loan,
+        opM:          Math.round(operating     / 1_0000),
+        invAvailM:    Math.round(investAvail   / 1_0000),
+        invUnavailM:  Math.round(investUnavail / 1_0000),
+        loanM:        Math.round(loan          / 1_0000),
+        opRaw:        operating,
+        invAvailRaw:  investAvail,
+        invUnavailRaw: investUnavail,
+        invRaw:       investAvail + investUnavail,
+        loanRaw:      loan,
       }
     })
   }, [dailyRecords, investments, loans, period])
@@ -98,17 +124,33 @@ export default function CashflowChart({ dailyRecords, investments, loans }: Prop
         </div>
       </div>
 
-      {/* 범례 */}
-      <div className="shrink-0 flex items-center gap-3 mb-2 px-1">
-        <span className="flex items-center gap-1 text-[10px] text-gray-400 dark:text-gray-500">
-          <span className="inline-block w-3 h-2.5 rounded-sm bg-blue-400" />운전자금
-        </span>
-        <span className="flex items-center gap-1 text-[10px] text-gray-400 dark:text-gray-500">
-          <span className="inline-block w-3 h-2.5 rounded-sm bg-emerald-400" />운용자금
-        </span>
-        <span className="flex items-center gap-1 text-[10px] text-gray-400 dark:text-gray-500">
-          <span className="inline-block w-4 border-t-2 border-dashed border-rose-400" />차입금
-        </span>
+      {/* 범례 (클릭=단독 / Ctrl·⌘+클릭=다중 토글 / 재클릭·전체해제=전체) */}
+      <div className="shrink-0 flex items-center gap-1.5 mb-2 px-1 flex-wrap">
+        {([
+          { key: 'operating',     label: '운전자금',    swatch: <span className="inline-block w-3 h-2.5 rounded-sm bg-blue-500" /> },
+          { key: 'investAvail',   label: '운용(가용)',  swatch: <span className="inline-block w-3 h-2.5 rounded-sm bg-emerald-500" /> },
+          { key: 'investUnavail', label: '운용(불가용)', swatch: <span className="inline-block w-3 h-2.5 rounded-sm bg-emerald-300" /> },
+          { key: 'loan',          label: '차입금',      swatch: <span className="inline-block w-4 border-t-2 border-dashed border-rose-400" /> },
+        ] as { key: SeriesKey; label: string; swatch: React.ReactNode }[]).map(s => (
+          <button
+            key={s.key}
+            onClick={e => toggleSeries(s.key, e.ctrlKey || e.metaKey)}
+            title="클릭: 단독 보기 · Ctrl(⌘)+클릭: 다중 선택"
+            className={`flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md transition-all ${
+              isVisible(s.key)
+                ? 'text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700'
+                : 'text-gray-300 dark:text-gray-600 opacity-50'
+            }`}
+          >
+            {s.swatch}{s.label}
+          </button>
+        ))}
+        {selected.size > 0 && (
+          <button
+            onClick={() => setSelected(new Set())}
+            className="text-[10px] text-blue-500 hover:text-blue-700 px-1"
+          >전체</button>
+        )}
       </div>
 
       {chartData.length < 2 ? (
@@ -148,36 +190,66 @@ export default function CashflowChart({ dailyRecords, investments, loans }: Prop
                   return (
                     <div style={tooltipStyle} className="px-3 py-2 space-y-1">
                       <p className="font-semibold text-[11px] mb-1.5">{label}</p>
-                      <div className="flex items-center gap-2 text-[11px]">
-                        <span className="w-2 h-2 rounded-sm bg-blue-400 inline-block" />
-                        <span className="text-gray-500 dark:text-gray-400">운전자금</span>
-                        <span className="ml-auto font-medium tabular-nums">{fmtKRW(d.opRaw)}</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-[11px]">
-                        <span className="w-2 h-2 rounded-sm bg-emerald-400 inline-block" />
-                        <span className="text-gray-500 dark:text-gray-400">운용자금</span>
-                        <span className="ml-auto font-medium tabular-nums">{fmtKRW(d.invRaw)}</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-[11px] border-t border-gray-100 dark:border-gray-700 pt-1 mt-1">
-                        <span className="w-2 h-2 rounded-sm bg-rose-400 inline-block" />
-                        <span className="text-gray-500 dark:text-gray-400">차입금</span>
-                        <span className="ml-auto font-medium tabular-nums text-rose-600">{fmtKRW(d.loanRaw)}</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-[11px]">
-                        <span className="text-gray-400 dark:text-gray-500">순현금</span>
-                        <span className={`ml-auto font-bold tabular-nums ${
-                          (d.opRaw + d.invRaw - d.loanRaw) >= 0 ? 'text-gray-800 dark:text-gray-100' : 'text-red-600'
-                        }`}>{fmtKRW(d.opRaw + d.invRaw - d.loanRaw)}</span>
-                      </div>
+                      {isVisible('operating') && (
+                        <div className="flex items-center gap-2 text-[11px]">
+                          <span className="w-2 h-2 rounded-sm bg-blue-500 inline-block" />
+                          <span className="text-gray-500 dark:text-gray-400">운전자금</span>
+                          <span className="ml-auto font-medium tabular-nums">{fmtKRW(d.opRaw)}</span>
+                        </div>
+                      )}
+                      {isVisible('investAvail') && (
+                        <div className="flex items-center gap-2 text-[11px]">
+                          <span className="w-2 h-2 rounded-sm bg-emerald-500 inline-block" />
+                          <span className="text-gray-500 dark:text-gray-400">운용(가용)</span>
+                          <span className="ml-auto font-medium tabular-nums">{fmtKRW(d.invAvailRaw)}</span>
+                        </div>
+                      )}
+                      {isVisible('investUnavail') && (
+                        <div className="flex items-center gap-2 text-[11px]">
+                          <span className="w-2 h-2 rounded-sm bg-emerald-300 inline-block" />
+                          <span className="text-gray-500 dark:text-gray-400">운용(불가용)</span>
+                          <span className="ml-auto font-medium tabular-nums">{fmtKRW(d.invUnavailRaw)}</span>
+                        </div>
+                      )}
+                      {isVisible('loan') && (
+                        <div className="flex items-center gap-2 text-[11px] border-t border-gray-100 dark:border-gray-700 pt-1 mt-1">
+                          <span className="w-2 h-2 rounded-sm bg-rose-400 inline-block" />
+                          <span className="text-gray-500 dark:text-gray-400">차입금</span>
+                          <span className="ml-auto font-medium tabular-nums text-rose-600">{fmtKRW(d.loanRaw)}</span>
+                        </div>
+                      )}
+                      {(() => {
+                        const net =
+                          (isVisible('operating')     ? d.opRaw        : 0) +
+                          (isVisible('investAvail')   ? d.invAvailRaw  : 0) +
+                          (isVisible('investUnavail') ? d.invUnavailRaw : 0) -
+                          (isVisible('loan')          ? d.loanRaw      : 0)
+                        const partial = selected.size > 0
+                        return (
+                          <div className="flex items-center gap-2 text-[11px]">
+                            <span className="text-gray-400 dark:text-gray-500">{partial ? '선택 합계' : '순현금'}</span>
+                            <span className={`ml-auto font-bold tabular-nums ${net >= 0 ? 'text-gray-800 dark:text-gray-100' : 'text-red-600'}`}>{fmtKRW(net)}</span>
+                          </div>
+                        )
+                      })()}
                     </div>
                   )
                 }}
                 cursor={{ fill: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)' }}
               />
               <ReferenceLine y={0} stroke={isDark ? '#374151' : '#e5e7eb'} strokeDasharray="4 2" />
-              <Bar dataKey="opM"  name="운전자금" stackId="cash" fill="#3b82f6" fillOpacity={0.85} radius={[0,0,3,3]} maxBarSize={40} />
-              <Bar dataKey="invM" name="운용자금" stackId="cash" fill="#10b981" fillOpacity={0.80} radius={[3,3,0,0]} maxBarSize={40} />
-              <Line type="monotone" dataKey="loanM" name="차입금" stroke="#f87171" strokeWidth={1.8} strokeDasharray="5 3" dot={false} activeDot={{ r: 3, fill: '#f87171' }} />
+              {isVisible('operating') && (
+                <Bar dataKey="opM" name="운전자금" stackId="cash" fill="#3b82f6" fillOpacity={0.85} radius={[0,0,3,3]} maxBarSize={40} />
+              )}
+              {isVisible('investAvail') && (
+                <Bar dataKey="invAvailM" name="운용(가용)" stackId="cash" fill="#10b981" fillOpacity={0.85} maxBarSize={40} />
+              )}
+              {isVisible('investUnavail') && (
+                <Bar dataKey="invUnavailM" name="운용(불가용)" stackId="cash" fill="#6ee7b7" fillOpacity={0.9} radius={[3,3,0,0]} maxBarSize={40} />
+              )}
+              {isVisible('loan') && (
+                <Line type="monotone" dataKey="loanM" name="차입금" stroke="#f87171" strokeWidth={1.8} strokeDasharray="5 3" dot={false} activeDot={{ r: 3, fill: '#f87171' }} />
+              )}
             </ComposedChart>
           </ResponsiveContainer>
         </div>

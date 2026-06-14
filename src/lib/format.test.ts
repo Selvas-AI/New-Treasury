@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import {
-  fmtKRW, normDate, calcReturn, isBusinessDay,
+  fmtKRW, normDate, calcReturn,
   fmtReturn, returnBadgeClass, calcDday, calcBondValue, makeIssueKey,
 } from './format'
+import { isBusinessDay } from './bizDay'
 
 // ─── fmtKRW ──────────────────────────────────────────────
 describe('fmtKRW', () => {
@@ -41,9 +42,11 @@ describe('returnBadgeClass', () => {
 
 // ─── isBusinessDay ───────────────────────────────────────
 describe('isBusinessDay', () => {
-  it('월요일 → 영업일', () => expect(isBusinessDay(new Date('2026-05-25'))).toBe(true))
-  it('토요일 → 비영업일', () => expect(isBusinessDay(new Date('2026-05-23'))).toBe(false))
-  it('공휴일(삼일절) → 비영업일', () => expect(isBusinessDay(new Date('2026-03-01'))).toBe(false))
+  it('월요일 → 영업일', () => expect(isBusinessDay('2026-05-25')).toBe(true))
+  it('토요일 → 비영업일', () => expect(isBusinessDay('2026-05-23')).toBe(false))
+  it('공휴일(삼일절) → 비영업일', () => expect(isBusinessDay('2026-03-01')).toBe(false))
+  it('2027 추석 → 비영업일', () => expect(isBusinessDay('2027-09-22')).toBe(false))
+  it('2028 신정 대체 → 비영업일', () => expect(isBusinessDay('2028-01-03')).toBe(false))
 })
 
 // ─── calcDday ────────────────────────────────────────────

@@ -3,9 +3,8 @@ import { useParams } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useLoans } from '../hooks/useLoans'
 import { fmtKRW, calcDday } from '../lib/format'
+import { getCompanyNames } from '../hooks/useCompanies'
 import type { LoanRecord, Company } from '../types'
-
-const VALID_COMPANIES: Company[] = ['셀바스에이아이', '셀바스헬스케어', '메디아나']
 
 const LOAN_TYPES    = ['일반대출', '한도대출', 'CP', '전자단기사채', '팩토링', '기타']
 const CURRENCY_LIST = ['KRW', 'USD', 'EUR', 'JPY', 'GBP', 'CNY']
@@ -47,7 +46,7 @@ export default function LoansPage() {
 
   useEffect(() => {
     if (!paramCompany || user?.role === 'company') return
-    if (VALID_COMPANIES.includes(paramCompany as Company)) setCurrentCompany(paramCompany as Company)
+    if (getCompanyNames().includes(paramCompany)) setCurrentCompany(paramCompany as Company)
   }, [paramCompany, user?.role, setCurrentCompany])
 
   // 딥링크 진입 시 수정 모드

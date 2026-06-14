@@ -58,6 +58,89 @@
 - [x] **거래 금융기관 한도 테이블**: `policy_bank_limits` DDL 작성(supabase_policy_tables.sql), `usePolicyBankLimits` 훅, `BankLimitsTab.tsx` 컴포넌트, PolicyPage "🏦 기관한도" 4번째 탭 추가. 규정 §9 기본 30%, master 커스텀 설정, 초과/주의 상태 표시. → **2026-06-05 완료**
 - [x] **12주 롤링 포캐스트**: `cashflow_plan` DDL, `useCashflowPlan` 훅, `CashflowForecastTab.tsx`, PolicyPage "📅 주간예측" 5번째 탭. 기초잔고(현재 운전자금)→주별 유입/유출 입력→기말잔고 누적, 12주 합계, 잔고 마이너스 시 적색 경고. → **2026-06-05 완료**
 
+---
+
+## 📄 자금일보 (DailyReportPage) — 신규 개발 (2026-06-09 기획 확정)
+
+> 상세 기획: `docs/pages/DailyReportPage.md`  
+> DB DDL: `docs/db/daily_report_tables.sql`  
+> 데이터 반영 정책: **C안** (임시 즉시 반영, 승인 시 확정)  
+> 결재선: 팀장 1단계 Default, 유연 추가/삭제 가능
+
+- [x] **S1: DB + 라우트 + 페이지 골격** → **2026-06-10 완료**
+- [x] **S2: 자금현황 요약 테이블** → **2026-06-10 완료**
+- [x] **S3: 입금/출금 라인 아이템 입력** → **2026-06-10 완료**
+- [x] **S4: 연동 팝업** → **2026-06-10 완료**
+- [x] **S5: 검증 + 결재 워크플로우** → **2026-06-10 완료**
+  - ValidationBar, 상신·승인·반려 버튼, 결재선 설정 모달 구현
+- [x] **S6: 인쇄 출력** → **2026-06-11 완료**
+  - [x] Print CSS (A4 가로, 자금현황 + 내역 + 결재란)
+  - [x] `[🖨️ 인쇄]` 버튼 → `window.print()`
+
+---
+
+---
+
+## 🔵 네비게이션 / UX 개선 (2026-06-10 세션7차 이후)
+
+- [x] **Sidebar 5섹션 재편**: DASHBOARD / 자금입력 / 자금일보 / 이력관리 / 관리 → **2026-06-10 완료**
+- [x] **일별 자금일보 목록 페이지** (`/daily-report-list`): 법인별·날짜별 작성현황 테이블, 상태 배지(미작성/작성 중/결재 중/승인) → **2026-06-10 완료**
+- [x] **조직도 관리 페이지** (`/admin/org-chart`): 법인별 결재선 설정 UI (master 전용), 향후 조직도 시각화 예정 → **2026-06-10 완료**
+- [x] **환율 현황 → 환율 이력** 레이블 변경 (Sidebar) → **2026-06-10 완료**
+- [ ] **환율 이력 FxPage 기능 확장**: 날짜별 환율 표시 — daily 테이블 연동, 기간별 환율 추이 차트
+- [ ] **인증 체계 공휴일 GAS 연동 세팅**: `HOLIDAY_API_KEY` 스크립트 속성 등록 필요 (GAS 에디터)
+
+---
+
 - [ ] **GAS 자동 시세 스케줄러 ON/OFF 토글**: 기존 HTML에서 `localStorage: auto_price_on`으로 관리하던 자동 시세 조회 ON/OFF 기능이 React 버전에 없음. `useStockTicker.ts`는 항상 폴링 활성화 상태.
 
 - [x] **`calcKRW` 함수 중복 정의**: `format.ts`의 `calcKRW` 가 실사용처 없음(grep 확인). 완전 제거. 모든 소비처는 `useFx().toKRW()` 통일 사용 중. → **2026-06-05 완료**
+
+---
+
+## 🔵 자금일보 후속 개선 (2026-06-12 세션8차 이후)
+
+- [x] **로그인 "처리 중..." 무한 행**: supabase-js Web Locks 데드락 → `noopLock` 주입 + `getUser()` 2차 호출 제거 → **2026-06-12 완료**
+- [x] **자금일보 재진입 무한 로딩**: `useFx` 메모이즈 + `useRef` latest-value 패턴으로 렌더 루프 차단 → **2026-06-12 완료**
+- [x] **CMS 대사 검증 모달 다중 PDF 지원**: 탭 UI + 크로스 PDF 금액 매칭 + 카드 클릭 시 페이지 점프 + 출처 기록 + 상태 localStorage 영속 → **2026-06-12 완료**
+- [x] **자금현황 외화 입출금 native 표시**: FX 행 입금/출금 컬럼 원화환산 → 외화 원단위(`fmtFx`) 표시 → **2026-06-12 완료**
+- [ ] **CMS 대사 완료 비율 요약**: 모달 상단에 "N/M 항목 대사 완료 (X%)" 프로그레스 바 표시
+
+---
+
+## 🟣 접근성 / 회사 관리 (2026-06-12 세션9차)
+
+- [x] **Sidebar 메뉴 접근성 필터링**: `NavItem.slug` + `hasMenu(slug)` → 권한 없는 메뉴/빈 섹션 숨김 → **완료**
+- [x] **PolicyPage 법인 접근 제한**: 단일 법인 계정이 타사 정보 조회하던 문제 → `accessibleCompanies` 필터 → **완료**
+- [x] **역할 권한 툴팁**: UsersPage 역할 카드 hover 상세 권한 표시 → **완료**
+- [x] **TopBar 주가 티커 오버플로**: 중앙 마퀴 이동, 우측 버튼 항상 표시 → **완료**
+- [x] **Sidebar 섹션 상태 영속화**: 유저별 localStorage 저장/복원 → **완료**
+- [x] **동적 회사 관리**: `companies` 테이블 + `useCompanies` 훅 + `/admin/companies` 페이지(사용자 관리와 분리), 전 페이지 하드코딩 제거 → **완료**
+  - ⚠ Supabase에 `docs/db/companies.sql` 실행 필요 (미실행 시 3법인 폴백)
+- [x] **무한 로딩/추가중 hang 수정**: 비동기 핸들러 try/catch/finally 적용 → **완료**
+- [x] **회사 추가 hang 근본 원인**: companies RLS 정책이 `auth.users` 참조 → 403 → supabase-js wedge. 정책 단순화(anon+authenticated permissive) + 쓰기를 raw fetch REST 헬퍼(`restInsert/Update/Delete`)로 전환 → **완료**
+- [x] **PolicyPage 동적 법인 미반영**: 하드코딩 3사(`COMPANIES`·`COMPANY_TAG`·`usePolicyDashboard`×3) → `useCompanies` + 배열 훅 `usePolicyDashboards`/`usePolicyParamsReadMap`로 전환. 신규 법인(크레도) 탭·요약·상세 탭 모두 반영 → **완료**
+- [x] **지분 신규등록 "null value in column id" 오류**: `useEquities.save()` 신규 insert 시 id 미생성 → `generateUUID()` 추가 → **완료**
+- [x] **지분 기준일 과거 종가 미조회**: `fetchStockByName`에 `basDt` 추가 + NewEquityForm이 과거 기준일이면 `fetchStockPrice(ticker, 기준일)`로 해당일 종가 조회 → **완료**
+- [x] **[CRITICAL] 메뉴이동/로그인 무한로딩 근본 원인**: supabase-js 쓰기가 에러(400 id null·403 RLS)나면 클라이언트 전체가 wedge → 이후 모든 SELECT(loadProfile 포함) 멈춤 → 새로고침 전까지 지속. **모든 데이터 쓰기(useDaily·useLoans·useInvestments·useEquities)를 raw fetch REST 헬퍼로 전환** → 쓰기 에러가 클라이언트를 wedge시키지 않음. SELECT만 supabase-js 유지 → **완료**
+- [⚠️ GAS 재배포 필요] **과거 종가 조회가 엉뚱한 주가 반환**: `Code.gs fetchViaPublicData`가 종목 필터로 `stckIscd`(미인식 파라미터) 사용 → data.go.kr이 basDt만 적용해 "그 날짜 첫 종목"을 반환(208370 4/13 종가 4,235원 대신 768원). `likeSrtnCd`로 수정 + `srtnCd` 정확 매칭 + 실시간은 네이버 우선 라우팅. **Code.gs 수정 완료 → GAS 에디터에서 새 버전 재배포 필요**
+
+---
+
+## 📊 통합상황판 시각화 개선 (2026-06-12)
+
+- [x] **가용 지분 별도 집계**: 가용 지분(상장)이 어디에도 집계 안 되던 문제 → `KpiData.equityAvail` 추가(가용자금·순현금 **미포함**). 자금흐름 카드 "참고 — 순현금 미포함" 섹션에 '지분(가용)' 라인 + 자산구성 도넛/범례에 별도 항목 + FlowDetailDrawer 'equity_avail' 상세 → **완료**
+- [x] **현금흐름 추이 운용 가용/불가용 2색 스택**: `CashflowChart` 운용자금 막대를 가용(emerald-500)+불가용(emerald-300) 2색 스택으로 분리, 툴팁도 분리 표기 → **완료**
+- [x] **현금흐름 범례 클릭 토글**: 정적 범례 → 클릭 버튼(단독 보기), Ctrl/⌘+클릭(다중 선택), 빈 선택 시 전체 표시 복귀, '전체' 리셋 버튼 → **완료**
+- [x] **운용 가용/불가용 독립 토글**: 범례를 `운전자금 | 운용(가용) | 운용(불가용) | 차입금` 4개 항목으로 분리 → 운용(불가용)만 Ctrl+클릭으로 제외 가능. 툴팁 '선택 합계'는 표시 중인 시리즈만 합산 → **완료**
+
+---
+
+## 🌐 LAN 접속 + 무한로딩 근본 해결 (2026-06-12)
+
+- [x] **LAN 접속 안 됨 원인분석·조치**: 서버는 0.0.0.0:5175 정상 리스닝, 로컬에서 192.168.22.241:5175 HTTP 200 확인. 원인 = ① 포트 5176 안내(실제 5175) ② 상대방이 다른 망(PC는 이더넷 192.168.22.x + Wi-Fi 172.30.x 동시 연결) ③ 방화벽 Node 규칙이 Domain 프로필 only. 조치: `vite.config.ts strictPort:true`(포트 고정), CLAUDE.md 포트/방화벽 안내 정정. **방화벽 전프로필 허용은 관리자 PS 1회 실행 필요**: `New-NetFirewallRule -DisplayName "Vite Dev 5175" -Direction Inbound -Protocol TCP -LocalPort 5175 -Action Allow -Profile Any`
+- [x] **[CRITICAL] 메뉴이동/로그인 무한로딩 전면 근본 해결**: 원인 = supabase-js 쓰기 오류 시 공유 클라이언트 wedge → 이후 모든 SELECT(loadProfile 포함) 영구 멈춤. 조치 2갈래:
+  - **Prong 1 (안전망)**: 주요 읽기 훅(useDaily/useLoans/useInvestments/useEquities/useIssues/usePolicyParams·Meetings·Decisions·Threads/useDailyReport·Items)에 `withTimeout(13s)` + try/catch/finally → `loading` 영구 미해제 차단(무한 스피너 제거)
+  - **Prong 2 (근본)**: 앱 내 **모든 supabase-js 쓰기를 raw fetch REST 헬퍼로 전환**(useIssues·정책 3훅·daily_report 2훅·팝업 4종·AuthContext treasury_users 동기화·DailyReportPage 중복삭제) → 쓰기 오류가 클라이언트를 wedge시키지 않음. SELECT만 supabase.from() 유지 → **완료**
+- [ ] **CMS 잔고 합계 자동 검증**: PDF 추출 금액 합산 vs 자금현황 합계 비교 → 일치 시 "합계 자동 검증 ✅" 표시
+- [ ] **자금일보 목록 → 날짜 클릭 바로 열기**: `DailyReportListPage` 날짜 행 클릭 시 해당일 자금일보로 즉시 이동 (현재 동작 검증 필요)

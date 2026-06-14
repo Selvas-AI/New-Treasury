@@ -1,3 +1,14 @@
+// ─── UUID 생성 (HTTPS/localhost 외 LAN HTTP 환경 fallback) ───
+export function generateUUID(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0
+    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16)
+  })
+}
+
 // ─── 숫자/날짜 포맷 ──────────────────────────────────────
 
 /** 원화 억/만 단위 포맷 */
@@ -59,23 +70,6 @@ export function returnBadgeClass(ret: number | null): string {
 export function fmtReturn(ret: number | null): string {
   if (ret === null) return '-'
   return (ret >= 0 ? '+' : '') + ret.toFixed(2) + '%'
-}
-
-// ─── 영업일 ──────────────────────────────────────────────
-
-const KR_HOLIDAYS_2026 = new Set([
-  '2026-01-01', '2026-01-28', '2026-01-29', '2026-01-30',
-  '2026-03-01', '2026-03-02', '2026-05-05', '2026-06-06',
-  '2026-08-17', '2026-09-24', '2026-09-25', '2026-09-26',
-  '2026-10-03', '2026-10-05', '2026-10-09', '2026-12-25',
-])
-
-/** 오늘 영업일 여부 (주말 + 2026 공휴일 제외) */
-export function isBusinessDay(date: Date = new Date()): boolean {
-  const day = date.getDay()
-  if (day === 0 || day === 6) return false
-  const iso = date.toISOString().slice(0, 10)
-  return !KR_HOLIDAYS_2026.has(iso)
 }
 
 // ─── 이슈 키 ─────────────────────────────────────────────

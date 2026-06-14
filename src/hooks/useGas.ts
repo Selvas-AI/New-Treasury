@@ -118,9 +118,11 @@ async function gasGet<T>(params: Record<string, string>): Promise<T> {
   throw lastErr
 }
 
-/** 주가 단건 조회 — GAS v3: ticker=108860 */
-export async function fetchStockPrice(code: string): Promise<StockPriceResult> {
-  const raw = await gasGet<GasStockRaw>({ ticker: code })
+/** 주가 단건 조회 — GAS v3: ticker=108860 / basDt=YYYY-MM-DD (과거 종가) */
+export async function fetchStockPrice(code: string, basDt?: string): Promise<StockPriceResult> {
+  const params: Record<string, string> = { ticker: code }
+  if (basDt) params.basDt = basDt.replace(/-/g, '')  // YYYYMMDD 형식으로 변환
+  const raw = await gasGet<GasStockRaw>(params)
   if (!raw.success) throw new Error(raw.error ?? '주가 조회 실패')
   return {
     code:      raw.symbol ?? code,
@@ -140,9 +142,11 @@ export async function fetchBondPrice(isin: string, basDt?: string): Promise<Bond
   return { isin: raw.isinCd ?? isin, price: raw.price, date: raw.date }
 }
 
-/** 종목명으로 주식 검색 + 시세 조회 — GAS: ?name=셀바스에이아이 */
-export async function fetchStockByName(name: string): Promise<StockSearchResult> {
-  const raw = await gasGet<GasStockRaw>({ name })
+/** 종목명으로 주식 검색 + 시세 조회 — GAS: ?name=셀바스에이아이 (basDt: 과거 종가) */
+export async function fetchStockByName(name: string, basDt?: string): Promise<StockSearchResult> {
+  const params: Record<string, string> = { name }
+  if (basDt) params.basDt = basDt.replace(/-/g, '')
+  const raw = await gasGet<GasStockRaw>(params)
   if (!raw.success) throw new Error(raw.error ?? '종목 조회 실패')
   return {
     code:       raw.symbol ?? raw.ticker ?? '',

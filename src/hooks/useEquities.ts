@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
-import { supabase } from '../lib/supabase'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { supabase, restInsert, restUpdate, restDelete, withTimeout } from '../lib/supabase'
 import { useAuth } from './useAuth'
+import { generateUUID } from '../lib/format'
 import type { EquityRecord, UseQueryResult } from '../types'
 
 /** 종목별 최신 날짜 1건만 반환 */
@@ -28,20 +29,26 @@ export function useEquities(): UseQueryResult<EquityRecord> & {
   const [error, setError] = useState<string | null>(null)
 
   const fetchCompany = user?.role === 'company' ? user.company : currentCompany
+  const fetchIdRef = useRef(0)
 
   const fetch = useCallback(async () => {
     if (!fetchCompany) return
+    const myId = ++fetchIdRef.current
     setLoading(true)
     setData([])
     setError(null)
-    const { data: rows, error: err } = await supabase
-      .from('equities')
-      .select('*')
-      .eq('company', fetchCompany)
-      .order('date', { ascending: false })
-    if (err) setError(err.message)
-    else setData((rows ?? []) as EquityRecord[])
-    setLoading(false)
+    try {
+      const { data: rows, error: err } = await withTimeout(
+        supabase.from('equities').select('*').eq('company', fetchCompany).order('date', { ascending: false }),
+      )
+      if (fetchIdRef.current !== myId) return
+      if (err) setError(err.message)
+      else setData((rows ?? []) as EquityRecord[])
+    } catch (e) {
+      if (fetchIdRef.current === myId) setError(e instanceof Error ? e.message : '조회 실패')
+    } finally {
+      if (fetchIdRef.current === myId) setLoading(false)
+    }
   }, [fetchCompany])
 
   useEffect(() => { void fetch() }, [fetch])
@@ -60,29 +67,29 @@ export function useEquities(): UseQueryResult<EquityRecord> & {
       )
       if (existing) record = { ...record, id: existing.id }
     }
+    // raw fetch 기반 — 오류 시에도 supabase-js 클라이언트 wedge 방지
+    // 신규 insert 시 id 클라이언트 생성 (equities.id not-null, DB default 없음)
     const { error: err } = record.id
-      ? await supabase.from('equities').update(record).eq('id', record.id)
-      : await supabase.from('equities').insert(record)
+      ? await restUpdate('equities', record, { id: record.id })
+      : await restInsert('equities', { ...record, id: generateUUID() })
     if (err) return err.message
     await fetch()
     return null
   }
 
   async function remove(id: string): Promise<string | null> {
-    const { error: err } = await supabase.from('equities').delete().eq('id', id)
+    const { error: err } = await restDelete('equities', { id })
     if (err) return err.message
     setData(prev => prev.filter(r => r.id !== id))
     return null
   }
 
-  /** 같은 종목 전체 이력에 취득가액 일괄 반영 */
+  /** 같은 종목 전체 이력에 취득가액 일괄 반영 (name+company 매칭) */
   async function updateAcquisitionCost(name: string, cost: number): Promise<string | null> {
-    const ids = data.filter(e => e.name === name).map(e => e.id)
-    if (!ids.length) return null
-    const { error: err } = await supabase
-      .from('equities')
-      .update({ acquisition_cost: cost })
-      .in('id', ids)
+    if (!fetchCompany) return null
+    const { error: err } = await restUpdate(
+      'equities', { acquisition_cost: cost }, { name, company: fetchCompany },
+    )
     if (err) return err.message
     setData(prev => prev.map(r => r.name === name ? { ...r, acquisition_cost: cost } : r))
     return null

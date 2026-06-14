@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
-import { supabase } from '../lib/supabase'
+import { supabase, restInsert, restDelete, withTimeout } from '../lib/supabase'
+import { generateUUID } from '../lib/format'
 import type { IssueComment } from '../types'
 
 /** policy_decisions 후속조치 스레드 — issue_key = 'policy_{decisionId}' */
@@ -11,13 +12,16 @@ export function usePolicyThreads(decisionIds: string[]) {
     if (!decisionIds.length) { setData([]); return }
     setLoading(true)
     const keys = decisionIds.map(id => `policy_${id}`)
-    const { data: rows } = await supabase
-      .from('issue_comments')
-      .select('*')
-      .in('issue_key', keys)
-      .order('created_at', { ascending: true })
-    setData((rows ?? []) as IssueComment[])
-    setLoading(false)
+    try {
+      const { data: rows } = await withTimeout(
+        supabase.from('issue_comments').select('*').in('issue_key', keys).order('created_at', { ascending: true }),
+      )
+      setData((rows ?? []) as IssueComment[])
+    } catch {
+      setData([])
+    } finally {
+      setLoading(false)
+    }
   }, [decisionIds.join(',')])  // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { void fetch() }, [fetch])
@@ -32,7 +36,8 @@ export function usePolicyThreads(decisionIds: string[]) {
     userLabel: string,
     company: string,
   ): Promise<string | null> {
-    const { error: err } = await supabase.from('issue_comments').insert({
+    const { error: err } = await restInsert('issue_comments', {
+      id: generateUUID(),
       issue_key: `policy_${decisionId}`,
       company,
       user_label: userLabel,
@@ -48,7 +53,7 @@ export function usePolicyThreads(decisionIds: string[]) {
   }
 
   async function removeMemo(id: string): Promise<void> {
-    await supabase.from('issue_comments').delete().eq('id', id)
+    await restDelete('issue_comments', { id })
     setData(prev => prev.filter(c => c.id !== id))
   }
 

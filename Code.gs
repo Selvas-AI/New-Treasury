@@ -30,6 +30,9 @@ function doGet(e) {
     // ── FX 표준편차 자동계산: ?type=fxstddev ──────────────────────
     if (type === 'fxstddev') return calcFxStdDevFromEcos_(e);
 
+    // ── 공휴일 조회: ?type=holidays&year=YYYY ─────────────────────
+    if (type === 'holidays') return fetchKoreanHolidays_(e);
+
     if (type === 'bond') {
       // ── 채권명으로 검색: ?type=bond&bondName=국고채권 ──────────
       if (e.parameter.bondName && !e.parameter.isinCd) {
@@ -50,22 +53,26 @@ function doGet(e) {
     if (!ticker) return createResponse({ success: false, error: 'ticker 필요' }, 400);
 
     const code6 = ticker.padStart(6, '0');
-    Logger.log('주가 조회: ' + code6);
+    // basDt: YYYYMMDD (과거 종가 조회) 없으면 최근 영업일 자동 사용
+    const basDt = (e.parameter.basDt || '').trim() || null;
+    Logger.log('주가 조회: ' + code6 + (basDt ? ' basDt=' + basDt : ' (최신)'));
 
-    // 1순위: 공공데이터포털 주식 API
-    let result = fetchViaPublicData(code6);
-
-    // 2순위: 네이버 (공공 API 실패 시)
-    if (!result) {
-      Logger.log('공공 API 실패, 네이버 시도');
+    let result = null;
+    if (basDt) {
+      // 과거 종가: 공공데이터포털 전용 (네이버·Yahoo는 과거 일자 조회 불가)
+      result = fetchViaPublicData(code6, basDt);
+    } else {
+      // 실시간: 네이버(장중 시세) 우선 → 공공데이터(T+1) → Yahoo 순 폴백
       result = fetchViaNaver(code6);
-    }
-
-    // 3순위: Yahoo (최후 폴백)
-    if (!result) {
-      Logger.log('네이버 실패, Yahoo 시도');
-      result = fetchViaYahoo(code6 + '.KQ');
-      if (!result) result = fetchViaYahoo(code6 + '.KS');
+      if (!result) {
+        Logger.log('네이버 실패, 공공 API 시도');
+        result = fetchViaPublicData(code6, null);
+      }
+      if (!result) {
+        Logger.log('공공 API 실패, Yahoo 시도');
+        result = fetchViaYahoo(code6 + '.KQ');
+        if (!result) result = fetchViaYahoo(code6 + '.KS');
+      }
     }
 
     if (!result) return createResponse({ success: false, error: code6 + ' 주가 조회 실패' }, 503);
@@ -93,7 +100,7 @@ function doGet(e) {
 //  서비스: GetStockSecuritiesInfoService / getStockPriceInfo
 //  등락 필드: vs (전일대비), fltRt (등락률)
 // ══════════════════════════════════════════════════════════════════════
-function fetchViaPublicData(code6) {
+function fetchViaPublicData(code6, basDt) {
   try {
     const apiKey = PropertiesService.getScriptProperties().getProperty('STOCK_API_KEY');
     if (!apiKey) {
@@ -101,17 +108,20 @@ function fetchViaPublicData(code6) {
       return null;
     }
 
-    // 오늘 날짜 → 최근 거래일 (주말이면 전주 금요일)
-    const today = getRecentBusinessDate();
+    // basDt: YYYYMMDD 지정 시 해당 날짜 종가, 없으면 최근 영업일
+    const queryDate = basDt || getRecentBusinessDate();
 
+    // ⚠️ 종목 필터는 반드시 likeSrtnCd(단축코드) 사용.
+    //    stckIscd 는 이 API가 인식하지 못하는 파라미터 → basDt 만 적용되어
+    //    "그 날짜의 첫 번째 종목"이 반환되는 치명 버그 발생(엉뚱한 주가).
+    //    numOfRows 를 넉넉히 받아 srtnCd === code6 인 행을 직접 선택해 안전성 확보.
     const url = 'https://apis.data.go.kr/1160100/service/'
               + 'GetStockSecuritiesInfoService/getStockPriceInfo'
               + '?serviceKey=' + encodeURIComponent(apiKey)
               + '&resultType=json'
-              + '&numOfRows=1'
-              + '&itmsNm=&mrktCls=KOSDAQ'  // KOSDAQ 우선
-              + '&isinCd=&stckIscd=' + code6
-              + '&basDt=' + today;
+              + '&numOfRows=20&pageNo=1'
+              + '&likeSrtnCd=' + code6
+              + '&basDt=' + queryDate;
 
     Logger.log('공공 주식 API 호출: ' + url.replace(apiKey, 'API_KEY'));
 
@@ -127,22 +137,15 @@ function fetchViaPublicData(code6) {
     const data  = JSON.parse(resp.getContentText());
     const body  = data.response && data.response.body;
     const items = body && body.items && body.items.item;
+    const list  = Array.isArray(items) ? items : (items ? [items] : []);
 
-    let item = Array.isArray(items) ? items[0] : items;
-
-    // KOSDAQ 결과 없으면 KOSPI 재시도
-    if (!item || !item.clpr) {
-      const urlKS = url.replace('mrktCls=KOSDAQ', 'mrktCls=KOSPI');
-      const resp2 = UrlFetchApp.fetch(urlKS, { method:'get', muteHttpExceptions:true, timeout:TIMEOUT_MS });
-      if (resp2.getResponseCode() === 200) {
-        const d2    = JSON.parse(resp2.getContentText());
-        const items2 = d2.response && d2.response.body && d2.response.body.items && d2.response.body.items.item;
-        item = Array.isArray(items2) ? items2[0] : items2;
-      }
-    }
+    // 단축코드(srtnCd)가 정확히 일치하는 행만 선택 — like 검색의 오매칭 방지
+    let item = list.find(function(it) {
+      return it && String(it.srtnCd || '').replace(/^A/, '') === code6;
+    }) || null;
 
     if (!item || !item.clpr) {
-      Logger.log('공공 주식 API 데이터 없음: ' + code6);
+      Logger.log('공공 주식 API 데이터 없음(정확 매칭 실패): ' + code6 + ' / rows=' + list.length);
       return null;
     }
 
@@ -1010,6 +1013,110 @@ function testEcosItemList() {
     Logger.log(i + ': ITEM_CODE=' + r.ITEM_CODE + ' | ' + r.ITEM_NAME + ' | 데이터수=' + r.DATA_CNT);
   });
   Logger.log('총 ' + rows.length + '개 항목');
+}
+
+/**
+ * 한국 법정공휴일 조회 — 공공데이터포털 한국천문연구원_특일정보 API
+ *
+ * 스크립트 속성 필요: HOLIDAY_API_KEY (공공데이터포털 인증키, 디코딩된 키 사용)
+ * 발급: https://www.data.go.kr → 한국천문연구원_특일정보 검색 → 활용신청
+ *
+ * GET ?type=holidays&year=2027
+ * → { success:true, year:2027, dates:["2027-01-01","2027-02-17",...] }
+ */
+function fetchKoreanHolidays_(e) {
+  const year = parseInt(e.parameter.year || new Date().getFullYear(), 10);
+  if (isNaN(year) || year < 2020 || year > 2035) {
+    return createResponse({ success: false, error: '유효하지 않은 연도입니다.' }, 400);
+  }
+
+  try {
+    const props = PropertiesService.getScriptProperties();
+    const apiKey = props.getProperty('HOLIDAY_API_KEY');
+    if (!apiKey) {
+      return createResponse({ success: false, error: 'HOLIDAY_API_KEY 스크립트 속성이 없습니다.' }, 500);
+    }
+
+    const url = 'https://apis.data.go.kr/B090041/openapi/service/SpcdeInfoService/getHoliDeInfo'
+      + '?serviceKey=' + encodeURIComponent(apiKey)
+      + '&solYear=' + year
+      + '&numOfRows=50'
+      + '&_type=json';
+
+    const resp = UrlFetchApp.fetch(url, {
+      muteHttpExceptions: true,
+      followRedirects: true,
+      deadline: 20
+    });
+    if (resp.getResponseCode() !== 200) {
+      return createResponse({ success: false, error: 'API HTTP ' + resp.getResponseCode() }, 502);
+    }
+
+    const json = JSON.parse(resp.getContentText());
+    const items = json.response?.body?.items?.item;
+    if (!items) {
+      return createResponse({ success: false, error: '데이터 없음' }, 404);
+    }
+
+    const list = Array.isArray(items) ? items : [items];
+    const dates = list
+      .filter(function(item) { return item.isHoliday === 'Y'; })
+      .map(function(item) {
+        const d = String(item.locdate);
+        return d.slice(0, 4) + '-' + d.slice(4, 6) + '-' + d.slice(6, 8);
+      });
+
+    return createResponse({ success: true, year: year, dates: dates, source: 'data.go.kr/astro' }, 200);
+
+  } catch (err) {
+    return createResponse({ success: false, error: err.toString().slice(0, 150) }, 500);
+  }
+}
+
+/**
+ * 공휴일 API 테스트 — GAS 에디터에서 직접 실행
+ * 실행 후 로그(Ctrl+Enter)에서 결과 확인
+ */
+function testHolidays2026() {
+  const e = { parameter: { type: 'holidays', year: '2026' } };
+  const result = fetchKoreanHolidays_(e);
+  const json = JSON.parse(result.getContent());
+  Logger.log('=== 2026 공휴일 ===');
+  Logger.log('성공: ' + json.success);
+  if (json.success) {
+    Logger.log('건수: ' + json.dates.length);
+    json.dates.forEach(function(d) { Logger.log(d); });
+  } else {
+    Logger.log('오류: ' + json.error);
+  }
+}
+
+function testHolidays2027() {
+  const e = { parameter: { type: 'holidays', year: '2027' } };
+  const result = fetchKoreanHolidays_(e);
+  const json = JSON.parse(result.getContent());
+  Logger.log('=== 2027 공휴일 ===');
+  Logger.log('성공: ' + json.success);
+  if (json.success) {
+    Logger.log('건수: ' + json.dates.length);
+    json.dates.forEach(function(d) { Logger.log(d); });
+  } else {
+    Logger.log('오류: ' + json.error);
+  }
+}
+
+function testHolidays2028() {
+  const e = { parameter: { type: 'holidays', year: '2028' } };
+  const result = fetchKoreanHolidays_(e);
+  const json = JSON.parse(result.getContent());
+  Logger.log('=== 2028 공휴일 ===');
+  Logger.log('성공: ' + json.success);
+  if (json.success) {
+    Logger.log('건수: ' + json.dates.length);
+    json.dates.forEach(function(d) { Logger.log(d); });
+  } else {
+    Logger.log('오류: ' + json.error);
+  }
 }
 
 /** 표본 표준편차 계산 */
