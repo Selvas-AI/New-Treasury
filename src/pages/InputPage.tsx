@@ -209,7 +209,7 @@ export default function InputPage() {
           {/* 원화 잔고 */}
           <div>
             <p className="text-xs font-medium text-gray-500 dark:text-slate-300 mb-2">원화 잔고 (원)</p>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
               {[
                 { key: 'krw_demand' as const, label: '보통예금/CMA' },
                 { key: 'krw_govt'   as const, label: '국책자금'     },
@@ -231,7 +231,7 @@ export default function InputPage() {
           {/* 외화 잔고 */}
           <div>
             <p className="text-xs font-medium text-gray-500 dark:text-slate-300 mb-2">외화 잔고</p>
-            <div className="grid grid-cols-5 gap-2">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
               {FX_FIELDS.map(f => (
                 <div key={f.key}>
                   <label className="block text-xs text-gray-400 dark:text-gray-500 mb-1">{f.label}</label>
@@ -279,7 +279,7 @@ export default function InputPage() {
         </form>
       )}
 
-      {/* 이력 테이블 */}
+      {/* 이력 */}
       <div className="bg-white rounded-xl shadow p-5 dark:bg-slate-800">
         <h3 className="text-sm font-semibold text-gray-600 dark:text-slate-100 mb-4">입력 이력</h3>
         {loading ? (
@@ -287,50 +287,99 @@ export default function InputPage() {
         ) : data.length === 0 ? (
           <p className="text-sm text-gray-400 text-center py-6">입력된 데이터가 없습니다.</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-100 dark:border-slate-700">
-                  {['기준일', '보통예금', '국책자금', '예수금', '외화환산', '합계', '작성자', ''].map(h => (
-                    <th key={h} className="text-left text-xs text-gray-400 dark:text-gray-500 font-medium pb-2 pr-3 whitespace-nowrap">
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {data.map(rec => {
-                  const total = (rec.krw_demand || 0) + (rec.krw_govt || 0) + (rec.krw_mmda || 0) + (rec.fx_krw || 0)
-                  const isToday = rec.date === today
-                  return (
-                    <tr key={rec.id}
-                      className={`border-b border-gray-50 dark:border-slate-700/50 hover:bg-gray-50 dark:hover:bg-slate-700 ${isToday ? 'bg-blue-50 dark:bg-blue-950/20' : ''}`}>
-                      <td className="py-2 pr-3 font-medium text-gray-800 dark:text-gray-100 whitespace-nowrap">
-                        {rec.date}
-                        {isToday && <span className="ml-1 text-xs text-blue-500 dark:text-blue-400">오늘</span>}
-                      </td>
-                      <td className="py-2 pr-3 text-right tabular-nums text-gray-700 dark:text-gray-200">{fmtKRW(rec.krw_demand)}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums text-gray-700 dark:text-gray-200">{fmtKRW(rec.krw_govt)}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums text-gray-700 dark:text-gray-200">{fmtKRW(rec.krw_mmda)}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums text-gray-500 dark:text-slate-300">{fmtKRW(rec.fx_krw)}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums font-semibold text-gray-800 dark:text-gray-100">{fmtKRW(total)}</td>
-                      <td className="py-2 pr-3 text-gray-500 dark:text-slate-300 whitespace-nowrap">{rec.writer}</td>
-                      <td className="py-2 whitespace-nowrap">
-                        {isEditable && (
-                          <div className="flex gap-1.5">
-                            <button onClick={() => loadRecord(rec)}
-                              className="text-xs text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300">수정</button>
-                            <button onClick={() => handleDelete(rec.id)}
-                              className="text-xs text-red-400 hover:text-red-600">삭제</button>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+          <>
+            {/* 모바일 카드 리스트 */}
+            <div className="md:hidden space-y-3">
+              {data.map(rec => {
+                const total = (rec.krw_demand || 0) + (rec.krw_govt || 0) + (rec.krw_mmda || 0) + (rec.fx_krw || 0)
+                const isToday = rec.date === today
+                return (
+                  <div key={rec.id}
+                    className={`rounded-xl border p-4 ${isToday ? 'border-blue-300 bg-blue-50 dark:bg-blue-950/20 dark:border-blue-700' : 'border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800'}`}>
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-gray-800 dark:text-gray-100">{rec.date}</span>
+                        {isToday && <span className="text-xs text-blue-500 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/40 px-1.5 py-0.5 rounded">오늘</span>}
+                      </div>
+                      <span className="text-sm font-bold text-gray-900 dark:text-white">{fmtKRW(total)}</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs mb-3">
+                      <div className="flex justify-between">
+                        <span className="text-gray-400 dark:text-gray-500">보통예금</span>
+                        <span className="text-gray-700 dark:text-gray-200 tabular-nums">{fmtKRW(rec.krw_demand)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-400 dark:text-gray-500">국책자금</span>
+                        <span className="text-gray-700 dark:text-gray-200 tabular-nums">{fmtKRW(rec.krw_govt)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-400 dark:text-gray-500">예수금</span>
+                        <span className="text-gray-700 dark:text-gray-200 tabular-nums">{fmtKRW(rec.krw_mmda)}</span>
+                      </div>
+                      {(rec.fx_krw || 0) > 0 && (
+                        <div className="flex justify-between">
+                          <span className="text-gray-400 dark:text-gray-500">외화환산</span>
+                          <span className="text-blue-600 dark:text-blue-400 tabular-nums">{fmtKRW(rec.fx_krw)}</span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between pt-2 border-t border-gray-100 dark:border-slate-700">
+                      <span className="text-xs text-gray-400 dark:text-gray-500">{rec.writer}</span>
+                      {isEditable && (
+                        <div className="flex gap-2">
+                          <button onClick={() => loadRecord(rec)}
+                            className="text-xs text-blue-500 hover:text-blue-700 dark:text-blue-400 px-2 py-1 rounded bg-blue-50 dark:bg-blue-900/30">수정</button>
+                          <button onClick={() => handleDelete(rec.id)}
+                            className="text-xs text-red-400 hover:text-red-600 px-2 py-1 rounded bg-red-50 dark:bg-red-900/20">삭제</button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* PC 테이블 */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-100 dark:border-slate-700">
+                    {['기준일', '보통예금', '국책자금', '예수금', '외화환산', '합계', '작성자', ''].map(h => (
+                      <th key={h} className="text-left text-xs text-gray-400 dark:text-gray-500 font-medium pb-2 pr-3 whitespace-nowrap">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.map(rec => {
+                    const total = (rec.krw_demand || 0) + (rec.krw_govt || 0) + (rec.krw_mmda || 0) + (rec.fx_krw || 0)
+                    const isToday = rec.date === today
+                    return (
+                      <tr key={rec.id}
+                        className={`border-b border-gray-50 dark:border-slate-700/50 hover:bg-gray-50 dark:hover:bg-slate-700 ${isToday ? 'bg-blue-50 dark:bg-blue-950/20' : ''}`}>
+                        <td className="py-2 pr-3 font-medium text-gray-800 dark:text-gray-100 whitespace-nowrap">
+                          {rec.date}{isToday && <span className="ml-1 text-xs text-blue-500 dark:text-blue-400">오늘</span>}
+                        </td>
+                        <td className="py-2 pr-3 text-right tabular-nums text-gray-700 dark:text-gray-200">{fmtKRW(rec.krw_demand)}</td>
+                        <td className="py-2 pr-3 text-right tabular-nums text-gray-700 dark:text-gray-200">{fmtKRW(rec.krw_govt)}</td>
+                        <td className="py-2 pr-3 text-right tabular-nums text-gray-700 dark:text-gray-200">{fmtKRW(rec.krw_mmda)}</td>
+                        <td className="py-2 pr-3 text-right tabular-nums text-gray-500 dark:text-slate-300">{fmtKRW(rec.fx_krw)}</td>
+                        <td className="py-2 pr-3 text-right tabular-nums font-semibold text-gray-800 dark:text-gray-100">{fmtKRW(total)}</td>
+                        <td className="py-2 pr-3 text-gray-500 dark:text-slate-300 whitespace-nowrap">{rec.writer}</td>
+                        <td className="py-2 whitespace-nowrap">
+                          {isEditable && (
+                            <div className="flex gap-1.5">
+                              <button onClick={() => loadRecord(rec)} className="text-xs text-blue-500 hover:text-blue-700 dark:text-blue-400">수정</button>
+                              <button onClick={() => handleDelete(rec.id)} className="text-xs text-red-400 hover:text-red-600">삭제</button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
     </div>

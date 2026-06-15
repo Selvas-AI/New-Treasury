@@ -201,7 +201,7 @@ export default function EquityPage() {
       )}
 
       {/* KPI */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         <div className="bg-pink-50 border border-pink-200 rounded-xl p-4 dark:bg-pink-950/30 dark:border-pink-800">
           <p className="text-xs text-pink-600 font-medium mb-1 dark:text-pink-400">지분(상장)</p>
           <p className="text-xl font-bold text-pink-800 dark:text-pink-300">{fmtKRW(stockTotal)}</p>
@@ -212,7 +212,7 @@ export default function EquityPage() {
           <p className="text-xl font-bold text-blue-800 dark:text-blue-300">{fmtKRW(bondTotal)}</p>
           <p className="text-xs text-blue-400 mt-1 dark:text-blue-500">{bonds.length}종목</p>
         </div>
-        <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 dark:bg-purple-950/30 dark:border-purple-800">
+        <div className="col-span-2 md:col-span-1 bg-purple-50 border border-purple-200 rounded-xl p-4 dark:bg-purple-950/30 dark:border-purple-800">
           <p className="text-xs text-purple-600 font-medium mb-1 dark:text-purple-400">비상장/기타</p>
           <p className="text-xl font-bold text-purple-800 dark:text-purple-300">{fmtKRW(unlistedTotal)}</p>
           <p className="text-xs text-purple-400 mt-1 dark:text-purple-500">{unlisted.length}종목</p>

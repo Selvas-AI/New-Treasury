@@ -145,7 +145,7 @@ export default function LoansPage() {
       </div>
 
       {/* KPI */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         <div className="bg-red-50 border border-red-200 rounded-xl p-4 dark:bg-red-950/30 dark:border-red-800">
           <p className="text-xs text-red-600 font-medium mb-1 dark:text-red-400">차입금 합계</p>
           <p className="text-xl font-bold text-red-800 dark:text-red-300">{fmtKRW(totalActive)}</p>
@@ -162,7 +162,7 @@ export default function LoansPage() {
             <p className="text-xs text-red-500 mt-1 dark:text-red-400">⚠️ D-30 이하 {d30Count}건</p>
           )}
         </div>
-        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 dark:bg-slate-800 dark:border-slate-700">
+        <div className="col-span-2 md:col-span-1 bg-gray-50 border border-gray-200 rounded-xl p-4 dark:bg-slate-800 dark:border-slate-700">
           <p className="text-xs text-gray-500 font-medium mb-1 dark:text-slate-300">상환 완료</p>
           <p className="text-xl font-bold text-gray-600 dark:text-slate-100">{inactiveList.length}건</p>
         </div>
@@ -268,64 +268,121 @@ export default function LoansPage() {
           ) : displayList.length === 0 ? (
             <p className="text-sm text-gray-400 text-center py-6 dark:text-gray-500">데이터가 없습니다.</p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-100 dark:border-slate-700">
-                    {['금융기관', '유형', '통화', '차입금액', '금리', '차입일', '만기일', 'D-day', ''].map(h => (
-                      <th key={h} className="text-left text-xs text-gray-400 font-medium pb-2 pr-3 whitespace-nowrap dark:text-gray-500">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {displayList.map(rec => {
-                    const dday = calcDday(rec.maturity)
-                    const rowBg =
-                      tab === 'active' && dday <= 7  ? 'bg-red-50' :
-                      tab === 'active' && dday <= 30 ? 'bg-amber-50/50' : ''
-                    return (
-                      <tr key={rec.id} className={`border-b border-gray-50 hover:bg-gray-50 dark:border-slate-700 dark:hover:bg-slate-700 ${rowBg}`}>
-                        <td className="py-2.5 pr-3 font-medium text-gray-800 whitespace-nowrap dark:text-gray-100">{rec.lender}</td>
-                        <td className="py-2.5 pr-3 text-gray-500 dark:text-slate-300">{rec.type}</td>
-                        <td className="py-2.5 pr-3 text-gray-400 dark:text-gray-500">{rec.currency}</td>
-                        <td className="py-2.5 pr-3 text-right tabular-nums font-semibold text-gray-800 dark:text-gray-100">{fmtKRW(rec.amount)}</td>
-                        <td className="py-2.5 pr-3 text-right text-gray-600 dark:text-slate-100">{rec.rate ? `${rec.rate}%` : '-'}</td>
-                        <td className="py-2.5 pr-3 text-xs text-gray-400 whitespace-nowrap dark:text-gray-500">{rec.start_date}</td>
-                        <td className="py-2.5 pr-3 text-xs text-gray-600 whitespace-nowrap dark:text-slate-100">{rec.maturity}</td>
-                        <td className="py-2.5 pr-3">
+            <>
+              {/* 모바일 카드 리스트 */}
+              <div className="md:hidden space-y-3">
+                {displayList.map(rec => {
+                  const dday = calcDday(rec.maturity)
+                  const urgent = tab === 'active' && dday <= 7
+                  const warn   = tab === 'active' && dday > 7 && dday <= 30
+                  return (
+                    <div key={rec.id} className={`rounded-xl border p-4 space-y-3 ${
+                      urgent ? 'border-red-300 bg-red-50 dark:bg-red-950/30 dark:border-red-800' :
+                      warn   ? 'border-amber-200 bg-amber-50/50 dark:bg-amber-950/20 dark:border-amber-800' :
+                               'border-gray-200 bg-white dark:bg-slate-800 dark:border-slate-700'
+                    }`}>
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <p className="font-semibold text-gray-900 dark:text-gray-100">{rec.lender}</p>
+                          <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">{rec.type} · {rec.currency}</p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="font-bold text-gray-900 dark:text-gray-100 tabular-nums">{fmtKRW(rec.amount)}</p>
                           {tab === 'active' && <DdayBadge dday={dday} />}
-                        </td>
-                        <td className="py-2.5 whitespace-nowrap">
-                          {isEditable && (
-                            <div className="flex gap-1.5">
-                              <button onClick={() => loadRecord(rec)}
-                                className="text-xs text-blue-500 hover:text-blue-700">수정</button>
-                              {tab === 'active'
-                                ? <button onClick={() => handleSetActive(rec.id, false)}
-                                    className="text-xs text-emerald-500 hover:text-emerald-700">상환</button>
-                                : <button onClick={() => handleSetActive(rec.id, true)}
-                                    className="text-xs text-amber-500 hover:text-amber-700">복원</button>
-                              }
-                              <button onClick={() => handleDelete(rec.id)}
-                                className="text-xs text-red-400 hover:text-red-600">삭제</button>
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                        <div className="text-gray-400 dark:text-slate-400">금리</div>
+                        <div className="text-gray-700 dark:text-slate-200">{rec.rate ? `${rec.rate}%` : '-'}</div>
+                        <div className="text-gray-400 dark:text-slate-400">차입일</div>
+                        <div className="text-gray-700 dark:text-slate-200">{rec.start_date}</div>
+                        <div className="text-gray-400 dark:text-slate-400">만기일</div>
+                        <div className="text-gray-700 dark:text-slate-200">{rec.maturity}</div>
+                      </div>
+                      {isEditable && (
+                        <div className="flex gap-2 pt-1 border-t border-gray-100 dark:border-slate-700">
+                          <button onClick={() => loadRecord(rec)}
+                            className="flex-1 py-1.5 text-xs rounded-lg border border-blue-200 text-blue-600 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400">수정</button>
+                          {tab === 'active'
+                            ? <button onClick={() => handleSetActive(rec.id, false)}
+                                className="flex-1 py-1.5 text-xs rounded-lg border border-emerald-200 text-emerald-600 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-400">상환처리</button>
+                            : <button onClick={() => handleSetActive(rec.id, true)}
+                                className="flex-1 py-1.5 text-xs rounded-lg border border-amber-200 text-amber-600 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400">복원</button>
+                          }
+                          <button onClick={() => handleDelete(rec.id)}
+                            className="flex-1 py-1.5 text-xs rounded-lg border border-red-200 text-red-500 hover:bg-red-50 dark:border-red-800 dark:text-red-400">삭제</button>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
                 {tab === 'active' && (
-                  <tfoot>
-                    <tr className="border-t border-gray-200 dark:border-slate-700">
-                      <td colSpan={3} className="pt-2.5 text-xs text-gray-400 dark:text-gray-500">합계</td>
-                      <td className="pt-2.5 text-right tabular-nums font-bold text-gray-900 dark:text-gray-100">{fmtKRW(totalActive)}</td>
-                      <td colSpan={5} />
-                    </tr>
-                  </tfoot>
+                  <div className="flex justify-between items-center px-1 pt-2 border-t border-gray-200 dark:border-slate-700">
+                    <span className="text-xs text-gray-400 dark:text-gray-500">합계 {activeList.length}건</span>
+                    <span className="font-bold text-gray-900 dark:text-gray-100 tabular-nums">{fmtKRW(totalActive)}</span>
+                  </div>
                 )}
-              </table>
-            </div>
+              </div>
+              {/* PC 테이블 */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-100 dark:border-slate-700">
+                      {['금융기관', '유형', '통화', '차입금액', '금리', '차입일', '만기일', 'D-day', ''].map(h => (
+                        <th key={h} className="text-left text-xs text-gray-400 font-medium pb-2 pr-3 whitespace-nowrap dark:text-gray-500">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {displayList.map(rec => {
+                      const dday = calcDday(rec.maturity)
+                      const rowBg =
+                        tab === 'active' && dday <= 7  ? 'bg-red-50' :
+                        tab === 'active' && dday <= 30 ? 'bg-amber-50/50' : ''
+                      return (
+                        <tr key={rec.id} className={`border-b border-gray-50 hover:bg-gray-50 dark:border-slate-700 dark:hover:bg-slate-700 ${rowBg}`}>
+                          <td className="py-2.5 pr-3 font-medium text-gray-800 whitespace-nowrap dark:text-gray-100">{rec.lender}</td>
+                          <td className="py-2.5 pr-3 text-gray-500 dark:text-slate-300">{rec.type}</td>
+                          <td className="py-2.5 pr-3 text-gray-400 dark:text-gray-500">{rec.currency}</td>
+                          <td className="py-2.5 pr-3 text-right tabular-nums font-semibold text-gray-800 dark:text-gray-100">{fmtKRW(rec.amount)}</td>
+                          <td className="py-2.5 pr-3 text-right text-gray-600 dark:text-slate-100">{rec.rate ? `${rec.rate}%` : '-'}</td>
+                          <td className="py-2.5 pr-3 text-xs text-gray-400 whitespace-nowrap dark:text-gray-500">{rec.start_date}</td>
+                          <td className="py-2.5 pr-3 text-xs text-gray-600 whitespace-nowrap dark:text-slate-100">{rec.maturity}</td>
+                          <td className="py-2.5 pr-3">
+                            {tab === 'active' && <DdayBadge dday={dday} />}
+                          </td>
+                          <td className="py-2.5 whitespace-nowrap">
+                            {isEditable && (
+                              <div className="flex gap-1.5">
+                                <button onClick={() => loadRecord(rec)}
+                                  className="text-xs text-blue-500 hover:text-blue-700">수정</button>
+                                {tab === 'active'
+                                  ? <button onClick={() => handleSetActive(rec.id, false)}
+                                      className="text-xs text-emerald-500 hover:text-emerald-700">상환</button>
+                                  : <button onClick={() => handleSetActive(rec.id, true)}
+                                      className="text-xs text-amber-500 hover:text-amber-700">복원</button>
+                                }
+                                <button onClick={() => handleDelete(rec.id)}
+                                  className="text-xs text-red-400 hover:text-red-600">삭제</button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                  {tab === 'active' && (
+                    <tfoot>
+                      <tr className="border-t border-gray-200 dark:border-slate-700">
+                        <td colSpan={3} className="pt-2.5 text-xs text-gray-400 dark:text-gray-500">합계</td>
+                        <td className="pt-2.5 text-right tabular-nums font-bold text-gray-900 dark:text-gray-100">{fmtKRW(totalActive)}</td>
+                        <td colSpan={5} />
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              </div>
+            </>
           )}
         </div>
       </div>

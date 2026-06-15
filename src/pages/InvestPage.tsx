@@ -138,7 +138,7 @@ export default function InvestPage() {
       </div>
 
       {/* KPI 요약 */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 dark:bg-blue-950/30 dark:border-blue-800">
           <p className="text-xs text-blue-600 font-medium mb-1 dark:text-blue-400">가용 합계</p>
           <p className="text-xl font-bold text-blue-800 dark:text-blue-300">{fmtKRW(totalAvail)}</p>
@@ -147,7 +147,7 @@ export default function InvestPage() {
           <p className="text-xs text-gray-500 font-medium mb-1 dark:text-slate-300">불가용 합계</p>
           <p className="text-xl font-bold text-gray-700 dark:text-gray-200">{fmtKRW(totalUnavail)}</p>
         </div>
-        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 dark:bg-emerald-950/30 dark:border-emerald-800">
+        <div className="col-span-2 md:col-span-1 bg-emerald-50 border border-emerald-200 rounded-xl p-4 dark:bg-emerald-950/30 dark:border-emerald-800">
           <p className="text-xs text-emerald-600 font-medium mb-1 dark:text-emerald-400">총 운용 합계</p>
           <p className="text-xl font-bold text-emerald-800 dark:text-emerald-300">{fmtKRW(totalAvail + totalUnavail)}</p>
         </div>
@@ -288,76 +288,112 @@ export default function InvestPage() {
           ))}
         </div>
 
-        <div className="p-5">
+        <div className="p-4 md:p-5">
           {invest.loading ? (
             <p className="text-sm text-gray-400 text-center py-6 dark:text-gray-500">로딩 중...</p>
           ) : displayList.length === 0 ? (
             <p className="text-sm text-gray-400 text-center py-6 dark:text-gray-500">데이터가 없습니다.</p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-100 dark:border-slate-700">
-                    {['금융기관', '상품', '통화', '금액', '수익률', '가용', '시작일', '만기일', 'D-day', ''].map(h => (
-                      <th key={h} className="text-left text-xs text-gray-400 font-medium pb-2 pr-3 whitespace-nowrap dark:text-gray-500">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {displayList.map(rec => {
-                    const dday   = calcDday(rec.maturity)
-                    const ret    = calcReturn(rec.amount, rec.acquisition_cost)
-                    const urgent = tab === 'active' && dday <= 30
-                    return (
-                      <tr key={rec.id}
-                        className={`border-b border-gray-50 hover:bg-gray-50 dark:border-slate-700 dark:hover:bg-slate-700 ${urgent ? 'bg-red-50 dark:bg-red-950/20' : ''}`}>
-                        <td className="py-2 pr-3 font-medium text-gray-800 whitespace-nowrap dark:text-gray-100">{rec.bank}</td>
-                        <td className="py-2 pr-3 text-gray-600 dark:text-slate-100">{rec.product}</td>
-                        <td className="py-2 pr-3 text-gray-500 dark:text-slate-300">{rec.currency}</td>
-                        <td className="py-2 pr-3 text-right tabular-nums font-medium text-gray-800 dark:text-gray-100">{fmtKRW(rec.amount)}</td>
-                        <td className="py-2 pr-3">
-                          {ret !== null
-                            ? <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${returnBadgeClass(ret)}`}>{fmtReturn(ret)}</span>
-                            : <span className="text-xs text-gray-400 dark:text-gray-500">{rec.rate ? `${rec.rate}%` : '-'}</span>
-                          }
-                        </td>
-                        <td className="py-2 pr-3">
-                          <span className={`text-xs px-1.5 rounded ${
-                            rec.available === '가용' ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'
-                          }`}>{rec.available}</span>
-                        </td>
-                        <td className="py-2 pr-3 text-xs text-gray-400 whitespace-nowrap dark:text-gray-500">{rec.start}</td>
-                        <td className="py-2 pr-3 text-xs text-gray-600 whitespace-nowrap dark:text-slate-100">{rec.maturity}</td>
-                        <td className="py-2 pr-3 whitespace-nowrap">
+            <>
+              {/* 모바일 카드 리스트 */}
+              <div className="md:hidden space-y-3">
+                {displayList.map(rec => {
+                  const dday = calcDday(rec.maturity)
+                  const ret  = calcReturn(rec.amount, rec.acquisition_cost)
+                  const urgent = tab === 'active' && dday <= 7
+                  const warn   = tab === 'active' && dday > 7 && dday <= 30
+                  return (
+                    <div key={rec.id}
+                      className={`rounded-xl border p-4 ${
+                        urgent ? 'border-red-300 bg-red-50 dark:bg-red-950/20 dark:border-red-800'
+                        : warn  ? 'border-amber-200 bg-amber-50/50 dark:bg-amber-950/20 dark:border-amber-800'
+                        : 'border-gray-200 dark:border-slate-700'
+                      }`}>
+                      <div className="flex items-start justify-between mb-3">
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-semibold text-gray-900 dark:text-white">{rec.bank}</span>
+                            <span className="text-xs text-gray-500 dark:text-slate-300">{rec.product}</span>
+                          </div>
+                          <div className="flex gap-1.5 mt-1.5 flex-wrap">
+                            <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${rec.available === '가용' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-500 dark:bg-slate-700 dark:text-slate-300'}`}>{rec.available}</span>
+                            {rec.currency !== 'KRW' && <span className="text-xs px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">{rec.currency}</span>}
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0 ml-2">
+                          <div className="text-sm font-bold text-gray-900 dark:text-white tabular-nums">{fmtKRW(rec.amount)}</div>
                           {tab === 'active' && (
-                            <span className={`text-xs font-medium ${
-                              dday <= 7  ? 'text-red-600' :
-                              dday <= 30 ? 'text-amber-600' : 'text-gray-500'
-                            }`}>D-{dday}</span>
-                          )}
-                        </td>
-                        <td className="py-2 whitespace-nowrap">
-                          {isEditable && (
-                            <div className="flex gap-1.5">
-                              <button onClick={() => loadRecord(rec)}
-                                className="text-xs text-blue-500 hover:text-blue-700">수정</button>
-                              {tab === 'active'
-                                ? <button onClick={() => handleSetActive(rec.id, false)}
-                                    className="text-xs text-amber-500 hover:text-amber-700">만기</button>
-                                : <button onClick={() => handleSetActive(rec.id, true)}
-                                    className="text-xs text-emerald-500 hover:text-emerald-700">복원</button>
-                              }
-                              <button onClick={() => handleDelete(rec.id)}
-                                className="text-xs text-red-400 hover:text-red-600">삭제</button>
+                            <div className={`text-xs font-semibold mt-0.5 ${urgent ? 'text-red-600 dark:text-red-400' : warn ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400 dark:text-gray-500'}`}>
+                              D-{dday}
                             </div>
                           )}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs mb-3">
+                        <div className="flex justify-between"><span className="text-gray-400 dark:text-gray-500">금리</span><span className="text-gray-700 dark:text-gray-200">{rec.rate ? `${rec.rate}%` : '-'}</span></div>
+                        <div className="flex justify-between"><span className="text-gray-400 dark:text-gray-500">만기일</span><span className={`${urgent ? 'text-red-600 dark:text-red-400' : 'text-gray-700 dark:text-gray-200'}`}>{rec.maturity}</span></div>
+                        <div className="flex justify-between"><span className="text-gray-400 dark:text-gray-500">시작일</span><span className="text-gray-700 dark:text-gray-200">{rec.start}</span></div>
+                        {ret !== null && (
+                          <div className="flex justify-between items-center"><span className="text-gray-400 dark:text-gray-500">수익률</span><span className={`px-1.5 py-0.5 rounded font-medium ${returnBadgeClass(ret)}`}>{fmtReturn(ret)}</span></div>
+                        )}
+                      </div>
+                      {isEditable && (
+                        <div className="flex gap-2 pt-2 border-t border-gray-100 dark:border-slate-700">
+                          <button onClick={() => loadRecord(rec)} className="flex-1 text-xs text-blue-600 dark:text-blue-400 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100">수정</button>
+                          {tab === 'active'
+                            ? <button onClick={() => handleSetActive(rec.id, false)} className="flex-1 text-xs text-amber-600 dark:text-amber-400 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100">만기처리</button>
+                            : <button onClick={() => handleSetActive(rec.id, true)} className="flex-1 text-xs text-emerald-600 dark:text-emerald-400 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100">복원</button>
+                          }
+                          <button onClick={() => handleDelete(rec.id)} className="text-xs text-red-400 hover:text-red-600 px-3 py-1.5 rounded-lg bg-red-50 dark:bg-red-900/20">삭제</button>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* PC 테이블 */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-100 dark:border-slate-700">
+                      {['금융기관', '상품', '통화', '금액', '수익률', '가용', '시작일', '만기일', 'D-day', ''].map(h => (
+                        <th key={h} className="text-left text-xs text-gray-400 font-medium pb-2 pr-3 whitespace-nowrap dark:text-gray-500">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {displayList.map(rec => {
+                      const dday = calcDday(rec.maturity)
+                      const ret  = calcReturn(rec.amount, rec.acquisition_cost)
+                      const urgent = tab === 'active' && dday <= 30
+                      return (
+                        <tr key={rec.id} className={`border-b border-gray-50 hover:bg-gray-50 dark:border-slate-700 dark:hover:bg-slate-700 ${urgent ? 'bg-red-50 dark:bg-red-950/20' : ''}`}>
+                          <td className="py-2 pr-3 font-medium text-gray-800 whitespace-nowrap dark:text-gray-100">{rec.bank}</td>
+                          <td className="py-2 pr-3 text-gray-600 dark:text-slate-100">{rec.product}</td>
+                          <td className="py-2 pr-3 text-gray-500 dark:text-slate-300">{rec.currency}</td>
+                          <td className="py-2 pr-3 text-right tabular-nums font-medium text-gray-800 dark:text-gray-100">{fmtKRW(rec.amount)}</td>
+                          <td className="py-2 pr-3">{ret !== null ? <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${returnBadgeClass(ret)}`}>{fmtReturn(ret)}</span> : <span className="text-xs text-gray-400 dark:text-gray-500">{rec.rate ? `${rec.rate}%` : '-'}</span>}</td>
+                          <td className="py-2 pr-3"><span className={`text-xs px-1.5 rounded ${rec.available === '가용' ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{rec.available}</span></td>
+                          <td className="py-2 pr-3 text-xs text-gray-400 whitespace-nowrap dark:text-gray-500">{rec.start}</td>
+                          <td className="py-2 pr-3 text-xs text-gray-600 whitespace-nowrap dark:text-slate-100">{rec.maturity}</td>
+                          <td className="py-2 pr-3 whitespace-nowrap">{tab === 'active' && <span className={`text-xs font-medium ${dday <= 7 ? 'text-red-600' : dday <= 30 ? 'text-amber-600' : 'text-gray-500'}`}>D-{dday}</span>}</td>
+                          <td className="py-2 whitespace-nowrap">
+                            {isEditable && (
+                              <div className="flex gap-1.5">
+                                <button onClick={() => loadRecord(rec)} className="text-xs text-blue-500 hover:text-blue-700">수정</button>
+                                {tab === 'active' ? <button onClick={() => handleSetActive(rec.id, false)} className="text-xs text-amber-500 hover:text-amber-700">만기</button> : <button onClick={() => handleSetActive(rec.id, true)} className="text-xs text-emerald-500 hover:text-emerald-700">복원</button>}
+                                <button onClick={() => handleDelete(rec.id)} className="text-xs text-red-400 hover:text-red-600">삭제</button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </div>
       </div>
