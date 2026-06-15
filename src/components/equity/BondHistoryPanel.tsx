@@ -267,7 +267,7 @@ export default function BondHistoryPanel({
             accessorFn: row =>
               row.bondQty && row.bondPrice ? calcBondValue(row.bondQty, row.bondPrice) : row.amount,
             cell: ({ getValue }) => (
-              <span className="tabular-nums font-medium text-gray-800">{fmtKRW(getValue<number>())}</span>
+              <span className="tabular-nums font-medium text-gray-800 dark:text-slate-100">{fmtKRW(getValue<number>())}</span>
             ),
           },
           {
@@ -284,7 +284,7 @@ export default function BondHistoryPanel({
               const ret = calcReturn(val, row.original.acquisition_cost)
               return ret !== null
                 ? <span className={`px-1.5 py-0.5 rounded font-medium ${returnBadgeClass(ret)}`}>{fmtReturn(ret)}</span>
-                : <span className="text-gray-300">-</span>
+                : <span className="text-gray-300 dark:text-slate-500">-</span>
             },
           },
           {
@@ -292,7 +292,7 @@ export default function BondHistoryPanel({
             header: '취득가액',
             cell: ({ getValue }) => {
               const v = getValue<number | undefined>()
-              return <span className="tabular-nums text-gray-400">{v ? fmtKRW(v) : '-'}</span>
+              return <span className="tabular-nums text-gray-400 dark:text-slate-300">{v ? fmtKRW(v) : '-'}</span>
             },
           },
           {
@@ -301,7 +301,7 @@ export default function BondHistoryPanel({
             cell: ({ getValue }) => {
               const v = getValue<string>()
               return (
-                <span className={`px-1 rounded ${v === '가용' ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-400'}`}>
+                <span className={`px-1 rounded ${v === '가용' ? 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-400 dark:bg-slate-700 dark:text-slate-300'}`}>
                   {v}
                 </span>
               )
