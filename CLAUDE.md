@@ -1,6 +1,6 @@
 # CLAUDE.md — Selvas Treasury (New-Treasury)
 > 신규 세션 시작 시 이 파일을 먼저 읽어 컨텍스트를 복원하세요.
-> 최종 업데이트: 2026-06-15 (세션10차 — 다크모드 B안 팔레트 + 로그인 hang 근본 해결)
+> 최종 업데이트: 2026-06-15 (세션11차 — 모바일 최적화 + 팝업 금액 대사 수정)
 
 ---
 
@@ -652,6 +652,26 @@ VITE_GAS_API_URL=https://script.google.com/macros/s/AKfycbwZ.../exec
 - **전 페이지 하드코딩 제거**: Dashboard/Input/Invest/Loans/Equity/History/DailyReport(List)/DataPage/OrgChart 의 `VALID_COMPANIES`/`COMPANIES` → `getCompanyNames()`·`useCompanies().names`
   - master/admin은 `hasCompanyCheck`(빈 companies=전체)로 신규 법인 자동 접근, editor/viewer는 사용자 관리에서 법인 지정
 - **[CRITICAL] hang 수정**: `fetchWithTimeout` 12s abort 시 supabase 호출이 reject → `load()`/회사추가 핸들러에 **try/catch/finally** 필수 (없으면 `setLoading(false)` 미실행 → 무한 로딩/"추가 중" 멈춤). companies 테이블 미생성이 직접 원인이었음
+
+---
+
+### 2026-06-15 세션 11차 (모바일 최적화 + 팝업 금액 대사 수정)
+
+#### 모바일 UI 최적화
+- **좌우 스크롤 차단**: `Layout.tsx` main에 `overflow-x-hidden` 추가
+- **CashflowChart 모바일 렌더링 수정**: `h-full` 단독 → `h-72 md:h-full` (모바일 0px → 차트 미표시 해결)
+- **터치 영역 확대**: 범례 버튼 `py-0.5` → `py-1`
+- **Ctrl+클릭 힌트**: CashflowChart, EquityCard — 모바일(`hidden md:block`)에서 숨김
+- **팝업 모바일 전체 너비**: FlowDetailDrawer, IssueDrawer `w-80` → `w-[calc(100vw-2rem)] max-w-sm max-h-[80vh]`
+
+#### FlowDetailDrawer 팝업 국채 금액 대사 수정 ⭐
+- **원인**: KPI는 `calcBondValue(bondQty, bondPrice)`(시가) 사용, 팝업은 `i.amount`(취득원금) 사용 → 불일치
+- **AvailableDetail 수정**:
+  - 국채 금액 → `calcBondValue` 우선, fallback `i.amount`
+  - 국채 표시명 → `i.bondName ?? i.bank`
+  - 필터 `!== '불가용'` → `=== '가용'` (KPI와 동일)
+- **UnavailableDetail 수정**: 국채(불가용)도 `calcBondValue` 적용
+- **영향**: 팝업 표시값만 수정, KPI(`useDashboard.ts`) 계산 로직 변경 없음
 
 ---
 

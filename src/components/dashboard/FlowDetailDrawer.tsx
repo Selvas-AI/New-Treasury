@@ -1,5 +1,5 @@
 ﻿import { useNavigate } from 'react-router-dom'
-import { fmtKRW, calcDday } from '../../lib/format'
+import { fmtKRW, calcDday, calcBondValue } from '../../lib/format'
 import type { FlowItemKey } from './WaterfallCard'
 import type { KpiData } from '../../hooks/useDashboard'
 import type { DailyRecord, InvestmentRecord, LoanRecord } from '../../types'
@@ -256,8 +256,8 @@ function AvailableDetail({ kpi, daily, latestInvests, equities }: {
   latestInvests: InvestmentRecord[]
   equities: EquityItem[]
 }) {
-  const availInvest  = latestInvests.filter(i => i.product !== '국채' && i.available !== '불가용')
-  const availBond    = latestInvests.filter(i => i.product === '국채'  && i.available !== '불가용')
+  const availInvest  = latestInvests.filter(i => i.product !== '국채' && i.available === '가용')
+  const availBond    = latestInvests.filter(i => i.product === '국채'  && i.available === '가용')
   const availEquity  = equities.filter(e => e.available === '가용')
 
   return (
@@ -284,12 +284,19 @@ function AvailableDetail({ kpi, daily, latestInvests, equities }: {
         <div>
           <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">가용 운용자금</p>
           <div className="divide-y divide-gray-50 dark:divide-slate-700">
-            {[...availInvest, ...availBond].map(i => (
-              <div key={i.id} className="flex justify-between items-center py-1.5">
-                <span className="text-[11px] text-gray-400 truncate mr-2">{i.bank}</span>
-                <span className="text-xs tabular-nums font-semibold text-gray-700 dark:text-gray-200 shrink-0">{fmtKRW(i.amount)}</span>
-              </div>
-            ))}
+            {[...availInvest, ...availBond].map(i => {
+              const displayVal = i.product === '국채' && i.bondQty && i.bondPrice
+                ? calcBondValue(i.bondQty, i.bondPrice)
+                : (i.amount || 0)
+              return (
+                <div key={i.id} className="flex justify-between items-center py-1.5">
+                  <span className="text-[11px] text-gray-400 truncate mr-2">
+                    {i.product === '국채' ? (i.bondName ?? i.bank) : i.bank}
+                  </span>
+                  <span className="text-xs tabular-nums font-semibold text-gray-700 dark:text-gray-200 shrink-0">{fmtKRW(displayVal)}</span>
+                </div>
+              )
+            })}
           </div>
         </div>
       )}
@@ -401,7 +408,10 @@ function UnavailableDetail({ kpi, latestInvests, equities }: {
   if (unavailBonds.length > 0) {
     sections.push({
       label: '국채 (불가용)',
-      rows: unavailBonds.map(b => ({ name: b.bondName ?? b.bank, value: b.amount || 0 })),
+      rows: unavailBonds.map(b => ({
+        name: b.bondName ?? b.bank,
+        value: b.bondQty && b.bondPrice ? calcBondValue(b.bondQty, b.bondPrice) : (b.amount || 0),
+      })),
     })
   }
 
