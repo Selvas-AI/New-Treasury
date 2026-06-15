@@ -3,14 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <script>
-    // GitHub Pages SPA 라우팅 리다이렉트
-    // /New-Treasury/loans → /?p=/loans 형태로 index.html로 전달
-    var base = '/New-Treasury';
-    var path = window.location.pathname.replace(base, '') || '/';
+    // GitHub Pages SPA 라우팅 리다이렉트 (base = '/')
+    var path = window.location.pathname;
     var search = window.location.search;
     var hash = window.location.hash;
-    var redirect = base + '/?p=' + encodeURIComponent(path + search) + hash;
-    window.location.replace(redirect);
+    window.location.replace('/?p=' + encodeURIComponent(path + search) + hash);
   </script>
 </head>
 <body></body>

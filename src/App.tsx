@@ -38,7 +38,7 @@ export default function App() {
   return (
     <AuthProvider>
       <IssueCountProvider>
-      <BrowserRouter basename="/New-Treasury">
+      <BrowserRouter basename={import.meta.env.PROD ? '/' : '/New-Treasury'}>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
 

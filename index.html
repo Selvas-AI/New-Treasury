@@ -10,9 +10,7 @@
       (function() {
         var p = new URLSearchParams(window.location.search).get('p');
         if (p) {
-          var base = '/New-Treasury';
-          var target = base + decodeURIComponent(p);
-          window.history.replaceState(null, '', target);
+          window.history.replaceState(null, '', decodeURIComponent(p));
         }
       })();
     </script>
