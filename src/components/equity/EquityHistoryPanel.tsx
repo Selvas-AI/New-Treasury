@@ -228,83 +228,149 @@ export default function EquityHistoryPanel({
         </form>
       )}
 
-      {/* 이력 테이블 */}
-      {(() => {
-        const columns: ColumnDef<EquityRecord, unknown>[] = [
-          { accessorKey: 'date', header: '기준일' },
-          {
-            accessorKey: 'shares',
-            header: '주수',
-            cell: ({ getValue }) => (
-              <span className="tabular-nums text-gray-600 dark:text-slate-100">{getValue<number>().toLocaleString()}</span>
-            ),
-          },
-          {
-            accessorKey: 'price',
-            header: '주가',
-            cell: ({ getValue }) => (
-              <span className="tabular-nums text-gray-600 dark:text-slate-100">{getValue<number>().toLocaleString()}원</span>
-            ),
-          },
-          {
-            accessorKey: 'total_value',
-            header: '평가금액',
-            cell: ({ getValue }) => (
-              <span className="tabular-nums font-medium text-gray-800 dark:text-slate-100">{fmtKRW(getValue<number>())}</span>
-            ),
-          },
-          {
-            id: 'return',
-            header: '수익률',
-            accessorFn: row => calcReturn(row.total_value, row.acquisition_cost) ?? -Infinity,
-            cell: ({ row }) => {
-              const ret = calcReturn(row.original.total_value, row.original.acquisition_cost)
-              return ret !== null
-                ? <span className={`px-1.5 py-0.5 rounded font-medium ${returnBadgeClass(ret)}`}>{fmtReturn(ret)}</span>
-                : <span className="text-gray-300 dark:text-slate-500">-</span>
-            },
-          },
-          {
-            accessorKey: 'acquisition_cost',
-            header: '취득가액',
-            cell: ({ getValue }) => {
-              const v = getValue<number>()
-              return <span className="tabular-nums text-gray-400 dark:text-slate-300">{v ? fmtKRW(v) : '-'}</span>
-            },
-          },
-          {
-            accessorKey: 'available',
-            header: '가용',
-            cell: ({ getValue }) => {
-              const v = getValue<string>()
+      {/* 이력 — 모바일 카드 */}
+      {history.length === 0 ? (
+        <p className="text-sm text-gray-400 dark:text-slate-500 text-center py-6">이력이 없습니다.</p>
+      ) : (
+        <>
+          {/* 모바일 카드 리스트 */}
+          <div className="md:hidden space-y-2 px-1">
+            {history.map(rec => {
+              const ret = calcReturn(rec.total_value, rec.acquisition_cost)
+              const isAvail = rec.available === '가용'
               return (
-                <span className={`px-1 rounded ${v === '가용' ? 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-400 dark:bg-slate-700 dark:text-slate-300'}`}>
-                  {v}
-                </span>
+                <div key={rec.id}
+                  className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 space-y-3">
+                  {/* 상단: 날짜 + 가용배지 + 평가금액 */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-gray-800 dark:text-slate-100">{rec.date}</span>
+                      <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${isAvail
+                        ? 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                        : 'bg-gray-100 text-gray-400 dark:bg-slate-700 dark:text-slate-300'}`}>
+                        {rec.available}
+                      </span>
+                    </div>
+                    <span className="text-base font-bold text-gray-900 dark:text-slate-100 tabular-nums">
+                      {fmtKRW(rec.total_value)}
+                    </span>
+                  </div>
+                  {/* 중간: 메타 그리드 */}
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                    <div className="text-gray-400 dark:text-slate-400">주수</div>
+                    <div className="text-gray-700 dark:text-slate-200 tabular-nums text-right">{rec.shares.toLocaleString()}주</div>
+                    <div className="text-gray-400 dark:text-slate-400">주가</div>
+                    <div className="text-gray-700 dark:text-slate-200 tabular-nums text-right">{rec.price.toLocaleString()}원</div>
+                    <div className="text-gray-400 dark:text-slate-400">취득가액</div>
+                    <div className="text-gray-700 dark:text-slate-200 tabular-nums text-right">
+                      {rec.acquisition_cost ? fmtKRW(rec.acquisition_cost) : '-'}
+                    </div>
+                    <div className="text-gray-400 dark:text-slate-400">수익률</div>
+                    <div className="text-right">
+                      {ret !== null
+                        ? <span className={`px-1.5 py-0.5 rounded font-medium ${returnBadgeClass(ret)}`}>{fmtReturn(ret)}</span>
+                        : <span className="text-gray-300 dark:text-slate-500">-</span>}
+                    </div>
+                  </div>
+                  {/* 액션 버튼 */}
+                  {isEditable && (
+                    <div className="flex gap-2 pt-1 border-t border-gray-100 dark:border-slate-700">
+                      <button onClick={() => loadRecord(rec)}
+                        className="flex-1 py-1.5 text-xs rounded-lg border border-blue-200 text-blue-600 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-950/30">
+                        수정
+                      </button>
+                      <button onClick={() => handleRemove(rec.id)}
+                        className="flex-1 py-1.5 text-xs rounded-lg border border-red-200 text-red-500 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950/30">
+                        삭제
+                      </button>
+                    </div>
+                  )}
+                </div>
               )
-            },
-          },
-          ...(isEditable ? [{
-            id: 'actions',
-            header: '',
-            enableSorting: false,
-            cell: ({ row }: { row: { original: EquityRecord } }) => (
-              <div className="flex gap-1.5">
-                <button onClick={() => loadRecord(row.original)} className="text-blue-400 hover:text-blue-600">수정</button>
-                <button onClick={() => handleRemove(row.original.id)} className="text-red-300 hover:text-red-500">삭제</button>
-              </div>
-            ),
-          } as ColumnDef<EquityRecord, unknown>] : []),
-        ]
-        return (
-          <NotionTable<EquityRecord>
-            tableId="equity_history"
-            columns={columns}
-            data={history}
-            emptyText="이력이 없습니다."
-          />
-        )
-      })()}
+            })}
+          </div>
+
+          {/* PC 테이블 (NotionTable) */}
+          <div className="hidden md:block">
+            {(() => {
+              const columns: ColumnDef<EquityRecord, unknown>[] = [
+                { accessorKey: 'date', header: '기준일' },
+                {
+                  accessorKey: 'shares',
+                  header: '주수',
+                  cell: ({ getValue }) => (
+                    <span className="tabular-nums text-gray-600 dark:text-slate-100">{getValue<number>().toLocaleString()}</span>
+                  ),
+                },
+                {
+                  accessorKey: 'price',
+                  header: '주가',
+                  cell: ({ getValue }) => (
+                    <span className="tabular-nums text-gray-600 dark:text-slate-100">{getValue<number>().toLocaleString()}원</span>
+                  ),
+                },
+                {
+                  accessorKey: 'total_value',
+                  header: '평가금액',
+                  cell: ({ getValue }) => (
+                    <span className="tabular-nums font-medium text-gray-800 dark:text-slate-100">{fmtKRW(getValue<number>())}</span>
+                  ),
+                },
+                {
+                  id: 'return',
+                  header: '수익률',
+                  accessorFn: row => calcReturn(row.total_value, row.acquisition_cost) ?? -Infinity,
+                  cell: ({ row }) => {
+                    const ret = calcReturn(row.original.total_value, row.original.acquisition_cost)
+                    return ret !== null
+                      ? <span className={`px-1.5 py-0.5 rounded font-medium ${returnBadgeClass(ret)}`}>{fmtReturn(ret)}</span>
+                      : <span className="text-gray-300 dark:text-slate-500">-</span>
+                  },
+                },
+                {
+                  accessorKey: 'acquisition_cost',
+                  header: '취득가액',
+                  cell: ({ getValue }) => {
+                    const v = getValue<number>()
+                    return <span className="tabular-nums text-gray-400 dark:text-slate-300">{v ? fmtKRW(v) : '-'}</span>
+                  },
+                },
+                {
+                  accessorKey: 'available',
+                  header: '가용',
+                  cell: ({ getValue }) => {
+                    const v = getValue<string>()
+                    return (
+                      <span className={`px-1 rounded ${v === '가용' ? 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-400 dark:bg-slate-700 dark:text-slate-300'}`}>
+                        {v}
+                      </span>
+                    )
+                  },
+                },
+                ...(isEditable ? [{
+                  id: 'actions',
+                  header: '',
+                  enableSorting: false,
+                  cell: ({ row }: { row: { original: EquityRecord } }) => (
+                    <div className="flex gap-1.5">
+                      <button onClick={() => loadRecord(row.original)} className="text-blue-400 hover:text-blue-600">수정</button>
+                      <button onClick={() => handleRemove(row.original.id)} className="text-red-300 hover:text-red-500">삭제</button>
+                    </div>
+                  ),
+                } as ColumnDef<EquityRecord, unknown>] : []),
+              ]
+              return (
+                <NotionTable<EquityRecord>
+                  tableId="equity_history"
+                  columns={columns}
+                  data={history}
+                  emptyText="이력이 없습니다."
+                />
+              )
+            })()}
+          </div>
+        </>
+      )}
     </div>
   )
 }
