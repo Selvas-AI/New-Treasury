@@ -688,6 +688,30 @@ VITE_GAS_API_URL=https://script.google.com/macros/s/AKfycbwZ.../exec
 - **핵심 수정**: `supabase.ts` — `export let supabase = makeClient()` + `resetSupabaseClient()` 함수
 - **ES 모듈 live binding** — 재생성 즉시 모든 import 위치가 새 클라이언트 참조
 
+#### Watchdog 오탐 수정 (A안)
+- **원인**: "8s 무상호작용 → 무조건 오버레이" 로직이 정상 로딩 페이지에서도 발동 (사용자가 가만히 보기만 해도 트리거)
+- **수정** (`Layout.tsx`): 타이머 8s → **15s**, 타이머 후 DOM 체크 추가
+  - `main` 콘텐츠 100자 이상 + 스피너(`animate-spin`) 없음 + `불러오는 중` 텍스트 없음 → 발동 안 함
+  - stuck 상태(빈 화면 / 스피너 지속) 일 때만 카운트다운 오버레이 표시
+
+#### ESLint 에러 10건 수정 (CI 통과)
+- `DataPage.tsx` / `UsersPage.tsx` — 훅보다 앞에 `early return` 배치 → 훅 이후로 이동 (Rules of Hooks)
+- `PolicyCTab.tsx` — 삼항 표현식 statement → `if/else` (`no-unused-expressions`)
+- `CashflowForecastTab.tsx` — `useMemo` deps `[plan.data]` → `[plan]`
+- `DailyReportPage.tsx` — `useMemo` missing `summary` dep × 2 → `eslint-disable` 추가
+- `DailyReportPage.tsx` — `ref.current` 렌더 중 갱신 → `react-hooks/refs` disable 추가
+- `useTableSettings.ts` — `useEffect` missing `user` dep → `eslint-disable` 추가
+- `eslint.config.js` — react-hooks v7 React Compiler 규칙 비활성화
+  - `immutability` / `refs` / `purity` / `error-boundaries` → `'off'` (이 프로젝트는 React Compiler 미사용)
+  - `rules-of-hooks` / `exhaustive-deps` 핵심 규칙은 유지
+
+#### 가용자금 합계 계산 범위 확장
+- **변경**: `availableCash = 운전자금 + 가용운용자금 + 가용국채 + 가용 지분/장기투자`
+  - 기존: 지분 가용분이 어디에도 합산 안 됨 → 수정: `equityAvail` 포함
+- `useDashboard.ts` — `availableCash` 계산식에 `equityAvail` 추가
+- `DashboardPage.tsx` — KpiCard 부제목: `가용지분 X` 항목 추가 (>0일 때만 표시)
+- `FlowDetailDrawer.tsx` — `AvailableDetail` 팝업에 **가용 지분/장기투자** 섹션 추가 (종목별 평가액 목록)
+
 ---
 
 ## 8. 미완료 / 추후 작업

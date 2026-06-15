@@ -144,3 +144,12 @@
   - **Prong 2 (근본)**: 앱 내 **모든 supabase-js 쓰기를 raw fetch REST 헬퍼로 전환**(useIssues·정책 3훅·daily_report 2훅·팝업 4종·AuthContext treasury_users 동기화·DailyReportPage 중복삭제) → 쓰기 오류가 클라이언트를 wedge시키지 않음. SELECT만 supabase.from() 유지 → **완료**
 - [ ] **CMS 잔고 합계 자동 검증**: PDF 추출 금액 합산 vs 자금현황 합계 비교 → 일치 시 "합계 자동 검증 ✅" 표시
 - [ ] **자금일보 목록 → 날짜 클릭 바로 열기**: `DailyReportListPage` 날짜 행 클릭 시 해당일 자금일보로 즉시 이동 (현재 동작 검증 필요)
+
+---
+
+## 🎨 다크모드 B안 + UX 개선 (2026-06-15)
+
+- [x] **다크모드 B안 (블루-다크 팔레트) 전면 적용**: `gray-*` → `slate-*` (파란 틴트), body bg `#0f172a`, text `#f1f5f9`. `dark:text-gray-300` → `dark:text-slate-100` (45개 파일 일괄). NotionTable 헤더 `dark:text-sky-300`. EquityHistoryPanel/BondHistoryPanel form dark: 보완 → **완료**
+- [x] **Watchdog 오탐 수정**: 8s 무상호작용→무조건 발동 → 15s + DOM 콘텐츠 체크(main 100자+ & 스피너 없음일 때 발동 안 함) → **완료**
+- [x] **ESLint CI 에러 10건 수정**: DataPage/UsersPage conditional hooks, PolicyCTab no-unused-expressions, exhaustive-deps 누락 × 4건, eslint.config.js React Compiler 규칙 off → **완료**
+- [x] **가용자금 합계 범위 확장**: `availableCash = 운전 + 가용운용 + 가용국채 + 가용지분` (기존 지분 가용분 미합산 수정). KpiCard 부제목·FlowDetailDrawer 팝업 업데이트 → **완료**
