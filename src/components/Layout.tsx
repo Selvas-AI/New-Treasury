@@ -23,9 +23,17 @@ function useLoadingWatchdog() {
 
     watchTimerRef.current = window.setTimeout(() => {
       if (!interactedRef.current) {
-        setCountdown(10)  // 10초 카운트다운 시작
+        // DOM 체크: 콘텐츠가 정상 렌더링됐으면 발동 안 함
+        // stuck 조건 = main이 비어있거나 로딩 스피너가 여전히 돌고 있을 때만
+        const main = document.querySelector('main')
+        const hasContent = (main?.textContent?.trim().length ?? 0) > 100
+        const hasSpinner = !!document.querySelector('.animate-spin')
+        const hasLoadingText = (main?.textContent ?? '').includes('불러오는 중')
+        if (!hasContent || hasSpinner || hasLoadingText) {
+          setCountdown(10)
+        }
       }
-    }, 8000)
+    }, 15_000)  // 8s → 15s (정상 페이지 오탐 방지)
 
     return () => {
       if (watchTimerRef.current) window.clearTimeout(watchTimerRef.current)

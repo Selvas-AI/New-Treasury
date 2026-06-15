@@ -683,7 +683,8 @@ VITE_GAS_API_URL=https://script.google.com/macros/s/AKfycbwZ.../exec
   2. `withTimeout(6s)` — `loadProfile()` 포함 모든 supabase Promise 감싸기 (wedge 상태 차단)
   3. `resetSupabaseClient()` — 타임아웃/오류 감지 시 클라이언트 재생성 후 1회 재시도
   4. `hardTimeout(8s)` — AuthContext loading 안전장치
-  5. Global Watchdog (Layout.tsx) — 8s 무상호작용 감지 → 10초 카운트다운 오버레이 → 자동 새로고침
+  5. Global Watchdog (Layout.tsx) — 15s 후 DOM 체크(`main` 콘텐츠 100자 이상 + 스피너 없음) → 정상이면 발동 안 함, stuck이면 카운트다운 오버레이 → 자동 새로고침
+     - **오탐 수정 (세션10차)**: 기존 "8s 무상호작용→무조건 발동"에서 DOM 콘텐츠 체크 추가. 사용자가 페이지를 가만히 보기만 해도 발동되는 오탐 차단
 - **핵심 수정**: `supabase.ts` — `export let supabase = makeClient()` + `resetSupabaseClient()` 함수
 - **ES 모듈 live binding** — 재생성 즉시 모든 import 위치가 새 클라이언트 참조
 
