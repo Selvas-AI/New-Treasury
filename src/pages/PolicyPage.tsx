@@ -628,6 +628,127 @@ function DecisionPolicyPanel({
   )
 }
 
+// ── 모바일 요약 카드 그리드 (C안) ─────────────────────────────────────────
+interface MobileSummaryCard {
+  key: PolicyTab
+  icon: string
+  title: string
+  value: string
+  sub: string
+  status: 'ok' | 'warn' | 'over' | 'na'
+}
+
+function getMobileCards(
+  policyTab: PolicyTab,
+  selectedCompany: Company | null,
+  dataMap: Record<Company, PolicyRealData>,
+  paramsReadMap: Record<Company, PolicyParamReader>,
+  decisions: PolicyDecision[],
+): MobileSummaryCard[] {
+  const d = selectedCompany ? (dataMap[selectedCompany] ?? null) : null
+  const p = selectedCompany ? (paramsReadMap[selectedCompany] ?? null) : null
+
+  // 회의·의결
+  const pendingCount = decisions.filter(dec =>
+    (!selectedCompany || dec.company === selectedCompany) && dec.status !== 'completed'
+  ).length
+
+  // FX
+  const fxTotal = d?.operatingCashWithFx ?? 0
+  const fxRatio = fxTotal > 0 ? ((d?.fxKrw ?? 0) / fxTotal) * 100 : 0
+  const fxMin = p?.get('fx_target_min') ?? null
+  const fxMax = p?.get('fx_target_max') ?? null
+  const fxStatus: MobileSummaryCard['status'] =
+    !d ? 'na' : fxMin === null ? 'na'
+    : fxRatio >= fxMin && fxRatio <= (fxMax ?? 999) ? 'ok'
+    : fxRatio <= fxMin * 0.9 || fxRatio >= (fxMax ?? 999) * 1.1 ? 'over'
+    : 'warn'
+
+  // FVPL
+  const bonds = d?.bonds.filter(b => b.product === '국채') ?? []
+  const bondTotal = bonds.reduce((s, b) => s + (b.bondQty && b.bondPrice ? b.bondQty * (b.bondPrice / 10) : b.amount), 0)
+
+  // 기관한도
+  const invTotal = d?.investByBank.reduce((s, b) => s + b.amount, 0) ?? 0
+  const maxConc = d && invTotal > 0
+    ? Math.max(...d.investByBank.map(b => (b.amount / invTotal) * 100), 0)
+    : 0
+  const bankStatus: MobileSummaryCard['status'] =
+    !d || invTotal === 0 ? 'na'
+    : maxConc > 30 ? 'over'
+    : maxConc > 27 ? 'warn'
+    : 'ok'
+
+  // 차입금
+  const tf = (p?.get('fx_total_fund') ?? null) || (d?.totalFundEstimate ?? 0)
+  const loanRatio = tf > 0 ? ((d?.totalLoan ?? 0) / tf) * 100 : 0
+  const loanMax = p?.get('loan_max_total_ratio') ?? null
+  const loanStatus: MobileSummaryCard['status'] =
+    !d ? 'na' : loanMax === null ? 'na'
+    : loanRatio <= loanMax ? 'ok'
+    : loanRatio <= loanMax * 1.1 ? 'warn'
+    : 'over'
+
+  void policyTab // suppress unused warning
+
+  return [
+    {
+      key: 'decisions',
+      icon: '📋',
+      title: '회의·의결',
+      value: `${pendingCount}건 대기`,
+      sub: `전체 ${decisions.filter(dec => !selectedCompany || dec.company === selectedCompany).length}건`,
+      status: pendingCount > 5 ? 'warn' : 'ok',
+    },
+    {
+      key: 'fx',
+      icon: '💱',
+      title: 'FX 정책',
+      value: d ? `${fxRatio.toFixed(1)}%` : '-',
+      sub: fxMin !== null ? `목표 ${fxMin}~${fxMax}%` : '목표 미설정',
+      status: fxStatus,
+    },
+    {
+      key: 'fvpl',
+      icon: '📈',
+      title: '변동성 리스크',
+      value: bondTotal > 0 ? fmtKRW(bondTotal) : '-',
+      sub: `국채 ${bonds.length}건`,
+      status: 'na',
+    },
+    {
+      key: 'banks',
+      icon: '🏦',
+      title: '기관한도',
+      value: maxConc > 0 ? `최대 ${maxConc.toFixed(0)}%` : '-',
+      sub: '집중도 30% 한도',
+      status: bankStatus,
+    },
+    {
+      key: 'forecast',
+      icon: '📅',
+      title: '주간예측',
+      value: '12주 포캐스트',
+      sub: selectedCompany ? selectedCompany : '법인 선택 필요',
+      status: 'na',
+    },
+    {
+      key: 'plan_c',
+      icon: '📊',
+      title: '만기래더링',
+      value: d ? `${(d.investments.filter(i => i.active).length + d.loans.filter(l => l.active).length)}건` : '-',
+      sub: `차입 ${loanRatio.toFixed(1)}% (한도 ${loanMax ?? '-'}%)`,
+      status: loanStatus,
+    },
+  ]
+}
+
+function MobileStatusDot({ status }: { status: MobileSummaryCard['status'] }) {
+  if (status === 'na') return null
+  const cls = status === 'ok' ? 'bg-green-400' : status === 'warn' ? 'bg-yellow-400' : 'bg-red-500'
+  return <span className={`inline-block w-2 h-2 rounded-full ${cls} shrink-0`} />
+}
+
 // ── 메인 PolicyPage ────────────────────────────────────────────────────────
 const EMPTY_MEETING  = { title: '', meeting_type: '정책회의' as '정책회의' | '운영회의', held_at: '' }
 const EMPTY_DECISION = {
@@ -640,6 +761,16 @@ export default function PolicyPage() {
   const { names: companyNames } = useCompanies()
   const isMaster  = user?.role === 'master'
   const userLabel = user?.label ?? '알 수 없음'
+
+  // ── 모바일 감지 ──────────────────────────────────────────────────────────
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768)
+  const [mobileDetailOpen, setMobileDetailOpen] = useState(false)
+
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 768)
+    window.addEventListener('resize', handler)
+    return () => window.removeEventListener('resize', handler)
+  }, [])
 
   // 이 계정이 접근 가능한 법인만 (master/admin은 companies 미설정 시 전체)
   const accessibleCompanies = useMemo(
@@ -783,6 +914,380 @@ export default function PolicyPage() {
     if (!text) return
     await threads.addMemo(decisionId, text, userLabel, company)
     setMemoText(prev => ({ ...prev, [decisionId]: '' }))
+  }
+
+  // ── 모바일 요약 카드 데이터 ────────────────────────────────────────────
+  const mobileCards = useMemo(() =>
+    getMobileCards(policyTab, selectedCompany as Company | null, dataMap, paramsReadMap, decisions.data),
+    [policyTab, selectedCompany, dataMap, paramsReadMap, decisions.data],
+  )
+
+  function handleMobileCardTap(key: PolicyTab) {
+    handlePolicyTab(key)
+    setMobileDetailOpen(true)
+  }
+
+  function handleMobileBack() {
+    setMobileDetailOpen(false)
+  }
+
+  // ── 모바일 레이아웃 ─────────────────────────────────────────────────────
+  if (isMobile) {
+    return (
+      <div className="p-4 space-y-4">
+
+        {/* 모바일 헤더 */}
+        <div className="flex items-center gap-3">
+          {mobileDetailOpen && (
+            <button onClick={handleMobileBack}
+              className="p-2 -ml-1 text-gray-500 dark:text-slate-300 hover:text-gray-700 dark:hover:text-white">
+              ← 뒤로
+            </button>
+          )}
+          <div className="flex-1">
+            <h1 className="text-lg font-bold text-gray-900 dark:text-white">
+              {mobileDetailOpen
+                ? (mobileCards.find(c => c.key === policyTab)?.icon ?? '') + ' ' +
+                  (mobileCards.find(c => c.key === policyTab)?.title ?? '자금정책')
+                : '자금정책 관리'}
+            </h1>
+          </div>
+          {isMaster && !mobileDetailOpen && (
+            <button onClick={() => setShowMeetingForm(true)}
+              className="text-sm px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg">
+              + 새 회의
+            </button>
+          )}
+        </div>
+
+        {/* 법인 선택 칩 */}
+        <div className="flex gap-2 flex-wrap">
+          {(canSeeAll ? (['all', ...accessibleCompanies] as const) : accessibleCompanies).map(c => (
+            <button key={c} onClick={() => handleCompanyTab(c as Company | 'all')}
+              className={`text-sm px-3 py-1 rounded-full transition-colors ${
+                companyTab === c
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-slate-100'
+              }`}>
+              {c === 'all' ? '전체' : c}
+            </button>
+          ))}
+        </div>
+
+        {/* 드릴다운 상세 뷰 */}
+        {mobileDetailOpen ? (
+          <div className="space-y-4">
+            {/* 세부 탭에서 법인 선택 필요 안내 */}
+            {policyTab !== 'decisions' && companyTab === 'all' && (
+              <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl p-4 text-center">
+                <p className="text-sm font-medium text-amber-700 dark:text-amber-300 mb-1">법인을 선택해주세요</p>
+                <p className="text-xs text-amber-600 dark:text-amber-400">위 칩에서 법인을 선택하세요.</p>
+              </div>
+            )}
+
+            {/* FX 정책 */}
+            {policyTab === 'fx' && companyTab !== 'all' && selectedParams && (
+              <FxPolicyTab company={companyTab as Company} />
+            )}
+
+            {/* 변동성 리스크 */}
+            {policyTab === 'fvpl' && companyTab !== 'all' && selectedParams && (
+              <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-4">
+                <FvplRiskTab
+                  bonds={fvplBonds}
+                  params={selectedParams}
+                  isMaster={isMaster}
+                  userLabel={userLabel}
+                />
+              </div>
+            )}
+
+            {/* 기관한도 */}
+            {policyTab === 'banks' && companyTab !== 'all' && selectedData && (
+              <BankLimitsTab
+                company={companyTab as Company}
+                investments={selectedData.investments}
+                isMaster={isMaster}
+                userLabel={userLabel}
+              />
+            )}
+
+            {/* 주간예측 */}
+            {policyTab === 'forecast' && companyTab !== 'all' && selectedData && (
+              <CashflowForecastTab
+                company={companyTab as Company}
+                openingBalance={selectedData.operatingCash}
+                isMaster={isMaster}
+                userLabel={userLabel}
+              />
+            )}
+
+            {/* 만기래더링 */}
+            {policyTab === 'plan_c' && companyTab !== 'all' && selectedData && (
+              <PolicyCTab
+                investments={selectedData.investments}
+                loans={selectedData.loans}
+                isMaster={isMaster}
+              />
+            )}
+
+            {/* 회의·의결 */}
+            {policyTab === 'decisions' && (
+              <div className="space-y-4">
+                {/* 정책 현황 카드 */}
+                {companyTab === 'all' ? (
+                  <AllCompanySummary dataMap={dataMap} paramsMap={paramsReadMap} companies={accessibleCompanies} />
+                ) : selectedData && selectedParams && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <LiquidityCard data={selectedData} params={selectedParams} isMaster={isMaster} userLabel={userLabel} />
+                    <FxStatusCard data={selectedData} params={selectedParams}
+                      onNavigate={() => { setPolicyTab('fx'); setCompanyTab(companyTab as Company) }} />
+                    <LoanStatusCard data={selectedData} params={selectedParams} isMaster={false} userLabel={userLabel} />
+                    <InvestConcentrationCard data={selectedData}
+                      onNavigate={() => { setPolicyTab('banks'); setCompanyTab(companyTab as Company) }} />
+                  </div>
+                )}
+
+                {/* 회의 선택 */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <select value={activeMeetingId ?? ''}
+                    onChange={e => setSelectedMeetingId(e.target.value || null)}
+                    className="flex-1 text-sm border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2
+                               bg-white dark:bg-slate-800 text-gray-900 dark:text-white">
+                    {meetings.data.length === 0 && <option value="">— 회의 없음 —</option>}
+                    {meetings.data.map(m => (
+                      <option key={m.id} value={m.id}>{m.title} ({m.held_at})</option>
+                    ))}
+                  </select>
+                  {isMaster && activeMeetingId && (
+                    <button onClick={() => setShowDecisionForm(true)}
+                      className="text-sm px-3 py-2 bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-slate-100 rounded-lg">
+                      + 안건
+                    </button>
+                  )}
+                </div>
+
+                {meetings.error && (
+                  <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl p-4">
+                    <p className="text-sm font-semibold text-amber-700 dark:text-amber-300">⚠️ 테이블 미준비</p>
+                    <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">Supabase에서 policy SQL 실행 후 새로고침</p>
+                  </div>
+                )}
+
+                {/* 의결사항 목록 */}
+                <div className="space-y-3">
+                  {displayDecisions.map(d => {
+                    const thread = threads.threadOf(d.id)
+                    const isThreadOpen = openThreadId === d.id
+                    const sm = STATUS_META[d.status]
+                    const dday = d.due_date
+                      ? Math.ceil((new Date(d.due_date).getTime() - Date.now()) / 86400000)
+                      : null
+                    const cardData = dataMap[d.company]
+                    const cardParams = paramsReadMap[d.company]
+                    return (
+                      <div key={d.id}
+                        className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 overflow-hidden">
+                        <div className="p-4 space-y-2">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${companyTag(d.company)}`}>{d.company}</span>
+                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${sm.cls}`}>{sm.label}</span>
+                            {dday !== null && (
+                              <span className={`text-xs ${dday < 0 ? 'text-red-500' : dday <= 7 ? 'text-orange-500' : 'text-gray-400'}`}>
+                                {dday < 0 ? `D+${Math.abs(dday)}` : dday === 0 ? 'D-day' : `D-${dday}`}
+                              </span>
+                            )}
+                            {isMaster && (
+                              <select value={d.status}
+                                onChange={e => handleStatusChange(d, e.target.value as DecisionStatus)}
+                                className="ml-auto text-xs border border-gray-200 dark:border-slate-600 rounded px-1.5 py-0.5
+                                           bg-white dark:bg-slate-700 text-gray-700 dark:text-slate-100">
+                                <option value="pending">대기</option>
+                                <option value="in_progress">진행중</option>
+                                <option value="completed">완료</option>
+                              </select>
+                            )}
+                          </div>
+                          <p className="font-semibold text-gray-900 dark:text-white text-sm">{d.title}</p>
+                          <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                            <p className="text-sm text-gray-700 dark:text-slate-100 leading-relaxed">{d.decision}</p>
+                          </div>
+                          {cardData && cardParams && (
+                            <DecisionPolicyPanel decision={d} params={cardParams} data={cardData} />
+                          )}
+                          {(d.owner || d.due_date) && (
+                            <div className="flex gap-4 text-xs text-gray-400">
+                              {d.owner && <span>담당: {d.owner}</span>}
+                              {d.due_date && <span>기한: {d.due_date}</span>}
+                            </div>
+                          )}
+                        </div>
+                        <button onClick={() => setOpenThreadId(isThreadOpen ? null : d.id)}
+                          className="w-full flex items-center justify-between px-4 py-2 bg-gray-50 dark:bg-gray-700/30
+                                     border-t border-gray-100 dark:border-slate-700 text-xs text-gray-500 dark:text-slate-300">
+                          <span>💬 후속조치 {thread.length > 0 ? `(${thread.length})` : ''}</span>
+                          <span>{isThreadOpen ? '▲' : '▼'}</span>
+                        </button>
+                        {isThreadOpen && (
+                          <div className="px-4 pb-4 pt-2 border-t border-gray-100 dark:border-slate-700 space-y-2">
+                            {thread.map(c => (
+                              <div key={c.id} className="flex gap-2 items-start">
+                                <div className="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center shrink-0">
+                                  <span className="text-xs text-blue-700 dark:text-blue-300">{c.user_label.slice(0,1)}</span>
+                                </div>
+                                <div className="flex-1">
+                                  <span className="text-xs font-medium text-gray-700 dark:text-slate-100">{c.user_label}</span>
+                                  <span className="text-xs text-gray-400 ml-2">{c.created_at.slice(0,10)}</span>
+                                  <p className="text-sm text-gray-700 dark:text-slate-100 mt-0.5">{c.body}</p>
+                                </div>
+                              </div>
+                            ))}
+                            <div className="flex gap-2 mt-2">
+                              <input
+                                value={memoText[d.id] ?? ''}
+                                onChange={e => setMemoText(prev => ({ ...prev, [d.id]: e.target.value }))}
+                                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void handleAddMemo(d.id, d.company) }}}
+                                placeholder="후속조치 입력 (Enter 등록)"
+                                className="flex-1 text-sm border border-gray-200 dark:border-slate-600 rounded-lg px-3 py-1.5
+                                           bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400"
+                              />
+                              <button onClick={() => handleAddMemo(d.id, d.company)}
+                                className="text-sm px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg">등록</button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                  {displayDecisions.length === 0 && meetings.data.length > 0 && (
+                    <p className="text-center py-8 text-sm text-gray-400">해당 법인의 의결사항이 없습니다.</p>
+                  )}
+                  {meetings.data.length === 0 && !meetings.error && (
+                    <p className="text-center py-8 text-sm text-gray-400">등록된 회의가 없습니다.</p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          /* 요약 카드 그리드 2×3 */
+          <div className="grid grid-cols-2 gap-3">
+            {mobileCards.map(card => (
+              <button key={card.key} onClick={() => handleMobileCardTap(card.key)}
+                className="bg-white dark:bg-slate-800 rounded-2xl border border-gray-200 dark:border-slate-700
+                           p-4 text-left shadow-sm active:scale-95 transition-transform">
+                <div className="flex items-start justify-between mb-2">
+                  <span className="text-2xl">{card.icon}</span>
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <MobileStatusDot status={card.status} />
+                    <span className="text-gray-300 dark:text-slate-600 text-xs">›</span>
+                  </div>
+                </div>
+                <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1">{card.title}</p>
+                <p className="text-base font-bold text-gray-900 dark:text-white leading-tight">{card.value}</p>
+                <p className="text-xs text-gray-400 dark:text-slate-500 mt-0.5">{card.sub}</p>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* 모달들 (모바일에서도 필요) */}
+        {showMeetingForm && (
+          <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40">
+            <div className="bg-white dark:bg-slate-800 rounded-t-2xl shadow-2xl p-6 w-full">
+              <h2 className="text-base font-bold text-gray-900 dark:text-white mb-4">새 회의 등록</h2>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs font-medium text-gray-500 dark:text-slate-300">회의명</label>
+                  <input value={meetingForm.title}
+                    onChange={e => setMeetingForm(p => ({ ...p, title: e.target.value }))}
+                    placeholder="예: 2026년 2차 정책회의"
+                    className="mt-1 w-full text-sm border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2
+                               bg-white dark:bg-slate-700 text-gray-900 dark:text-white" />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-medium text-gray-500 dark:text-slate-300">유형</label>
+                    <select value={meetingForm.meeting_type}
+                      onChange={e => setMeetingForm(p => ({ ...p, meeting_type: e.target.value as '정책회의' | '운영회의' }))}
+                      className="mt-1 w-full text-sm border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2
+                                 bg-white dark:bg-slate-700 text-gray-900 dark:text-white">
+                      <option value="정책회의">정책회의</option>
+                      <option value="운영회의">운영회의</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-gray-500 dark:text-slate-300">개최일</label>
+                    <input type="date" value={meetingForm.held_at}
+                      onChange={e => setMeetingForm(p => ({ ...p, held_at: e.target.value }))}
+                      className="mt-1 w-full text-sm border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2
+                                 bg-white dark:bg-slate-700 text-gray-900 dark:text-white" />
+                  </div>
+                </div>
+                {meetingErr && <p className="text-xs text-red-500">{meetingErr}</p>}
+              </div>
+              <div className="flex gap-2 mt-5">
+                <button onClick={() => { setShowMeetingForm(false); setMeetingErr(null) }}
+                  className="flex-1 py-3 text-sm border border-gray-200 dark:border-slate-600 rounded-xl text-gray-600 dark:text-slate-100">취소</button>
+                <button onClick={handleAddMeeting}
+                  className="flex-1 py-3 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium">등록</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showDecisionForm && activeMeetingId && (
+          <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40">
+            <div className="bg-white dark:bg-slate-800 rounded-t-2xl shadow-2xl p-6 w-full max-h-[90vh] overflow-y-auto">
+              <h2 className="text-base font-bold text-gray-900 dark:text-white mb-4">안건 추가</h2>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs text-gray-500 dark:text-slate-300">법인</label>
+                  <select value={decisionForm.company}
+                    onChange={e => setDecisionForm(f => ({ ...f, company: e.target.value as Company }))}
+                    className="mt-1 w-full text-sm border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2 bg-white dark:bg-slate-700 text-gray-900 dark:text-white">
+                    {accessibleCompanies.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 dark:text-slate-300">안건명 *</label>
+                  <input type="text" value={decisionForm.title}
+                    onChange={e => setDecisionForm(f => ({ ...f, title: e.target.value }))}
+                    className="mt-1 w-full border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm dark:bg-slate-700 dark:text-gray-100" />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 dark:text-slate-300">결정내용 *</label>
+                  <textarea rows={3} value={decisionForm.decision}
+                    onChange={e => setDecisionForm(f => ({ ...f, decision: e.target.value }))}
+                    className="mt-1 w-full border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm dark:bg-slate-700 dark:text-gray-100 resize-none" />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-gray-500 dark:text-slate-300">담당자</label>
+                    <input type="text" value={decisionForm.owner}
+                      onChange={e => setDecisionForm(f => ({ ...f, owner: e.target.value }))}
+                      className="mt-1 w-full border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm dark:bg-slate-700 dark:text-gray-100" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 dark:text-slate-300">기한</label>
+                    <input type="date" value={decisionForm.due_date}
+                      onChange={e => setDecisionForm(f => ({ ...f, due_date: e.target.value }))}
+                      className="mt-1 w-full border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm dark:bg-slate-700 dark:text-gray-100" />
+                  </div>
+                </div>
+                {decisionErr && <p className="text-xs text-red-500">{decisionErr}</p>}
+              </div>
+              <div className="flex gap-2 mt-5">
+                <button onClick={() => { setShowDecisionForm(false); setDecisionErr(null) }}
+                  className="flex-1 py-3 text-sm border border-gray-200 dark:border-slate-600 rounded-xl text-gray-600 dark:text-slate-100">취소</button>
+                <button onClick={handleAddDecision}
+                  className="flex-1 py-3 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium">등록</button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    )
   }
 
   return (

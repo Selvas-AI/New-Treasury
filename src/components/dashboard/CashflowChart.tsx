@@ -1,4 +1,4 @@
-﻿import { useState, useMemo } from 'react'
+﻿import { useState, useMemo, useEffect } from 'react'
 import {
   ComposedChart, Bar, Line,
   XAxis, YAxis, CartesianGrid,
@@ -28,6 +28,15 @@ const ALL_SERIES: SeriesKey[] = ['operating', 'investAvail', 'investUnavail', 'l
 export default function CashflowChart({ dailyRecords, investments, loans }: Props) {
   const isDark = typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
   const [period, setPeriod] = useState<Period>(7)
+
+  // 모바일 다중선택 토글 모드
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768)
+  const [multiMode, setMultiMode] = useState(false)
+  useEffect(() => {
+    const h = () => setIsMobile(window.innerWidth < 768)
+    window.addEventListener('resize', h)
+    return () => window.removeEventListener('resize', h)
+  }, [])
 
   // 범례 선택: 빈 Set = 전체 표시. 클릭=단독, Ctrl/⌘+클릭=다중 토글
   const [selected, setSelected] = useState<Set<SeriesKey>>(new Set())
@@ -124,8 +133,20 @@ export default function CashflowChart({ dailyRecords, investments, loans }: Prop
         </div>
       </div>
 
-      {/* 범례 (클릭=단독 / Ctrl·⌘+클릭=다중 토글 / 재클릭·전체해제=전체) */}
+      {/* 범례 (클릭=단독 / Ctrl·⌘+클릭 또는 모바일 다중모드=다중 토글 / 재클릭·전체해제=전체) */}
       <div className="shrink-0 flex items-center gap-1.5 mb-2 px-1 flex-wrap">
+        {isMobile && (
+          <button
+            onClick={() => setMultiMode(m => !m)}
+            className={`text-[10px] px-2 py-1 rounded-md font-medium transition-colors ${
+              multiMode
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 dark:bg-slate-700 text-gray-500 dark:text-slate-300'
+            }`}
+          >
+            다중
+          </button>
+        )}
         {([
           { key: 'operating',     label: '운전자금',    swatch: <span className="inline-block w-3 h-2.5 rounded-sm bg-blue-500" /> },
           { key: 'investAvail',   label: '운용(가용)',  swatch: <span className="inline-block w-3 h-2.5 rounded-sm bg-emerald-500" /> },
@@ -134,7 +155,7 @@ export default function CashflowChart({ dailyRecords, investments, loans }: Prop
         ] as { key: SeriesKey; label: string; swatch: React.ReactNode }[]).map(s => (
           <button
             key={s.key}
-            onClick={e => toggleSeries(s.key, e.ctrlKey || e.metaKey)}
+            onClick={e => toggleSeries(s.key, e.ctrlKey || e.metaKey || multiMode)}
             title="클릭: 단독 보기 · Ctrl(⌘)+클릭: 다중 선택"
             className={`flex items-center gap-1 text-[10px] px-2 py-1 rounded-md transition-all ${
               isVisible(s.key)

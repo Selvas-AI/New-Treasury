@@ -1,4 +1,4 @@
-﻿import { useState, useMemo } from 'react'
+﻿import { useState, useMemo, useEffect } from 'react'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer,
@@ -36,12 +36,20 @@ export default function EquityCard({
   // 키 규칙: 지분 → eq.name / 국채 → 'bond_' + isin
   const [selected, setSelected]       = useState<Set<string>>(new Set())
   const [chartPeriod, setChartPeriod] = useState<Period>(7)
+  const [isMobile, setIsMobile]       = useState(() => window.innerWidth < 768)
+  const [multiMode, setMultiMode]     = useState(false)
+
+  useEffect(() => {
+    const h = () => setIsMobile(window.innerWidth < 768)
+    window.addEventListener('resize', h)
+    return () => window.removeEventListener('resize', h)
+  }, [])
 
   const isAll = selected.size === 0
 
-  // 클릭 핸들러 — Ctrl/Meta: 다중 토글 / 일반: 단일 선택(재클릭 시 해제)
+  // 클릭 핸들러 — Ctrl/Meta 또는 모바일 다중모드: 다중 토글 / 일반: 단일 선택(재클릭 시 해제)
   function handleItemClick(key: string, e: React.MouseEvent) {
-    if (e.ctrlKey || e.metaKey) {
+    if (e.ctrlKey || e.metaKey || multiMode) {
       setSelected(prev => {
         const next = new Set(prev)
         if (next.has(key)) next.delete(key)
@@ -134,6 +142,21 @@ export default function EquityCard({
       </div>
 
       {/* 종목 목록 — 항상 전체 표시, 고정 높이 스크롤 */}
+      {isMobile && (equities.length + bonds.length) > 1 && (
+        <div className="flex items-center gap-2 mb-2">
+          <button
+            onClick={() => setMultiMode(m => !m)}
+            className={`text-[10px] px-2 py-1 rounded-md font-medium transition-colors ${
+              multiMode
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 dark:bg-slate-700 text-gray-500 dark:text-slate-300'
+            }`}
+          >
+            다중 선택
+          </button>
+          {multiMode && <span className="text-[10px] text-gray-400">탭하여 복수 선택</span>}
+        </div>
+      )}
       <div className="h-44 overflow-y-auto mb-3 space-y-0.5 pr-0.5">
 
         {/* 지분(주식) */}
