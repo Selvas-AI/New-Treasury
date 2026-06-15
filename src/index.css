@@ -164,6 +164,36 @@ body.is-printing .print-only { display: block !important; }
   /* ReportSummaryTable ?섎떒 ?덈궡臾??섏쑉 div ?④? */
   .print-summary-table > div > div[class*="border-t"] { display: none !important; }
   .print-only .no-print { display: none !important; }
+
+  /* ── 다크모드 강제 라이트 팔레트 (인쇄 시 항상 흰 배경·검은 텍스트) ── */
+  /* .dark 클래스가 있을 때만 덮어씌워 라이트모드 색상 뱃지 손상 방지 */
+  html.dark,
+  html.dark body,
+  html.dark #root {
+    background-color: #ffffff !important;
+    color: #111827 !important;
+    color-scheme: light !important;
+  }
+  html.dark * {
+    background-color: transparent !important;
+    color: #111827 !important;
+    border-color: #d1d5db !important;
+  }
+  /* 흰 배경이 필요한 컨테이너 */
+  html.dark main,
+  html.dark .bg-white,
+  html.dark [class*="rounded"] {
+    background-color: #ffffff !important;
+  }
+  /* 색상 뱃지·강조 셀 복원 (print-* 클래스, 라이트/다크 공통) */
+  .print-in-amt    { color: #166534 !important; }
+  .print-out-amt   { color: #991b1b !important; }
+  .print-delta-pos { color: #1d4ed8 !important; }
+  .print-delta-neg { color: #b91c1c !important; }
+  .print-summary-table th { background: #dbeafe !important; color: #1e3a5f !important; }
+  .print-summary-table tr.print-section-header td { background: #f0f4f8 !important; color: #1e3a5f !important; }
+  .print-summary-table tr.print-subtotal td { background: #f0f9ff !important; }
+  .print-summary-table tr.print-total td   { background: #dbeafe !important; }
 }
 
 /* ?? 而ㅼ뒪? ???ㅽ겕濡ㅻ컮 ???????????????????????????????? */
