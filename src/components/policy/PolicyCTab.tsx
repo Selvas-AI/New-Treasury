@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 자금정책 C안 — 만기 래더링 차트 + 상품 적정성 체크리스트 (별지2)
  */
 import { useState, useMemo } from 'react'
@@ -282,13 +282,13 @@ function ProductChecklist({ isMaster }: ChecklistProps) {
         </h3>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
-            <div className="w-24 bg-gray-100 dark:bg-gray-700 rounded-full h-1.5">
+            <div className="w-24 bg-gray-100 dark:bg-slate-700 rounded-full h-1.5">
               <div
                 className={`h-1.5 rounded-full transition-all ${allChecked ? 'bg-green-500' : pct > 60 ? 'bg-blue-500' : 'bg-gray-400'}`}
                 style={{ width: `${pct}%` }}
               />
             </div>
-            <span className={`text-xs font-medium ${allChecked ? 'text-green-600 dark:text-green-400' : 'text-gray-500 dark:text-gray-400'}`}>
+            <span className={`text-xs font-medium ${allChecked ? 'text-green-600 dark:text-green-400' : 'text-gray-500 dark:text-slate-300'}`}>
               {checked.size}/{CHECKLIST.length}
               {allChecked && ' ✓ 충족'}
             </span>
@@ -303,31 +303,31 @@ function ProductChecklist({ isMaster }: ChecklistProps) {
 
       {/* 상품명 입력 */}
       <div className="flex items-center gap-2">
-        <label className="text-xs text-gray-500 dark:text-gray-400 shrink-0">검토 상품</label>
+        <label className="text-xs text-gray-500 dark:text-slate-300 shrink-0">검토 상품</label>
         <input
           type="text"
           value={product}
           onChange={e => setProduct(e.target.value)}
           placeholder="예: KB국민은행 정기예금 3개월"
           disabled={!isMaster}
-          className="flex-1 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 text-sm dark:bg-gray-700 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:opacity-50"
+          className="flex-1 border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-1.5 text-sm dark:bg-slate-700 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:opacity-50"
         />
       </div>
 
       {/* 카테고리별 체크리스트 */}
       {categories.map(cat => (
-        <div key={cat} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-          <div className="px-4 py-2 bg-gray-50 dark:bg-gray-700/50 border-b border-gray-100 dark:border-gray-700">
-            <span className="text-xs font-semibold text-gray-600 dark:text-gray-300">{cat}</span>
+        <div key={cat} className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 overflow-hidden">
+          <div className="px-4 py-2 bg-gray-50 dark:bg-gray-700/50 border-b border-gray-100 dark:border-slate-700">
+            <span className="text-xs font-semibold text-gray-600 dark:text-slate-100">{cat}</span>
           </div>
-          <div className="divide-y divide-gray-50 dark:divide-gray-700/50">
+          <div className="divide-y divide-gray-50 dark:divide-slate-700/50">
             {CHECKLIST.filter(c => c.category === cat).map(item => {
               const isChecked = checked.has(item.id)
               return (
                 <label
                   key={item.id}
                   className={`flex items-start gap-3 px-4 py-3 cursor-pointer transition-colors ${
-                    isChecked ? 'bg-green-50/50 dark:bg-green-950/10' : 'hover:bg-gray-50 dark:hover:bg-gray-700'
+                    isChecked ? 'bg-green-50/50 dark:bg-green-950/10' : 'hover:bg-gray-50 dark:hover:bg-slate-700'
                   } ${!isMaster ? 'cursor-default' : ''}`}
                 >
                   <input
@@ -382,7 +382,7 @@ export default function PolicyCTab({ investments, loans, isMaster }: Props) {
   return (
     <div className="space-y-4">
       {/* 서브 탭 */}
-      <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 rounded-xl p-1 w-fit">
+      <div className="flex gap-1 bg-gray-100 dark:bg-slate-800 rounded-xl p-1 w-fit">
         {([
           { key: 'ladder',    label: '📊 만기 래더링' },
           { key: 'checklist', label: '☑️ 상품 적정성' },
@@ -390,8 +390,8 @@ export default function PolicyCTab({ investments, loans, isMaster }: Props) {
           <button key={t.key} onClick={() => setView(t.key)}
             className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
               view === t.key
-                ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                ? 'bg-white dark:bg-slate-700 text-gray-900 dark:text-white shadow-sm'
+                : 'text-gray-500 dark:text-slate-300 hover:text-gray-700 dark:hover:text-gray-200'
             }`}>
             {t.label}
           </button>
@@ -399,7 +399,7 @@ export default function PolicyCTab({ investments, loans, isMaster }: Props) {
       </div>
 
       {view === 'ladder' && (
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
+        <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-5">
           <MaturityLadder investments={investments} loans={loans} />
         </div>
       )}
@@ -409,3 +409,4 @@ export default function PolicyCTab({ investments, loans, isMaster }: Props) {
     </div>
   )
 }
+

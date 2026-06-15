@@ -1,4 +1,4 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useStockTicker } from '../hooks/useStockTicker'
@@ -25,7 +25,7 @@ function isMarketHours(): boolean {
 }
 
 function Divider() {
-  return <span className="w-px h-4 bg-gray-200 dark:bg-gray-700 shrink-0" />
+  return <span className="w-px h-4 bg-gray-200 dark:bg-slate-700 shrink-0" />
 }
 
 /** 아이콘+툴팁 버튼 (소형 화면) */
@@ -37,7 +37,7 @@ function IconBtn({
       onClick={onClick}
       title={label}
       aria-label={label}
-      className={`relative group flex items-center justify-center w-8 h-8 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-sm ${className}`}
+      className={`relative group flex items-center justify-center w-8 h-8 rounded-lg text-gray-500 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors text-sm ${className}`}
     >
       {icon}
       {/* 툴팁 */}
@@ -75,13 +75,13 @@ export default function TopBar({ onMenuClick }: Props) {
   }
 
   return (
-    <header className="h-14 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 px-3 flex items-center gap-2 shrink-0 z-10 overflow-hidden">
+    <header className="h-14 bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-700 px-3 flex items-center gap-2 shrink-0 z-10 overflow-hidden">
 
       {/* ── 좌측: 햄버거 + 법인 선택 ──────────────────────── */}
       <div className="flex items-center gap-2 shrink-0">
         <button
           onClick={onMenuClick}
-          className="md:hidden p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
+          className="md:hidden p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-800"
           aria-label="메뉴"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -93,7 +93,7 @@ export default function TopBar({ onMenuClick }: Props) {
           <select
             value={currentCompany ?? ''}
             onChange={e => setCurrentCompany(e.target.value as Company)}
-            className="border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-1.5 text-sm bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-400 max-w-[9rem] sm:max-w-none"
+            className="border border-gray-300 dark:border-slate-600 rounded-lg px-2 py-1.5 text-sm bg-white dark:bg-slate-800 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-400 max-w-[9rem] sm:max-w-none"
           >
             {companyNames.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
@@ -118,7 +118,7 @@ export default function TopBar({ onMenuClick }: Props) {
                   return (
                     <span key={`${pass}-${t.code}`} className="flex items-center gap-1 shrink-0 whitespace-nowrap">
                       {idx > 0 && <span className="text-gray-300 dark:text-gray-600 mx-1">·</span>}
-                      <span className="text-xs text-gray-500 dark:text-gray-400">{t.shortName}</span>
+                      <span className="text-xs text-gray-500 dark:text-slate-300">{t.shortName}</span>
                       <span className="text-xs font-semibold text-gray-800 dark:text-gray-100 tabular-nums">{t.price.toLocaleString()}원</span>
                       <span className={`text-xs tabular-nums font-medium ${col}`}>
                         {up ? '▲' : dn ? '▼' : '─'}{Math.abs(pct).toFixed(2)}%
@@ -133,8 +133,8 @@ export default function TopBar({ onMenuClick }: Props) {
         )}
         {loading && !hasPrices && (
           <div className="flex items-center gap-2 animate-pulse px-2 h-full">
-            <div className="h-3 w-24 bg-gray-200 dark:bg-gray-700 rounded" />
-            <div className="h-3 w-20 bg-gray-200 dark:bg-gray-700 rounded" />
+            <div className="h-3 w-24 bg-gray-200 dark:bg-slate-700 rounded" />
+            <div className="h-3 w-20 bg-gray-200 dark:bg-slate-700 rounded" />
           </div>
         )}
       </div>
@@ -143,14 +143,14 @@ export default function TopBar({ onMenuClick }: Props) {
       <div className="flex items-center gap-1.5 shrink-0">
 
         {/* ── 날짜 · 갱신 시각: lg 이상만 텍스트 표시 ── */}
-        <span className="hidden lg:inline text-xs text-gray-500 dark:text-gray-400 tabular-nums">{today}</span>
-        <span className="hidden lg:block w-px h-4 bg-gray-200 dark:bg-gray-700" />
+        <span className="hidden lg:inline text-xs text-gray-500 dark:text-slate-300 tabular-nums">{today}</span>
+        <span className="hidden lg:block w-px h-4 bg-gray-200 dark:bg-slate-700" />
 
-        <span className="hidden md:flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
+        <span className="hidden md:flex items-center gap-1 text-xs text-gray-500 dark:text-slate-300">
           <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${marketOn ? 'bg-emerald-400 animate-pulse' : 'bg-gray-300 dark:bg-gray-600'}`} />
           <span className="hidden lg:inline">다음 </span>{getNextRefresh()}
         </span>
-        <span className="hidden md:block w-px h-4 bg-gray-200 dark:bg-gray-700" />
+        <span className="hidden md:block w-px h-4 bg-gray-200 dark:bg-slate-700" />
 
         {/* 역할 배지 */}
         <span className={`text-xs font-semibold px-2 py-0.5 rounded-full leading-none shrink-0 ${roleBadge[user?.role ?? 'company'] ?? ''}`}>
@@ -164,7 +164,7 @@ export default function TopBar({ onMenuClick }: Props) {
           {/* lg 이상: 텍스트 */}
           <button
             onClick={() => navigate('/fx')}
-            className="hidden lg:flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors px-1.5 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
+            className="hidden lg:flex items-center gap-1 text-xs text-gray-500 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors px-1.5 py-1 rounded hover:bg-gray-100 dark:hover:bg-slate-800"
             title="환율 현황"
           >
             <span>↺</span><span>환율</span>
@@ -179,7 +179,7 @@ export default function TopBar({ onMenuClick }: Props) {
         {/* lg 이상: 풀 토글 pill */}
         <button
           onClick={toggleDark}
-          className="hidden lg:flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+          className="hidden lg:flex items-center gap-1.5 text-xs text-gray-500 dark:text-slate-300 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
           aria-label="테마 전환"
           title="테마 전환"
         >
@@ -204,7 +204,7 @@ export default function TopBar({ onMenuClick }: Props) {
           <>
             <button
               onClick={() => navigate('/admin/users')}
-              className="hidden lg:flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors px-1.5 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
+              className="hidden lg:flex items-center gap-1 text-xs text-gray-500 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors px-1.5 py-1 rounded hover:bg-gray-100 dark:hover:bg-slate-800"
               title="코드 관리"
             >
               <span>⚙</span><span>코드 관리</span>
@@ -244,3 +244,4 @@ export default function TopBar({ onMenuClick }: Props) {
     </header>
   )
 }
+

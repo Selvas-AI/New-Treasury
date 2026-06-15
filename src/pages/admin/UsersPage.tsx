@@ -1,4 +1,4 @@
-/**
+﻿/**
  * UsersPage — treasury_users 관리 (master 전용)
  *
  * 사용자 생성 흐름:
@@ -70,7 +70,7 @@ const ROLE_BADGE: Record<string, string> = {
   master:  'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
   admin:   'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
   editor:  'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
-  viewer:  'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400',
+  viewer:  'bg-gray-100 text-gray-600 dark:bg-slate-700 dark:text-slate-300',
   ceo:     'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
   company: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
 }
@@ -241,7 +241,7 @@ export default function UsersPage() {
     void load()
   }
 
-  const inputCls = 'w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-400'
+  const inputCls = 'w-full border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-700 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-400'
 
   return (
     <div className="space-y-5 max-w-5xl mx-auto">
@@ -270,7 +270,7 @@ export default function UsersPage() {
       {/* 등록/수정 폼 */}
       {showForm && (
         <form onSubmit={handleSubmit}
-          className="bg-white dark:bg-gray-800 rounded-xl shadow border border-gray-100 dark:border-gray-700 p-6 space-y-5">
+          className="bg-white dark:bg-slate-800 rounded-xl shadow border border-gray-100 dark:border-slate-700 p-6 space-y-5">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">
               {editId ? '✏️ 사용자 수정' : '+ 사용자 추가'}
@@ -282,7 +282,7 @@ export default function UsersPage() {
           {/* 기본 정보 */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="md:col-span-2">
-              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">이메일 <span className="text-red-400">*</span></label>
+              <label className="block text-xs text-gray-500 dark:text-slate-300 mb-1">이메일 <span className="text-red-400">*</span></label>
               <input type="email" value={form.email}
                 onChange={e => setF('email', e.target.value)}
                 placeholder="name@selvas.com" disabled={!!editId}
@@ -290,7 +290,7 @@ export default function UsersPage() {
               {!editId && <p className="text-[10px] text-gray-400 mt-1">이 이메일로 최초 계정 설정이 가능합니다.</p>}
             </div>
             <div>
-              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">표시 이름 <span className="text-red-400">*</span></label>
+              <label className="block text-xs text-gray-500 dark:text-slate-300 mb-1">표시 이름 <span className="text-red-400">*</span></label>
               <div className="flex gap-1.5">
                 <input type="text" value={form.name}
                   onChange={e => setF('name', e.target.value)}
@@ -298,7 +298,7 @@ export default function UsersPage() {
               </div>
             </div>
             <div>
-              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
+              <label className="block text-xs text-gray-500 dark:text-slate-300 mb-1">
                 사용자 코드 <span className="text-red-400">*</span>
                 <span className="text-gray-400 font-normal ml-1">(감사추적용)</span>
               </label>
@@ -309,7 +309,7 @@ export default function UsersPage() {
                   className={inputCls + ' font-mono uppercase'} />
                 <button type="button"
                   onClick={() => setF('user_code', genCode(form.name))}
-                  className="shrink-0 text-xs px-2 py-1.5 bg-gray-100 dark:bg-gray-700 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600 whitespace-nowrap">
+                  className="shrink-0 text-xs px-2 py-1.5 bg-gray-100 dark:bg-slate-700 rounded-lg text-gray-500 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-gray-600 whitespace-nowrap">
                   자동
                 </button>
               </div>
@@ -318,20 +318,20 @@ export default function UsersPage() {
 
           {/* 역할 */}
           <div>
-            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-2">역할 <span className="text-red-400">*</span></label>
+            <label className="block text-xs text-gray-500 dark:text-slate-300 mb-2">역할 <span className="text-red-400">*</span></label>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
               {ROLES.map(r => (
                 <label key={r.value}
-                  className={`group relative flex flex-col gap-1 p-3 rounded-lg border-2 cursor-pointer transition-colors ${form.role === r.value ? 'border-blue-400 bg-blue-50 dark:bg-blue-900/20' : 'border-gray-200 dark:border-gray-600 hover:border-blue-200 dark:hover:border-blue-700'}`}>
+                  className={`group relative flex flex-col gap-1 p-3 rounded-lg border-2 cursor-pointer transition-colors ${form.role === r.value ? 'border-blue-400 bg-blue-50 dark:bg-blue-900/20' : 'border-gray-200 dark:border-slate-600 hover:border-blue-200 dark:hover:border-blue-700'}`}>
                   <input type="radio" name="role" value={r.value} checked={form.role === r.value}
                     onChange={() => setF('role', r.value)} className="sr-only" />
                   <div className="flex items-center justify-between gap-1">
                     <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${ROLE_BADGE[r.value]}`}>{r.label}</span>
                     <span className="text-[10px] text-gray-400 dark:text-gray-500 select-none">ℹ</span>
                   </div>
-                  <span className="text-[10px] text-gray-500 dark:text-gray-400 leading-snug">{r.desc}</span>
+                  <span className="text-[10px] text-gray-500 dark:text-slate-300 leading-snug">{r.desc}</span>
                   {/* 호버 시 상세 권한 툴팁 */}
-                  <div className="absolute bottom-full left-0 mb-2 z-20 hidden group-hover:block w-56 bg-gray-900 dark:bg-gray-950 text-white rounded-lg shadow-xl p-3 pointer-events-none">
+                  <div className="absolute bottom-full left-0 mb-2 z-20 hidden group-hover:block w-56 bg-gray-900 dark:bg-slate-950 text-white rounded-lg shadow-xl p-3 pointer-events-none">
                     <p className="text-[11px] font-semibold mb-1.5 text-gray-200">{r.label} 권한 상세</p>
                     <ul className="space-y-1">
                       {r.permissions.map((p, i) => (
@@ -348,7 +348,7 @@ export default function UsersPage() {
 
           {/* 법인 접근 */}
           <div>
-            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-2">
+            <label className="block text-xs text-gray-500 dark:text-slate-300 mb-2">
               접근 허용 법인
               {(form.role === 'master' || form.role === 'admin') && form.companies.length === 0
                 ? <span className="ml-2 text-blue-500 font-normal">전체 허용 (빈 선택)</span>
@@ -357,7 +357,7 @@ export default function UsersPage() {
             <div className="flex gap-2 flex-wrap">
               {companyNames.map(c => (
                 <label key={c}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border cursor-pointer text-xs transition-colors ${form.companies.includes(c) ? 'border-blue-400 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300' : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-blue-200'}`}>
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border cursor-pointer text-xs transition-colors ${form.companies.includes(c) ? 'border-blue-400 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300' : 'border-gray-200 dark:border-slate-600 text-gray-600 dark:text-slate-300 hover:border-blue-200'}`}>
                   <input type="checkbox" checked={form.companies.includes(c)}
                     onChange={() => toggleCompany(c)} className="sr-only" />
                   {form.companies.includes(c) ? '✓ ' : ''}{c}
@@ -371,7 +371,7 @@ export default function UsersPage() {
 
           {/* 세분화 권한 */}
           <div>
-            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-2">추가 권한</label>
+            <label className="block text-xs text-gray-500 dark:text-slate-300 mb-2">추가 권한</label>
             <div className="flex flex-wrap gap-3">
               {[
                 { key: 'can_delete',  label: '데이터 삭제 허용' },
@@ -383,7 +383,7 @@ export default function UsersPage() {
                     checked={form[key as keyof typeof form] as boolean}
                     onChange={e => setF(key as keyof typeof form, e.target.checked as never)}
                     className="w-4 h-4 accent-blue-600" />
-                  <span className="text-sm text-gray-700 dark:text-gray-300">{label}</span>
+                  <span className="text-sm text-gray-700 dark:text-slate-100">{label}</span>
                 </label>
               ))}
             </div>
@@ -395,13 +395,13 @@ export default function UsersPage() {
               <input type="checkbox" checked={customMenu}
                 onChange={e => { setCustomMenu(e.target.checked); if (!e.target.checked) setF('menus', null) }}
                 className="w-4 h-4 accent-blue-600" />
-              <span className="text-xs text-gray-500 dark:text-gray-400">메뉴 접근 커스텀 설정 (미선택 시 역할 기본값 적용)</span>
+              <span className="text-xs text-gray-500 dark:text-slate-300">메뉴 접근 커스텀 설정 (미선택 시 역할 기본값 적용)</span>
             </label>
             {customMenu && (
               <div className="flex flex-wrap gap-2 pl-6">
                 {MENU_SLUGS.map(m => (
                   <label key={m.slug}
-                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border cursor-pointer text-xs transition-colors ${(form.menus ?? []).includes(m.slug) ? 'border-indigo-400 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300' : 'border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400'}`}>
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border cursor-pointer text-xs transition-colors ${(form.menus ?? []).includes(m.slug) ? 'border-indigo-400 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300' : 'border-gray-200 dark:border-slate-600 text-gray-500 dark:text-slate-300'}`}>
                     <input type="checkbox"
                       checked={(form.menus ?? []).includes(m.slug)}
                       onChange={() => toggleMenu(m.slug)} className="sr-only" />
@@ -422,7 +422,7 @@ export default function UsersPage() {
       )}
 
       {/* 사용자 목록 */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow border border-gray-100 dark:border-gray-700 overflow-hidden">
+      <div className="bg-white dark:bg-slate-800 rounded-xl shadow border border-gray-100 dark:border-slate-700 overflow-hidden">
         {loading ? (
           <p className="text-sm text-gray-400 text-center py-10 animate-pulse">로딩 중…</p>
         ) : rows.length === 0 ? (
@@ -431,7 +431,7 @@ export default function UsersPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+                <tr className="border-b border-gray-100 dark:border-slate-700 bg-gray-50 dark:bg-slate-800">
                   {['이름', '이메일', '코드', '역할', '법인', '권한', '상태', ''].map(h => (
                     <th key={h} className="text-left text-xs text-gray-400 dark:text-gray-500 font-semibold px-4 py-3 whitespace-nowrap">{h}</th>
                   ))}
@@ -440,19 +440,19 @@ export default function UsersPage() {
               <tbody>
                 {rows.map(row => (
                   <tr key={row.id}
-                    className={`border-b border-gray-50 dark:border-gray-700 hover:bg-gray-50/50 dark:hover:bg-gray-700/30 transition-colors ${!row.is_active ? 'opacity-50' : ''}`}>
+                    className={`border-b border-gray-50 dark:border-slate-700 hover:bg-gray-50/50 dark:hover:bg-gray-700/30 transition-colors ${!row.is_active ? 'opacity-50' : ''}`}>
                     <td className="px-4 py-3 font-medium text-gray-800 dark:text-gray-100 whitespace-nowrap">
                       {row.name}
                       {row.id === user?.sb_id && <span className="ml-1.5 text-[10px] text-blue-500">(나)</span>}
                     </td>
-                    <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs">{row.email}</td>
+                    <td className="px-4 py-3 text-gray-500 dark:text-slate-300 text-xs">{row.email}</td>
                     <td className="px-4 py-3 font-mono text-xs text-gray-400 dark:text-gray-500">{row.user_code}</td>
                     <td className="px-4 py-3">
                       <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${ROLE_BADGE[row.role]}`}>
                         {ROLES.find(r => r.value === row.role)?.label ?? row.role}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400">
+                    <td className="px-4 py-3 text-xs text-gray-500 dark:text-slate-300">
                       {row.companies?.length
                         ? row.companies.map(c => shortName(c)).join('·')
                         : <span className="text-blue-400">전체</span>}
@@ -465,7 +465,7 @@ export default function UsersPage() {
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${row.is_active ? 'bg-green-50 text-green-600 dark:text-emerald-400' : 'bg-gray-100 text-gray-400 dark:bg-gray-700 dark:text-gray-600'}`}>
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${row.is_active ? 'bg-green-50 text-green-600 dark:text-emerald-400' : 'bg-gray-100 text-gray-400 dark:bg-slate-700 dark:text-gray-600'}`}>
                         {row.is_active ? '활성' : '비활성'}
                       </span>
                     </td>
@@ -501,3 +501,4 @@ export default function UsersPage() {
     </div>
   )
 }
+

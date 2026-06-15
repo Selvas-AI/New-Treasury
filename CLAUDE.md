@@ -1,6 +1,6 @@
 # CLAUDE.md — Selvas Treasury (New-Treasury)
 > 신규 세션 시작 시 이 파일을 먼저 읽어 컨텍스트를 복원하세요.
-> 최종 업데이트: 2026-06-12 (세션9차 — 접근성 점검 + TopBar 티커 + 동적 회사 관리)
+> 최종 업데이트: 2026-06-15 (세션10차 — 다크모드 B안 팔레트 + 로그인 hang 근본 해결)
 
 ---
 
@@ -652,6 +652,40 @@ VITE_GAS_API_URL=https://script.google.com/macros/s/AKfycbwZ.../exec
 - **전 페이지 하드코딩 제거**: Dashboard/Input/Invest/Loans/Equity/History/DailyReport(List)/DataPage/OrgChart 의 `VALID_COMPANIES`/`COMPANIES` → `getCompanyNames()`·`useCompanies().names`
   - master/admin은 `hasCompanyCheck`(빈 companies=전체)로 신규 법인 자동 접근, editor/viewer는 사용자 관리에서 법인 지정
 - **[CRITICAL] hang 수정**: `fetchWithTimeout` 12s abort 시 supabase 호출이 reject → `load()`/회사추가 핸들러에 **try/catch/finally** 필수 (없으면 `setLoading(false)` 미실행 → 무한 로딩/"추가 중" 멈춤). companies 테이블 미생성이 직접 원인이었음
+
+---
+
+### 2026-06-15 세션 10차 (다크모드 B안 팔레트 + 로그인 hang 근본 해결)
+
+#### 다크모드 B안 (블루-다크 재무 팔레트) 전면 적용 ⭐
+- **배경**: `gray-*` → `slate-*` (파란 틴트, 재무 앱 분위기)
+  - body dark background: `#111827` → `#0f172a` (`src/index.css`)
+  - `dark:bg-gray-950/900/800/700` → `dark:bg-slate-950/900/800/700`
+- **텍스트 대폭 밝아짐** (WCAG 대비 향상):
+  - `dark:text-gray-300` → `dark:text-slate-100` (primary 텍스트, `#d1d5db` → `#f1f5f9`)
+  - `dark:text-gray-400` → `dark:text-slate-300` (secondary 텍스트)
+  - `dark:body color`: `#f9fafb` → `#f1f5f9`
+- **테이블 헤더 blue accent**: `NotionTable.tsx` th `dark:text-slate-300` → `dark:text-sky-300`
+- **보더**: `dark:border/divide-gray-700/600` → `dark:border/divide-slate-700/600`
+- **누락 dark: 수정**: `tabular-nums text-gray-600` → `dark:text-slate-100` (EquityHistoryPanel, BondHistoryPanel, DataPage), Sidebar 환율 섹션, DataPage 섹션 헤더
+- 영향 파일: 45개 tsx/ts + index.css (PowerShell 일괄 치환)
+
+#### 다크모드 누락 패널 수정
+- `EquityHistoryPanel.tsx`, `BondHistoryPanel.tsx` — form/input/select/label 전체 `dark:` 추가
+- `NewEquityForm.tsx`, `NewBondForm.tsx` — 후보 드롭다운, 재조회 버튼 `dark:` 추가
+
+#### TopBar `?` 도움말 툴팁 클리핑 수정
+- 커스텀 `<span>` 툴팁 (overflow:hidden 헤더 안에서 잘림) → `title="도움말"` native 속성으로 교체
+
+#### 로그인/네비 "로딩 중..." 영구 hang 근본 해결 (D안)
+- **D안 3겹 방어**:
+  1. `fetchWithTimeout` 5s — 네트워크 레이어
+  2. `withTimeout(6s)` — `loadProfile()` 포함 모든 supabase Promise 감싸기 (wedge 상태 차단)
+  3. `resetSupabaseClient()` — 타임아웃/오류 감지 시 클라이언트 재생성 후 1회 재시도
+  4. `hardTimeout(8s)` — AuthContext loading 안전장치
+  5. Global Watchdog (Layout.tsx) — 8s 무상호작용 감지 → 10초 카운트다운 오버레이 → 자동 새로고침
+- **핵심 수정**: `supabase.ts` — `export let supabase = makeClient()` + `resetSupabaseClient()` 함수
+- **ES 모듈 live binding** — 재생성 즉시 모든 import 위치가 새 클라이언트 참조
 
 ---
 

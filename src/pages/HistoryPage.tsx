@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+﻿import { useState, useEffect, useMemo } from 'react'
 import { useParams } from 'react-router-dom'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
@@ -135,26 +135,26 @@ export default function HistoryPage() {
         <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100">자금 변동 이력</h2>
         <div className="flex items-center gap-2">
           {/* 기간 탭 */}
-          <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
+          <div className="flex gap-1 bg-gray-100 dark:bg-slate-800 rounded-lg p-1">
             {PERIODS.map(p => (
               <button key={p.value} onClick={() => setPeriod(p.value)}
                 className={`text-xs px-3 py-1.5 rounded-md transition-colors ${
                   period === p.value
-                    ? 'bg-white dark:bg-gray-700 text-blue-700 font-semibold shadow-sm'
-                    : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+                    ? 'bg-white dark:bg-slate-700 text-blue-700 font-semibold shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700 dark:text-slate-300 dark:hover:text-gray-200'
                 }`}>
                 {p.label}
               </button>
             ))}
           </div>
           {/* 보기 전환 */}
-          <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
+          <div className="flex gap-1 bg-gray-100 dark:bg-slate-800 rounded-lg p-1">
             {(['table', 'chart'] as const).map(v => (
               <button key={v} onClick={() => setView(v)}
                 className={`text-xs px-3 py-1.5 rounded-md transition-colors ${
                   view === v
-                    ? 'bg-white dark:bg-gray-700 text-blue-700 font-semibold shadow-sm'
-                    : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+                    ? 'bg-white dark:bg-slate-700 text-blue-700 font-semibold shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700 dark:text-slate-300 dark:hover:text-gray-200'
                 }`}>
                 {v === 'table' ? '📋 표' : '📈 차트'}
               </button>
@@ -180,9 +180,9 @@ export default function HistoryPage() {
             <p className="text-lg font-bold text-red-800 dark:text-red-300">{fmtKRW(latest.loan)}</p>
           </div>
           <div className={`border rounded-xl p-4 ${latest.net >= 0
-            ? 'bg-gray-50 border-gray-200 dark:bg-gray-800 dark:border-gray-700'
+            ? 'bg-gray-50 border-gray-200 dark:bg-slate-800 dark:border-slate-700'
             : 'bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-800'}`}>
-            <p className={`text-xs font-medium mb-1 ${latest.net >= 0 ? 'text-gray-600 dark:text-gray-300' : 'text-red-600 dark:text-red-400'}`}>
+            <p className={`text-xs font-medium mb-1 ${latest.net >= 0 ? 'text-gray-600 dark:text-slate-100' : 'text-red-600 dark:text-red-400'}`}>
               순현금 포지션
             </p>
             <p className={`text-lg font-bold ${latest.net >= 0 ? 'text-gray-800 dark:text-gray-100' : 'text-red-800 dark:text-red-300'}`}>
@@ -196,19 +196,19 @@ export default function HistoryPage() {
       )}
 
       {loading ? (
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow p-8 text-center text-sm text-gray-400 dark:text-gray-500">
+        <div className="bg-white dark:bg-slate-800 rounded-xl shadow p-8 text-center text-sm text-gray-400 dark:text-gray-500">
           로딩 중...
         </div>
       ) : rows.length === 0 ? (
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow p-8 text-center text-sm text-gray-400 dark:text-gray-500">
+        <div className="bg-white dark:bg-slate-800 rounded-xl shadow p-8 text-center text-sm text-gray-400 dark:text-gray-500">
           해당 기간에 데이터가 없습니다.
         </div>
       ) : (
         <>
           {/* 차트 뷰 */}
           {view === 'chart' && (
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow p-5">
-              <h3 className="text-sm font-semibold text-gray-600 dark:text-gray-300 mb-4">
+            <div className="bg-white dark:bg-slate-800 rounded-xl shadow p-5">
+              <h3 className="text-sm font-semibold text-gray-600 dark:text-slate-100 mb-4">
                 현금흐름 추이 ({rows[0]?.date} ~ {rows[rows.length - 1]?.date})
               </h3>
               <ResponsiveContainer width="100%" height={280}>
@@ -255,11 +255,11 @@ export default function HistoryPage() {
 
           {/* 표 뷰 */}
           {view === 'table' && (
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow">
+            <div className="bg-white dark:bg-slate-800 rounded-xl shadow">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-gray-100 dark:border-gray-700">
+                    <tr className="border-b border-gray-100 dark:border-slate-700">
                       {['기준일', '운전자금', '운용자금', '차입금', '순현금 포지션', '전일 대비', '작성자'].map(h => (
                         <th key={h}
                           className="text-left text-xs text-gray-400 dark:text-gray-500 font-medium px-5 py-3 whitespace-nowrap first:pl-5">
@@ -273,7 +273,7 @@ export default function HistoryPage() {
                       const prev = arr[i + 1]
                       const diff = prev ? row.net - prev.net : null
                       return (
-                        <tr key={row.date} className="border-b border-gray-50 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700">
+                        <tr key={row.date} className="border-b border-gray-50 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700">
                           <td className="px-5 py-3 font-medium text-gray-800 dark:text-gray-100 whitespace-nowrap">
                             {row.date}
                           </td>
@@ -316,3 +316,4 @@ export default function HistoryPage() {
     </div>
   )
 }
+

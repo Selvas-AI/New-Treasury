@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+﻿import { useState, useEffect } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { supabase } from '../../lib/supabase'
@@ -95,7 +95,7 @@ export default function DataPage() {
 
       {/* 테이블별 데이터 현황 */}
       <div className="bg-white rounded-xl shadow p-5">
-        <h3 className="text-sm font-semibold text-gray-600 mb-4">테이블별 레코드 현황</h3>
+        <h3 className="text-sm font-semibold text-gray-600 dark:text-slate-300 mb-4">테이블별 레코드 현황</h3>
         {loading ? (
           <p className="text-sm text-gray-400 text-center py-6">집계 중...</p>
         ) : (
@@ -115,7 +115,7 @@ export default function DataPage() {
                   <tr key={s.table} className="border-b border-gray-50 hover:bg-gray-50">
                     <td className="py-2.5 pr-6 text-gray-700">{s.label}</td>
                     {s.companies.map(c => (
-                      <td key={c.company} className="py-2.5 pr-4 text-right tabular-nums text-gray-600">
+                      <td key={c.company} className="py-2.5 pr-4 text-right tabular-nums text-gray-600 dark:text-slate-100">
                         {c.count.toLocaleString()}
                       </td>
                     ))}
@@ -132,7 +132,7 @@ export default function DataPage() {
 
       {/* 데이터 정리 */}
       <div className="bg-white rounded-xl shadow p-5">
-        <h3 className="text-sm font-semibold text-gray-600 mb-1">데이터 정리</h3>
+        <h3 className="text-sm font-semibold text-gray-600 dark:text-slate-300 mb-1">데이터 정리</h3>
         <p className="text-xs text-gray-400 mb-4">특정 날짜 이전의 데이터를 일괄 삭제합니다. 복구 불가능하므로 신중히 사용하세요.</p>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
@@ -182,7 +182,7 @@ export default function DataPage() {
 
       {/* Supabase 대시보드 링크 */}
       <div className="bg-gray-50 border border-gray-200 rounded-xl p-5">
-        <h3 className="text-sm font-semibold text-gray-600 mb-3">외부 관리 도구</h3>
+        <h3 className="text-sm font-semibold text-gray-600 dark:text-slate-300 mb-3">외부 관리 도구</h3>
         <div className="flex flex-wrap gap-3">
           <a href="https://supabase.com/dashboard/project/qobfmihxcclbzfaohnor"
             target="_blank" rel="noreferrer"
@@ -191,7 +191,7 @@ export default function DataPage() {
           </a>
           <a href="https://github.com/Selvas-AI/New-Treasury"
             target="_blank" rel="noreferrer"
-            className="text-sm text-gray-600 hover:text-gray-800 border border-gray-200 px-3 py-2 rounded-lg bg-white hover:bg-gray-50 transition-colors">
+            className="text-sm text-gray-600 dark:text-slate-300 hover:text-gray-800 dark:hover:text-slate-100 border border-gray-200 dark:border-slate-600 px-3 py-2 rounded-lg bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors">
             🔗 GitHub 레포지토리
           </a>
         </div>
@@ -199,3 +199,5 @@ export default function DataPage() {
     </div>
   )
 }
+
+

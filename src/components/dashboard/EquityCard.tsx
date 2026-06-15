@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+﻿import { useState, useMemo } from 'react'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer,
@@ -114,17 +114,17 @@ export default function EquityCard({
     : { borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 10, padding: '4px 8px' }
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl shadow p-5">
+    <div className="bg-white dark:bg-slate-800 rounded-xl shadow p-5">
 
       {/* 헤더 */}
       <div className="flex items-center justify-between mb-3 gap-2">
-        <h3 className="text-sm font-semibold text-gray-600 dark:text-gray-300">지분/장기투자</h3>
+        <h3 className="text-sm font-semibold text-gray-600 dark:text-slate-100">지분/장기투자</h3>
         <div className="flex items-center gap-2">
           <span className="text-sm font-bold text-gray-800 dark:text-gray-100">{fmtKRW(totalValue)}</span>
           {!isAll && (
             <button
               onClick={() => setSelected(new Set())}
-              className="text-[10px] text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded-full leading-none"
+              className="text-[10px] text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 bg-gray-100 dark:bg-slate-700 px-2 py-0.5 rounded-full leading-none"
               title="전체 종목으로 돌아가기"
             >
               ✕ 전체
@@ -142,7 +142,7 @@ export default function EquityCard({
           return (
             <div key={eq.name}
               onClick={e => handleItemClick(eq.name, e)}
-              className={`flex items-center justify-between py-1.5 border-b border-gray-50 dark:border-gray-700/60 last:border-0 rounded px-1 cursor-pointer select-none transition-colors ${
+              className={`flex items-center justify-between py-1.5 border-b border-gray-50 dark:border-slate-700/60 last:border-0 rounded px-1 cursor-pointer select-none transition-colors ${
                 isSelected
                   ? 'bg-pink-50 dark:bg-pink-900/20 ring-1 ring-inset ring-pink-200 dark:ring-pink-700'
                   : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'
@@ -151,7 +151,7 @@ export default function EquityCard({
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5">
                   <span className="text-xs font-medium text-gray-800 dark:text-gray-100 truncate">{eq.name}</span>
-                  <span className="text-[10px] text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-700 px-1.5 rounded shrink-0">{eq.market}</span>
+                  <span className="text-[10px] text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-slate-700 px-1.5 rounded shrink-0">{eq.market}</span>
                   {isSelected && <span className="text-[9px] text-pink-500 font-bold shrink-0">▶ 차트</span>}
                 </div>
                 <p className="text-[10px] text-gray-400 dark:text-gray-500">{eq.price.toLocaleString()}원 · {eq.date}</p>
@@ -171,9 +171,9 @@ export default function EquityCard({
         {/* 구분선 — 지분과 국채 모두 있을 때 */}
         {equities.length > 0 && hasBonds && (
           <div className="flex items-center gap-1.5 py-1 px-1">
-            <div className="flex-1 h-px bg-gray-100 dark:bg-gray-700" />
+            <div className="flex-1 h-px bg-gray-100 dark:bg-slate-700" />
             <span className="text-[10px] text-gray-400 dark:text-gray-500 font-medium shrink-0">국채/채권</span>
-            <div className="flex-1 h-px bg-gray-100 dark:bg-gray-700" />
+            <div className="flex-1 h-px bg-gray-100 dark:bg-slate-700" />
           </div>
         )}
 
@@ -185,7 +185,7 @@ export default function EquityCard({
           return (
             <div key={b.isin}
               onClick={e => handleItemClick(bKey, e)}
-              className={`flex items-center justify-between py-1.5 border-b border-gray-50 dark:border-gray-700/60 last:border-0 rounded px-1 cursor-pointer select-none transition-colors ${
+              className={`flex items-center justify-between py-1.5 border-b border-gray-50 dark:border-slate-700/60 last:border-0 rounded px-1 cursor-pointer select-none transition-colors ${
                 isSelected
                   ? 'bg-blue-50 dark:bg-blue-900/20 ring-1 ring-inset ring-blue-200 dark:ring-blue-700'
                   : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'
@@ -236,7 +236,7 @@ export default function EquityCard({
                 className={`text-xs px-2 py-0.5 rounded transition-colors ${
                   chartPeriod === p.value
                     ? (isBondOnly ? 'bg-blue-500 text-white' : 'bg-pink-500 text-white')
-                    : 'text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'
+                    : 'text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-slate-700'
                 }`}
               >
                 {p.label}
@@ -303,3 +303,4 @@ export default function EquityCard({
     </div>
   )
 }
+

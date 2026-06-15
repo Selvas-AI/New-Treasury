@@ -1,4 +1,4 @@
-/**
+﻿/**
  * ThreadPopup — 기타 입출금 항목 사유 스레드 팝업
  *
  * other_in / other_out 카테고리 선택 시 💬 버튼 클릭하면 오픈.
@@ -73,12 +73,12 @@ export default function ThreadPopup({
       {/* 팝업 */}
       <div
         className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50
-                   w-full max-w-sm bg-white dark:bg-gray-800 rounded-2xl shadow-2xl
-                   border border-gray-100 dark:border-gray-700 flex flex-col"
+                   w-full max-w-sm bg-white dark:bg-slate-800 rounded-2xl shadow-2xl
+                   border border-gray-100 dark:border-slate-700 flex flex-col"
         style={{ animation: 'fadeInScale 0.16s ease-out both' }}
       >
         {/* 헤더 */}
-        <div className={`px-5 py-3 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between rounded-t-2xl ${colorCls}`}>
+        <div className={`px-5 py-3 border-b border-gray-100 dark:border-slate-700 flex items-center justify-between rounded-t-2xl ${colorCls}`}>
           <div className="flex items-center gap-2">
             <span>{direction === 'in' ? '💬 입금 사유' : '💬 출금 사유'}</span>
             <span className="text-xs text-gray-400 dark:text-gray-500">기타 항목 메모</span>
@@ -98,7 +98,7 @@ export default function ThreadPopup({
             onChange={e => onUpdateMemo(e.target.value)}
             disabled={isReadOnly}
             placeholder="간단한 메모를 입력하세요"
-            className="mt-1 w-full text-sm px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:bg-gray-50 dark:disabled:bg-gray-700/50"
+            className="mt-1 w-full text-sm px-3 py-2 rounded-lg border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:bg-gray-50 dark:disabled:bg-gray-700/50"
           />
         </div>
 
@@ -110,21 +110,21 @@ export default function ThreadPopup({
           {threads.map(t => (
             <div key={t.id} className="bg-gray-50 dark:bg-gray-700/50 rounded-lg px-3 py-2">
               <div className="flex items-center gap-2 mb-1">
-                <span className="text-[11px] font-semibold text-gray-600 dark:text-gray-300">
+                <span className="text-[11px] font-semibold text-gray-600 dark:text-slate-100">
                   {t.author_label ?? t.author_code}
                 </span>
                 <span className="text-[10px] text-gray-400 dark:text-gray-500 ml-auto">
                   {fmtDateTime(t.created_at)}
                 </span>
               </div>
-              <p className="text-xs text-gray-600 dark:text-gray-400 whitespace-pre-wrap">{t.body}</p>
+              <p className="text-xs text-gray-600 dark:text-slate-300 whitespace-pre-wrap">{t.body}</p>
             </div>
           ))}
         </div>
 
         {/* 입력 영역 */}
         {!isReadOnly && (
-          <div className="px-5 pb-4 pt-2 border-t border-gray-100 dark:border-gray-700">
+          <div className="px-5 pb-4 pt-2 border-t border-gray-100 dark:border-slate-700">
             <textarea
               ref={textareaRef}
               value={body}
@@ -132,7 +132,7 @@ export default function ThreadPopup({
               onKeyDown={handleKey}
               rows={3}
               placeholder={`사유를 입력하세요… (Ctrl+Enter 전송)`}
-              className="w-full text-sm px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-400 resize-none"
+              className="w-full text-sm px-3 py-2 rounded-lg border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-400 resize-none"
             />
             <div className="flex justify-end mt-2">
               <button
@@ -149,3 +149,4 @@ export default function ThreadPopup({
     </>
   )
 }
+

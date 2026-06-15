@@ -1,4 +1,4 @@
-/**
+﻿/**
  * LoginPage — 듀얼 인증 로그인
  *
  * 탭 1: 이메일 + 비밀번호 (Supabase Auth — 신규 표준)
@@ -31,7 +31,7 @@ export default function LoginPage() {
   const [busy,     setBusy]     = useState(false)
 
   if (loading) return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-gray-950">
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950">
       <div className="text-sm text-gray-400 animate-pulse">로딩 중…</div>
     </div>
   )
@@ -85,8 +85,8 @@ export default function LoginPage() {
   }
 
   const inputCls =
-    'w-full border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 text-sm ' +
-    'bg-gray-50 dark:bg-gray-800/60 text-gray-800 dark:text-gray-100 ' +
+    'w-full border border-gray-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm ' +
+    'bg-gray-50 dark:bg-slate-800/60 text-gray-800 dark:text-gray-100 ' +
     'focus:outline-none focus:ring-2 focus:ring-blue-400 focus:bg-white dark:focus:bg-gray-800 transition-colors ' +
     'placeholder:text-gray-400 dark:placeholder:text-gray-500'
 
@@ -106,7 +106,7 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-100 to-blue-50 dark:from-gray-950 dark:to-gray-900 p-4">
-      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
 
         {/* 헤더 */}
         <div className="px-8 pt-8 pb-5 text-center border-b border-gray-100 dark:border-gray-800">
@@ -120,7 +120,7 @@ export default function LoginPage() {
         </div>
 
         {/* 탭 — 2×2 그리드 */}
-        <div className="grid grid-cols-2 gap-px bg-gray-100 dark:bg-gray-800 border-b border-gray-100 dark:border-gray-800">
+        <div className="grid grid-cols-2 gap-px bg-gray-100 dark:bg-slate-800 border-b border-gray-100 dark:border-gray-800">
           {TABS.map(({ mode: m, icon, label }) => (
             <button
               key={m}
@@ -129,8 +129,8 @@ export default function LoginPage() {
               className={
                 'flex flex-col items-center gap-1 py-3 text-[11px] font-medium transition-colors ' +
                 (mode === m
-                  ? 'bg-white dark:bg-gray-900 text-blue-600 dark:text-blue-400'
-                  : 'bg-white dark:bg-gray-900 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300')
+                  ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400'
+                  : 'bg-white dark:bg-slate-900 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300')
               }
             >
               <span className="text-base leading-none">{icon}</span>
@@ -149,7 +149,7 @@ export default function LoginPage() {
           {mode === 'code' && (
             <>
               <div>
-                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">접근 코드</label>
+                <label className="block text-xs font-medium text-gray-500 dark:text-slate-300 mb-1.5">접근 코드</label>
                 <input
                   type="password"
                   value={code}
@@ -170,7 +170,7 @@ export default function LoginPage() {
           {/* 이메일 (로그인 / 최초설정 / 비밀번호찾기) */}
           {mode !== 'code' && (
             <div>
-              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">이메일</label>
+              <label className="block text-xs font-medium text-gray-500 dark:text-slate-300 mb-1.5">이메일</label>
               <input
                 type="email"
                 value={email}
@@ -186,7 +186,7 @@ export default function LoginPage() {
           {/* 비밀번호 (로그인 / 최초설정) */}
           {(mode === 'login' || mode === 'register') && (
             <div>
-              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">
+              <label className="block text-xs font-medium text-gray-500 dark:text-slate-300 mb-1.5">
                 비밀번호
                 {mode === 'register' && <span className="text-gray-400 font-normal"> (8자 이상)</span>}
               </label>
@@ -204,7 +204,7 @@ export default function LoginPage() {
           {/* 비밀번호 확인 (최초설정) */}
           {mode === 'register' && (
             <div>
-              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">비밀번호 확인</label>
+              <label className="block text-xs font-medium text-gray-500 dark:text-slate-300 mb-1.5">비밀번호 확인</label>
               <input
                 type="password"
                 value={confirm}
@@ -261,3 +261,4 @@ export default function LoginPage() {
     </div>
   )
 }
+

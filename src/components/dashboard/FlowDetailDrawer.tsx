@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom'
+﻿import { useNavigate } from 'react-router-dom'
 import { fmtKRW, calcDday } from '../../lib/format'
 import type { FlowItemKey } from './WaterfallCard'
 import type { KpiData } from '../../hooks/useDashboard'
@@ -51,13 +51,13 @@ export default function FlowDetailDrawer({ itemKey, kpi, latestDaily, latestInve
       />
 
       {/* 드로어 패널 */}
-      <div style={{ animation: 'fadeInScale 0.18s ease-out both' }} className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-80 max-h-[70vh] bg-white dark:bg-gray-800 rounded-xl shadow-xl flex flex-col overflow-hidden border border-gray-200 dark:border-gray-700">
+      <div style={{ animation: 'fadeInScale 0.18s ease-out both' }} className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-80 max-h-[70vh] bg-white dark:bg-slate-800 rounded-xl shadow-xl flex flex-col overflow-hidden border border-gray-200 dark:border-slate-700">
         {/* 헤더 */}
-        <div className="shrink-0 flex items-center justify-between px-4 pt-4 pb-3 border-b border-gray-100 dark:border-gray-700">
+        <div className="shrink-0 flex items-center justify-between px-4 pt-4 pb-3 border-b border-gray-100 dark:border-slate-700">
           <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">{title}</h3>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors p-1 rounded hover:bg-gray-100 dark:hover:bg-slate-700"
           >
             ✕
           </button>
@@ -78,7 +78,7 @@ export default function FlowDetailDrawer({ itemKey, kpi, latestDaily, latestInve
 
         {/* 하단 바로가기 */}
         {(itemKey === 'operating' || itemKey === 'invest' || itemKey === 'loan' || itemKey === 'available' || itemKey === 'equity_avail') && (
-          <div className="shrink-0 px-4 py-3 border-t border-gray-100 dark:border-gray-700">
+          <div className="shrink-0 px-4 py-3 border-t border-gray-100 dark:border-slate-700">
             <button
               onClick={() => {
                 onClose()
@@ -105,7 +105,7 @@ export default function FlowDetailDrawer({ itemKey, kpi, latestDaily, latestInve
 function OperatingDetail({ daily, kpi }: { daily: DailyRecord | null; kpi: KpiData }) {
   if (!daily) return <p className="text-xs text-gray-400 py-4 text-center">오늘 운전자금 데이터가 없습니다</p>
   return (
-    <div className="divide-y divide-gray-50 dark:divide-gray-700">
+    <div className="divide-y divide-gray-50 dark:divide-slate-700">
       {[
         { label: '보통예금 / CMA', value: daily.krw_demand },
         { label: '국책자금',        value: daily.krw_govt  },
@@ -118,7 +118,7 @@ function OperatingDetail({ daily, kpi }: { daily: DailyRecord | null; kpi: KpiDa
         </div>
       ))}
       <div className="flex justify-between items-center py-2">
-        <span className="text-xs font-semibold text-gray-600 dark:text-gray-300">합계</span>
+        <span className="text-xs font-semibold text-gray-600 dark:text-slate-100">합계</span>
         <span className="text-sm font-bold text-blue-600 dark:text-blue-400 tabular-nums">{fmtKRW(kpi.operatingCash)}</span>
       </div>
     </div>
@@ -129,7 +129,7 @@ function OperatingDetail({ daily, kpi }: { daily: DailyRecord | null; kpi: KpiDa
 function InvestDetail({ items }: { items: InvestmentRecord[] }) {
   if (items.length === 0) return <p className="text-xs text-gray-400 py-4 text-center">운용 중인 자금이 없습니다</p>
   return (
-    <div className="divide-y divide-gray-50 dark:divide-gray-700">
+    <div className="divide-y divide-gray-50 dark:divide-slate-700">
       {items.map(inv => (
         <div key={inv.id} className="flex justify-between items-center py-2">
           <span className="text-[11px] text-gray-400 truncate mr-2">{inv.bank}</span>
@@ -160,8 +160,8 @@ function LoanDetail({ loans, kpi }: { loans: LoanRecord[]; kpi: KpiData }) {
           </div>
         )
       })}
-      <div className="flex justify-between items-center border-t border-gray-100 dark:border-gray-700 pt-2 mt-1 px-2">
-        <span className="text-xs font-semibold text-gray-600 dark:text-gray-300">합계</span>
+      <div className="flex justify-between items-center border-t border-gray-100 dark:border-slate-700 pt-2 mt-1 px-2">
+        <span className="text-xs font-semibold text-gray-600 dark:text-slate-100">합계</span>
         <span className="text-sm font-bold text-red-500 tabular-nums">{fmtKRW(kpi.totalLoan)}</span>
       </div>
     </div>
@@ -174,10 +174,10 @@ function EquityAvailDetail({ equities, total }: { equities: EquityItem[]; total:
   return (
     <div>
       <p className="text-[10px] text-gray-400 dark:text-gray-500 mb-1">상장 지분(가용) — 순현금 미포함, 참고용</p>
-      <div className="divide-y divide-gray-50 dark:divide-gray-700">
+      <div className="divide-y divide-gray-50 dark:divide-slate-700">
         {equities.map((e, i) => (
           <div key={i} className="flex justify-between items-center py-2 gap-2">
-            <span className="text-[11px] text-gray-500 dark:text-gray-300 truncate">{e.name}</span>
+            <span className="text-[11px] text-gray-500 dark:text-slate-100 truncate">{e.name}</span>
             <span className="flex items-center gap-1.5 shrink-0">
               <span className="text-xs tabular-nums font-semibold text-gray-700 dark:text-gray-200">{fmtKRW(e.total_value)}</span>
               {e.returnRate != null && (
@@ -189,7 +189,7 @@ function EquityAvailDetail({ equities, total }: { equities: EquityItem[]; total:
           </div>
         ))}
         <div className="flex justify-between items-center py-2">
-          <span className="text-xs font-semibold text-gray-600 dark:text-gray-300">합계</span>
+          <span className="text-xs font-semibold text-gray-600 dark:text-slate-100">합계</span>
           <span className="text-sm font-bold text-violet-600 dark:text-violet-400 tabular-nums">{fmtKRW(total)}</span>
         </div>
       </div>
@@ -209,7 +209,7 @@ function FxDetail({ daily }: { daily: DailyRecord | null }) {
   ].filter(r => r.value > 0)
   if (rows.length === 0) return <p className="text-xs text-gray-400 py-4 text-center">외화 보유 없음</p>
   return (
-    <div className="divide-y divide-gray-50 dark:divide-gray-700">
+    <div className="divide-y divide-gray-50 dark:divide-slate-700">
       {rows.map(r => (
         <div key={r.label} className="flex justify-between items-center py-2">
           <span className="text-[11px] text-gray-400">{r.label}</span>
@@ -227,7 +227,7 @@ function FxDetail({ daily }: { daily: DailyRecord | null }) {
 // ── 순현금 포지션 ────────────────────────────────────────────
 function NetDetail({ kpi }: { kpi: KpiData }) {
   return (
-    <div className="divide-y divide-gray-50 dark:divide-gray-700">
+    <div className="divide-y divide-gray-50 dark:divide-slate-700">
       {[
         { label: '가용자금 합계', value: kpi.availableCash, color: 'text-blue-600 dark:text-blue-400' },
         { label: '차입금 합계',   value: -kpi.totalLoan,    color: 'text-red-500' },
@@ -240,7 +240,7 @@ function NetDetail({ kpi }: { kpi: KpiData }) {
         </div>
       ))}
       <div className="flex justify-between items-center py-2">
-        <span className="text-xs font-semibold text-gray-600 dark:text-gray-300">순현금</span>
+        <span className="text-xs font-semibold text-gray-600 dark:text-slate-100">순현금</span>
         <span className={`text-sm font-bold tabular-nums ${kpi.netCashPosition >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
           {kpi.netCashPosition >= 0 ? '+' : ''}{fmtKRW(kpi.netCashPosition)}
         </span>
@@ -262,7 +262,7 @@ function AvailableDetail({ kpi, daily, latestInvests }: {
     <div className="space-y-3">
       <div>
         <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">운전자금</p>
-        <div className="divide-y divide-gray-50 dark:divide-gray-700">
+        <div className="divide-y divide-gray-50 dark:divide-slate-700">
           {[
             { label: '보통예금 / CMA', value: daily?.krw_demand ?? 0 },
             { label: '국책자금',        value: daily?.krw_govt  ?? 0 },
@@ -279,7 +279,7 @@ function AvailableDetail({ kpi, daily, latestInvests }: {
       {(availInvest.length > 0 || availBond.length > 0) && (
         <div>
           <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">가용 운용자금</p>
-          <div className="divide-y divide-gray-50 dark:divide-gray-700">
+          <div className="divide-y divide-gray-50 dark:divide-slate-700">
             {[...availInvest, ...availBond].map(i => (
               <div key={i.id} className="flex justify-between items-center py-1.5">
                 <span className="text-[11px] text-gray-400 truncate mr-2">{i.bank}</span>
@@ -289,8 +289,8 @@ function AvailableDetail({ kpi, daily, latestInvests }: {
           </div>
         </div>
       )}
-      <div className="flex justify-between items-center border-t border-gray-200 dark:border-gray-600 pt-2">
-        <span className="text-xs font-semibold text-gray-600 dark:text-gray-300">가용자금 합계</span>
+      <div className="flex justify-between items-center border-t border-gray-200 dark:border-slate-600 pt-2">
+        <span className="text-xs font-semibold text-gray-600 dark:text-slate-100">가용자금 합계</span>
         <span className="text-sm font-bold text-blue-600 dark:text-blue-400 tabular-nums">{fmtKRW(kpi.availableCash)}</span>
       </div>
     </div>
@@ -310,7 +310,7 @@ function AssetDetail({ kpi, fxKrw }: {
 
   return (
     <div className="space-y-3">
-      <div className="divide-y divide-gray-50 dark:divide-gray-700">
+      <div className="divide-y divide-gray-50 dark:divide-slate-700">
         {[
           { label: '운전자금',  value: kpi.operatingCash,    color: 'text-blue-600 dark:text-blue-400',    pct: pctOf(kpi.operatingCash) },
           { label: '가용운용',  value: investTotal,           color: 'text-emerald-600 dark:text-emerald-400', pct: pctOf(investTotal) },
@@ -319,7 +319,7 @@ function AssetDetail({ kpi, fxKrw }: {
             : []),
         ].map(r => (
           <div key={r.label} className="flex justify-between items-center py-2">
-            <span className="text-[11px] text-gray-500 dark:text-gray-400">{r.label}</span>
+            <span className="text-[11px] text-gray-500 dark:text-slate-300">{r.label}</span>
             <div className="text-right">
               <span className={`text-xs tabular-nums font-semibold ${r.color}`}>{fmtKRW(r.value)}</span>
               <span className="text-[10px] text-gray-400 ml-2">({r.pct}%)</span>
@@ -340,8 +340,8 @@ function AssetDetail({ kpi, fxKrw }: {
           </div>
         </div>
       )}
-      <div className="flex justify-between items-center border-t border-gray-200 dark:border-gray-600 pt-2">
-        <span className="text-xs font-semibold text-gray-600 dark:text-gray-300">총 자산</span>
+      <div className="flex justify-between items-center border-t border-gray-200 dark:border-slate-600 pt-2">
+        <span className="text-xs font-semibold text-gray-600 dark:text-slate-100">총 자산</span>
         <span className="text-sm font-bold text-gray-700 dark:text-gray-200 tabular-nums">{fmtKRW(totalAssets)}</span>
       </div>
     </div>
@@ -401,11 +401,11 @@ function UnavailableDetail({ kpi, latestInvests, equities }: {
       {sections.map(sec => (
         <div key={sec.label}>
           <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">{sec.label}</p>
-          <div className="divide-y divide-gray-50 dark:divide-gray-700">
+          <div className="divide-y divide-gray-50 dark:divide-slate-700">
             {sec.rows.map(row => (
               <div key={row.name} className="py-2">
                 <div className="flex justify-between items-center">
-                  <span className="text-[11px] text-gray-600 dark:text-gray-300 truncate mr-2">{row.name}</span>
+                  <span className="text-[11px] text-gray-600 dark:text-slate-100 truncate mr-2">{row.name}</span>
                   <span className="text-xs tabular-nums font-semibold text-amber-600 dark:text-amber-400 shrink-0">{fmtKRW(row.value)}</span>
                 </div>
                 {row.sub && <p className="text-[10px] text-gray-400 mt-0.5">{row.sub}</p>}
@@ -414,10 +414,11 @@ function UnavailableDetail({ kpi, latestInvests, equities }: {
           </div>
         </div>
       ))}
-      <div className="flex justify-between items-center border-t border-gray-100 dark:border-gray-700 pt-2">
-        <span className="text-xs font-semibold text-gray-600 dark:text-gray-300">합계</span>
+      <div className="flex justify-between items-center border-t border-gray-100 dark:border-slate-700 pt-2">
+        <span className="text-xs font-semibold text-gray-600 dark:text-slate-100">합계</span>
         <span className="text-sm font-bold text-amber-600 dark:text-amber-400 tabular-nums">{fmtKRW(kpi.unavailableAssets)}</span>
       </div>
     </div>
   )
 }
+

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+﻿import { useState, useEffect, useMemo } from 'react'
 import { useParams } from 'react-router-dom'
 import { useDaily } from '../hooks/useDaily'
 import { useFx } from '../hooks/useFx'
@@ -100,7 +100,7 @@ export default function FxPage() {
               className={`rounded-xl border p-4 text-left transition-all ${
                 isHL
                   ? 'border-blue-400 bg-blue-50 shadow-md dark:bg-blue-950/30 dark:border-blue-500'
-                  : 'border-gray-200 bg-white hover:border-blue-300 hover:shadow-sm dark:bg-gray-800 dark:border-gray-700 dark:hover:border-blue-500'
+                  : 'border-gray-200 bg-white hover:border-blue-300 hover:shadow-sm dark:bg-slate-800 dark:border-slate-700 dark:hover:border-blue-500'
               }`}>
               <div className="flex items-center gap-1.5 mb-2">
                 <span className="text-xl">{meta.flag}</span>
@@ -111,9 +111,9 @@ export default function FxPage() {
                 {rate ? `₩${fmtNumber(rate.rate)}` : '—'}
               </p>
               {balance > 0 && (
-                <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-700">
+                <div className="mt-2 pt-2 border-t border-gray-100 dark:border-slate-700">
                   <p className="text-xs text-gray-400 dark:text-gray-500">보유잔고</p>
-                  <p className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                  <p className="text-xs font-medium text-gray-700 dark:text-slate-100">
                     {fmtNumber(balance, 2)} {code}
                   </p>
                   <p className="text-xs text-blue-600 font-medium">{fmtKRW(krwVal)}</p>
@@ -126,15 +126,15 @@ export default function FxPage() {
 
       {/* 외화 잔고 요약 */}
       {latestDaily && (
-        <div className="bg-white rounded-xl shadow p-5 dark:bg-gray-800">
+        <div className="bg-white rounded-xl shadow p-5 dark:bg-slate-800">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-semibold text-gray-600 dark:text-gray-300">외화 잔고 현황</h3>
+            <h3 className="text-sm font-semibold text-gray-600 dark:text-slate-100">외화 잔고 현황</h3>
             <span className="text-xs text-gray-400 dark:text-gray-500">기준: {latestDaily.date}</span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-100 dark:border-gray-700">
+                <tr className="border-b border-gray-100 dark:border-slate-700">
                   {['통화', '보유잔고', '환율', '원화환산', '비중'].map(h => (
                     <th key={h} className="text-left text-xs text-gray-400 dark:text-gray-500 font-medium pb-2 pr-4">{h}</th>
                   ))}
@@ -147,7 +147,7 @@ export default function FxPage() {
                   const totalFxKrw = latestDaily.fx_krw || 1
                   const pct     = totalFxKrw > 0 ? (krwVal / totalFxKrw) * 100 : 0
                   return (
-                    <tr key={code} className="border-b border-gray-50 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700">
+                    <tr key={code} className="border-b border-gray-50 dark:border-slate-700/50 hover:bg-gray-50 dark:hover:bg-slate-700">
                       <td className="py-2.5 pr-4">
                         <div className="flex items-center gap-1.5">
                           <span>{FX_META[code].flag}</span>
@@ -157,7 +157,7 @@ export default function FxPage() {
                       <td className="py-2.5 pr-4 tabular-nums text-gray-700 dark:text-gray-200">
                         {fmtNumber(fxBalances[code], 2)}
                       </td>
-                      <td className="py-2.5 pr-4 tabular-nums text-gray-500 dark:text-gray-400">
+                      <td className="py-2.5 pr-4 tabular-nums text-gray-500 dark:text-slate-300">
                         {rate ? `₩${fmtNumber(rate.rate)}` : '—'}
                       </td>
                       <td className="py-2.5 pr-4 tabular-nums font-medium text-blue-700 dark:text-blue-400">
@@ -165,10 +165,10 @@ export default function FxPage() {
                       </td>
                       <td className="py-2.5 pr-4">
                         <div className="flex items-center gap-2">
-                          <div className="flex-1 bg-gray-100 dark:bg-gray-700 rounded-full h-1.5 min-w-[60px]">
+                          <div className="flex-1 bg-gray-100 dark:bg-slate-700 rounded-full h-1.5 min-w-[60px]">
                             <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: `${Math.min(pct, 100)}%` }} />
                           </div>
-                          <span className="text-xs text-gray-500 dark:text-gray-400 w-10 text-right">
+                          <span className="text-xs text-gray-500 dark:text-slate-300 w-10 text-right">
                             {pct.toFixed(1)}%
                           </span>
                         </div>
@@ -176,7 +176,7 @@ export default function FxPage() {
                     </tr>
                   )
                 })}
-                <tr className="border-t border-gray-200 dark:border-gray-700">
+                <tr className="border-t border-gray-200 dark:border-slate-700">
                   <td colSpan={3} className="pt-2.5 text-xs text-gray-400 dark:text-gray-500 font-medium">합계</td>
                   <td className="pt-2.5 tabular-nums font-bold text-blue-800 dark:text-blue-300">
                     {fmtKRW(latestDaily.fx_krw)}
@@ -190,17 +190,17 @@ export default function FxPage() {
       )}
 
       {/* 환산 계산기 */}
-      <div className="bg-white rounded-xl shadow p-5 dark:bg-gray-800">
-        <h3 className="text-sm font-semibold text-gray-600 dark:text-gray-300 mb-4">환산 계산기</h3>
+      <div className="bg-white rounded-xl shadow p-5 dark:bg-slate-800">
+        <h3 className="text-sm font-semibold text-gray-600 dark:text-slate-100 mb-4">환산 계산기</h3>
         <div className="flex flex-wrap gap-3 items-end">
-          <div className="flex gap-1 bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+          <div className="flex gap-1 bg-gray-100 dark:bg-slate-700 rounded-lg p-1">
             {[{ key: 'fx', label: '외화 → 원화' }, { key: 'krw', label: '원화 → 외화' }].map(m => (
               <button key={m.key}
                 onClick={() => { setCalcMode(m.key as 'fx' | 'krw'); setCalcInput('') }}
                 className={`text-xs px-3 py-1.5 rounded-md transition-colors ${
                   calcMode === m.key
                     ? 'bg-white text-blue-700 font-semibold shadow-sm dark:bg-gray-600 dark:text-blue-300'
-                    : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'
+                    : 'text-gray-500 hover:text-gray-700 dark:text-slate-300'
                 }`}>
                 {m.label}
               </button>
@@ -209,7 +209,7 @@ export default function FxPage() {
           <div>
             <label className="block text-xs text-gray-400 mb-1">통화</label>
             <select value={calcCurrency} onChange={e => setCalcCurrency(e.target.value as FxCode)}
-              className="border border-gray-300 rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100">
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm dark:bg-slate-700 dark:border-slate-600 dark:text-gray-100">
               {FX_CODES.map(c => <option key={c} value={c}>{FX_META[c].flag} {c}</option>)}
             </select>
           </div>
@@ -219,7 +219,7 @@ export default function FxPage() {
             </label>
             <input type="number" min="0" step="any" value={calcInput}
               onChange={e => setCalcInput(e.target.value)} placeholder="0"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-right dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" />
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-right dark:bg-slate-700 dark:border-slate-600 dark:text-gray-100" />
           </div>
           <div className="flex-1 min-w-[160px]">
             <label className="block text-xs text-gray-400 mb-1">
@@ -241,3 +241,4 @@ export default function FxPage() {
     </div>
   )
 }
+

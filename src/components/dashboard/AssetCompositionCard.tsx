@@ -1,4 +1,4 @@
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
+﻿import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
 import { fmtKRW } from '../../lib/format'
 import type { KpiData } from '../../hooks/useDashboard'
 
@@ -31,7 +31,7 @@ export default function AssetCompositionCard({ kpi, fxKrw, onItemClick }: Props)
 
   return (
     <div
-      className={`bg-white dark:bg-gray-800 rounded-xl shadow p-5 flex flex-col ${onItemClick ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}
+      className={`bg-white dark:bg-slate-800 rounded-xl shadow p-5 flex flex-col ${onItemClick ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}
       onClick={() => onItemClick?.('asset')}
       title={onItemClick ? '클릭하여 자산 구성 상세 보기' : undefined}
     >
@@ -72,11 +72,11 @@ export default function AssetCompositionCard({ kpi, fxKrw, onItemClick }: Props)
             : []),
         ].map(item => (
           <div key={item.name} className="flex items-center justify-between gap-1.5">
-            <span className="flex items-center gap-1.5 text-[11px] text-gray-600 dark:text-gray-400 min-w-0">
+            <span className="flex items-center gap-1.5 text-[11px] text-gray-600 dark:text-slate-300 min-w-0">
               <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
               <span className="truncate">{item.name}</span>
             </span>
-            <span className="text-[11px] font-semibold text-gray-700 dark:text-gray-300 tabular-nums shrink-0">
+            <span className="text-[11px] font-semibold text-gray-700 dark:text-slate-100 tabular-nums shrink-0">
               {pctOf(item.value)}%
             </span>
           </div>
@@ -99,3 +99,4 @@ export default function AssetCompositionCard({ kpi, fxKrw, onItemClick }: Props)
     </div>
   )
 }
+

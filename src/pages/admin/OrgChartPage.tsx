@@ -1,4 +1,4 @@
-/**
+﻿/**
  * OrgChartPage — 조직도 / 결재선 관리
  *
  * 라우트: /admin/org-chart (master 전용)
@@ -24,9 +24,9 @@ export default function OrgChartPage() {
   }
 
   return (
-    <div className="flex flex-col h-full bg-gray-50 dark:bg-gray-900">
+    <div className="flex flex-col h-full bg-gray-50 dark:bg-slate-900">
       {/* 헤더 */}
-      <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-3 flex items-center gap-4 shrink-0">
+      <div className="bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 px-6 py-3 flex items-center gap-4 shrink-0">
         <span className="text-lg">🏢</span>
         <h1 className="text-base font-bold text-gray-800 dark:text-gray-100">조직도 / 결재선 관리</h1>
         <p className="text-xs text-gray-400 dark:text-gray-500 ml-2">자금일보 결재선을 법인별로 설정합니다.</p>
@@ -34,7 +34,7 @@ export default function OrgChartPage() {
 
       <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
         {/* 법인 탭 */}
-        <div className="flex gap-1 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl p-1 w-fit">
+        <div className="flex gap-1 bg-white dark:bg-slate-800 border border-gray-100 dark:border-slate-700 rounded-xl p-1 w-fit">
           {COMPANIES.map(c => (
             <button
               key={c}
@@ -42,7 +42,7 @@ export default function OrgChartPage() {
               className={`text-xs px-4 py-1.5 rounded-lg font-medium transition-colors ${
                 activeCompany === c
                   ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'
+                  : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-slate-700'
               }`}
             >{c}</button>
           ))}
@@ -94,8 +94,8 @@ function ApprovalConfigPanel({ company }: { company: Company }) {
   const sorted = [...ac.config].sort((a, b) => a.step - b.step)
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
-      <div className="px-5 py-3 border-b border-gray-100 dark:border-gray-700 flex items-center gap-2">
+    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-100 dark:border-slate-700 overflow-hidden">
+      <div className="px-5 py-3 border-b border-gray-100 dark:border-slate-700 flex items-center gap-2">
         <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">결재선 설정</span>
         <span className="text-xs text-gray-400 dark:text-gray-500">— {company}</span>
         {ac.loading && <span className="ml-auto text-xs text-gray-400 animate-pulse">로딩 중…</span>}
@@ -107,19 +107,19 @@ function ApprovalConfigPanel({ company }: { company: Company }) {
       ) : (
         <table className="w-full text-xs">
           <thead>
-            <tr className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-100 dark:border-gray-700">
+            <tr className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-100 dark:border-slate-700">
               <th className="px-4 py-2.5 text-left font-medium text-gray-500 w-16">단계</th>
               <th className="px-4 py-2.5 text-left font-medium text-gray-500">직책</th>
               <th className="px-4 py-2.5 text-left font-medium text-gray-500">결재자 코드</th>
               <th className="px-4 py-2.5 text-right font-medium text-gray-500 w-24">관리</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-50 dark:divide-gray-700/50">
+          <tbody className="divide-y divide-gray-50 dark:divide-slate-700/50">
             {sorted.map(cfg => (
               <tr key={cfg.step} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
                 <td className="px-4 py-3 font-semibold text-blue-600 dark:text-blue-400">{cfg.step}단계</td>
                 <td className="px-4 py-3 text-gray-700 dark:text-gray-200">{cfg.role_label}</td>
-                <td className="px-4 py-3 font-mono text-gray-500 dark:text-gray-400">{cfg.approver_code}</td>
+                <td className="px-4 py-3 font-mono text-gray-500 dark:text-slate-300">{cfg.approver_code}</td>
                 <td className="px-4 py-3 text-right space-x-2">
                   <button
                     onClick={() => startEdit(cfg.step, cfg.role_label, cfg.approver_code)}
@@ -137,8 +137,8 @@ function ApprovalConfigPanel({ company }: { company: Company }) {
       )}
 
       {/* 추가/수정 폼 */}
-      <div className="px-5 py-4 border-t border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-700/20">
-        <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-3">
+      <div className="px-5 py-4 border-t border-gray-100 dark:border-slate-700 bg-gray-50/50 dark:bg-gray-700/20">
+        <p className="text-xs font-semibold text-gray-500 dark:text-slate-300 mb-3">
           {editTarget ? `${editTarget}단계 수정` : '새 결재단계 추가'}
         </p>
         <div className="flex gap-2 flex-wrap">
@@ -147,19 +147,19 @@ function ApprovalConfigPanel({ company }: { company: Company }) {
             value={form.step}
             disabled={!!editTarget}
             onChange={e => setForm(f => ({ ...f, step: e.target.value }))}
-            className="w-24 text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-2.5 py-1.5 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 placeholder-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:opacity-50"
+            className="w-24 text-xs border border-gray-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-200 placeholder-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:opacity-50"
           />
           <input
             type="text" placeholder="직책 (예: 팀장)"
             value={form.role_label}
             onChange={e => setForm(f => ({ ...f, role_label: e.target.value }))}
-            className="w-32 text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-2.5 py-1.5 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 placeholder-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-400"
+            className="w-32 text-xs border border-gray-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-200 placeholder-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-400"
           />
           <input
             type="text" placeholder="결재자 접근코드"
             value={form.approver_code}
             onChange={e => setForm(f => ({ ...f, approver_code: e.target.value }))}
-            className="w-40 text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-2.5 py-1.5 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 placeholder-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-400"
+            className="w-40 text-xs border border-gray-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-200 placeholder-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-400"
           />
           <button
             onClick={handleSave}
@@ -180,3 +180,4 @@ function ApprovalConfigPanel({ company }: { company: Company }) {
     </div>
   )
 }
+

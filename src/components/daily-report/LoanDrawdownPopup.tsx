@@ -1,4 +1,4 @@
-/**
+﻿/**
  * LoanDrawdownPopup — 차입금 실행 연동 팝업
  * 신규 차입금 입력 → loans 테이블 insert + 일보 아이템 저장
  */
@@ -66,14 +66,14 @@ export default function LoanDrawdownPopup({ company, onSaved, onClose }: Props) 
     setSaving(false)
   }
 
-  const inputCls = 'text-xs px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-green-400 w-full'
-  const labelCls = 'text-xs text-gray-500 dark:text-gray-400 w-20 shrink-0'
+  const inputCls = 'text-xs px-3 py-2 rounded-lg border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-green-400 w-full'
+  const labelCls = 'text-xs text-gray-500 dark:text-slate-300 w-20 shrink-0'
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md mx-4 flex flex-col" style={{ animation: 'fadeInScale 0.18s ease-out both' }}>
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md mx-4 flex flex-col" style={{ animation: 'fadeInScale 0.18s ease-out both' }}>
         {/* 헤더 */}
-        <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
+        <div className="px-6 py-4 border-b border-gray-100 dark:border-slate-700 flex items-center justify-between">
           <div>
             <h2 className="text-sm font-bold text-gray-800 dark:text-gray-100">📋 차입금 실행 연동</h2>
             <p className="text-[11px] text-gray-400 mt-0.5">신규 차입금을 등록하고 일보에 자동 연동합니다</p>
@@ -129,7 +129,7 @@ export default function LoanDrawdownPopup({ company, onSaved, onClose }: Props) 
         </div>
 
         {/* 저장 */}
-        <div className="px-6 py-4 border-t border-gray-100 dark:border-gray-700 flex justify-end gap-2">
+        <div className="px-6 py-4 border-t border-gray-100 dark:border-slate-700 flex justify-end gap-2">
           <button onClick={onClose} className="text-xs px-3 py-1.5 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">취소</button>
           <button onClick={() => void handleSave()} disabled={saving}
             className="text-xs px-4 py-1.5 bg-green-600 text-white rounded-lg font-medium disabled:opacity-40 hover:bg-green-700">
@@ -140,3 +140,4 @@ export default function LoanDrawdownPopup({ company, onSaved, onClose }: Props) 
     </div>
   )
 }
+

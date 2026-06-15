@@ -1,4 +1,4 @@
-/**
+﻿/**
  * CmsVerificationModal — CMS 증빙 PDF 뷰어 + 자금일보 대사 검증 (다중 PDF 지원)
  *
  * 좌측: PDF 탭 + 캔버스 렌더링 (텍스트 선택 가능)
@@ -239,11 +239,11 @@ export default function CmsVerificationModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
       onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl flex flex-col"
+      <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl flex flex-col"
         style={{ width: '94vw', maxWidth: 1400, height: '92vh' }}>
 
         {/* 헤더 */}
-        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200 dark:border-gray-700 shrink-0">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200 dark:border-slate-700 shrink-0">
           <div>
             <h2 className="font-bold text-gray-800 dark:text-gray-100">📄 CMS 잔고내역 대사 검증</h2>
             <p className="text-xs text-gray-500 mt-0.5">
@@ -253,7 +253,7 @@ export default function CmsVerificationModal({
           <div className="flex items-center gap-3">
             <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${
               allDone ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
-                      : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'}`}>
+                      : 'bg-gray-100 text-gray-600 dark:bg-slate-800 dark:text-slate-100'}`}>
               대사 {doneCount} / {verifiable.length}
             </span>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl px-1 leading-none">✕</button>
@@ -264,7 +264,7 @@ export default function CmsVerificationModal({
         <div className="flex flex-1 min-h-0 overflow-hidden">
 
           {/* ── 좌: PDF 뷰어 ── */}
-          <div className="flex-1 flex flex-col min-w-0 border-r border-gray-200 dark:border-gray-700">
+          <div className="flex-1 flex flex-col min-w-0 border-r border-gray-200 dark:border-slate-700">
             {/* PDF 탭 (2건 이상일 때) */}
             {pdfs.length > 1 && (
               <div className="flex items-center gap-1 px-3 pt-2 border-b border-gray-100 dark:border-gray-800 overflow-x-auto shrink-0">
@@ -282,18 +282,18 @@ export default function CmsVerificationModal({
               </div>
             )}
             {/* 툴바 */}
-            <div className="flex items-center gap-2 px-4 py-2 border-b border-gray-100 dark:border-gray-800 text-xs text-gray-600 dark:text-gray-400 shrink-0 flex-wrap">
+            <div className="flex items-center gap-2 px-4 py-2 border-b border-gray-100 dark:border-gray-800 text-xs text-gray-600 dark:text-slate-300 shrink-0 flex-wrap">
               <button disabled={page <= 1} onClick={() => setPage(p => p - 1)}
-                className="px-2 py-1 rounded bg-gray-100 dark:bg-gray-800 disabled:opacity-40">◀</button>
+                className="px-2 py-1 rounded bg-gray-100 dark:bg-slate-800 disabled:opacity-40">◀</button>
               <span className="tabular-nums">{page} / {totalPages || '—'}</span>
               <button disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}
-                className="px-2 py-1 rounded bg-gray-100 dark:bg-gray-800 disabled:opacity-40">▶</button>
+                className="px-2 py-1 rounded bg-gray-100 dark:bg-slate-800 disabled:opacity-40">▶</button>
               <span className="ml-3">배율</span>
               {[1.0, 1.3, 1.6, 2.0].map(s => (
                 <button key={s} onClick={() => setScale(s)}
                   className={`px-2 py-0.5 rounded text-xs border ${
                     scale === s ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 border-blue-300'
-                                : 'bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700'}`}>
+                                : 'bg-gray-100 dark:bg-slate-800 border-gray-200 dark:border-slate-700'}`}>
                   {Math.round(s * 100)}%
                 </button>
               ))}
@@ -304,7 +304,7 @@ export default function CmsVerificationModal({
               )}
             </div>
             {/* 캔버스 */}
-            <div className="flex-1 overflow-auto bg-gray-200 dark:bg-gray-800 p-4">
+            <div className="flex-1 overflow-auto bg-gray-200 dark:bg-slate-800 p-4">
               {loadState === 'loading' && <div className="flex items-center justify-center h-full text-gray-500 text-sm">PDF 로딩 중…</div>}
               {loadState === 'error' && <div className="flex items-center justify-center h-full text-red-500 text-sm">{errorMsg}</div>}
               {loadState === 'ready' && (
@@ -317,7 +317,7 @@ export default function CmsVerificationModal({
           </div>
 
           {/* ── 우: 대사 패널 ── */}
-          <div className="w-96 shrink-0 overflow-y-auto p-4 space-y-2.5 bg-gray-50/50 dark:bg-gray-900">
+          <div className="w-96 shrink-0 overflow-y-auto p-4 space-y-2.5 bg-gray-50/50 dark:bg-slate-900">
             <h3 className="text-sm font-bold text-gray-700 dark:text-gray-200">자금일보 항목 대사</h3>
 
             {fields.map(f => {
@@ -333,7 +333,7 @@ export default function CmsVerificationModal({
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5">
                         <span className="text-green-600 dark:text-green-400 text-xs font-bold">✅</span>
-                        <span className="text-xs font-medium text-gray-600 dark:text-gray-300 truncate">{f.label}</span>
+                        <span className="text-xs font-medium text-gray-600 dark:text-slate-100 truncate">{f.label}</span>
                       </div>
                       <div className="text-sm font-bold tabular-nums text-gray-800 dark:text-gray-100">{fmtKRW(f.value)}</div>
                       <div className="text-[10px] text-gray-400 truncate">
@@ -349,17 +349,17 @@ export default function CmsVerificationModal({
                 <div key={f.key}
                   className={`rounded-lg border p-3 transition-colors ${
                     vs.done ? 'border-green-400 dark:border-green-600 bg-green-50 dark:bg-green-900/20'
-                            : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800'
+                            : 'border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800'
                   } ${!zero && auto?.hit ? 'cursor-pointer hover:border-blue-300' : ''}`}
                   onClick={() => !zero && auto?.hit && locate(auto.hit)}>
 
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-medium text-gray-600 dark:text-gray-300">{f.label}</span>
+                    <span className="text-xs font-medium text-gray-600 dark:text-slate-100">{f.label}</span>
                     {zero
-                      ? <span className="text-[10px] text-gray-400 px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700">대상 아님</span>
+                      ? <span className="text-[10px] text-gray-400 px-1.5 py-0.5 rounded bg-gray-100 dark:bg-slate-700">대상 아님</span>
                       : vs.done
                         ? <span className="text-[10px] font-bold text-green-700 dark:text-green-300 px-1.5 py-0.5 rounded bg-green-100 dark:bg-green-900/50">✅ 대사완료</span>
-                        : <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400 px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700">○ 미대사</span>}
+                        : <span className="text-[10px] font-bold text-gray-500 dark:text-slate-300 px-1.5 py-0.5 rounded bg-gray-100 dark:bg-slate-700">○ 미대사</span>}
                   </div>
 
                   <div className="text-base font-bold tabular-nums text-gray-800 dark:text-gray-100">{fmtKRW(f.value)}</div>
@@ -378,19 +378,19 @@ export default function CmsVerificationModal({
                   {/* 메모/출처 (완료 시) */}
                   {vs.done && (
                     <div className="mt-2 space-y-1" onClick={e => e.stopPropagation()}>
-                      {vs.source && <div className="text-[11px] text-gray-500 dark:text-gray-400">📎 출처: {vs.source}</div>}
+                      {vs.source && <div className="text-[11px] text-gray-500 dark:text-slate-300">📎 출처: {vs.source}</div>}
                       {vs.editMemo ? (
                         <div className="flex gap-1">
                           <input type="text" value={vs.memo} maxLength={100} autoFocus
                             placeholder="예: 2건 합산 / 별도 증빙 확인"
-                            className="flex-1 text-xs border border-gray-300 dark:border-gray-600 rounded px-2 py-1 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100"
+                            className="flex-1 text-xs border border-gray-300 dark:border-slate-600 rounded px-2 py-1 bg-white dark:bg-slate-700 text-gray-800 dark:text-gray-100"
                             onChange={e => setVS(f.key, { memo: e.target.value })}
                             onKeyDown={e => { if (e.key === 'Enter') setVS(f.key, { editMemo: false }) }} />
-                          <button className="text-xs px-2 py-1 rounded bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
+                          <button className="text-xs px-2 py-1 rounded bg-gray-200 dark:bg-slate-700 text-gray-600 dark:text-slate-100"
                             onClick={() => setVS(f.key, { editMemo: false })}>저장</button>
                         </div>
                       ) : (
-                        <button className="text-[11px] text-gray-500 dark:text-gray-400 hover:text-blue-600"
+                        <button className="text-[11px] text-gray-500 dark:text-slate-300 hover:text-blue-600"
                           onClick={() => setVS(f.key, { editMemo: true })}>
                           {vs.memo ? `📝 ${vs.memo}` : '+ 메모 추가'}
                         </button>
@@ -408,13 +408,13 @@ export default function CmsVerificationModal({
                         })}
                         className={`flex-1 text-xs py-1.5 rounded font-semibold transition-colors flex items-center justify-center gap-1.5 ${
                           vs.done ? 'bg-green-600 hover:bg-green-700 text-white'
-                                  : 'bg-white dark:bg-gray-700 border border-blue-400 dark:border-blue-500 text-blue-600 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/40'}`}>
+                                  : 'bg-white dark:bg-slate-700 border border-blue-400 dark:border-blue-500 text-blue-600 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/40'}`}>
                         {vs.done ? <><span className="text-sm">☑</span> 대사 완료됨 · 취소하려면 클릭</>
                                  : <><span className="text-sm">☐</span> 클릭하여 대사 완료</>}
                       </button>
                       {vs.done && (
                         <button onClick={() => setVS(f.key, { collapsed: true })}
-                          className="px-2.5 text-xs rounded border border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
+                          className="px-2.5 text-xs rounded border border-gray-300 dark:border-slate-600 text-gray-500 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700"
                           title="카드 접기">▴ 접기</button>
                       )}
                     </div>
@@ -432,8 +432,8 @@ export default function CmsVerificationModal({
 
             {/* 현재 PDF의 추출 금액 목록 — 클릭 강조 */}
             {extracted && activeExt && activeExt.amounts.length > 0 && (
-              <details className="rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-xs" open>
-                <summary className="cursor-pointer px-3 py-2 text-gray-600 dark:text-gray-300 font-medium select-none">
+              <details className="rounded-lg bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-xs" open>
+                <summary className="cursor-pointer px-3 py-2 text-gray-600 dark:text-slate-100 font-medium select-none">
                   📄 {pdfs[activePdf]?.fileName} 추출 금액 {activeExt.amounts.length}건
                 </summary>
                 <div className="px-3 pb-2 flex flex-wrap gap-1 max-h-44 overflow-y-auto">
@@ -442,7 +442,7 @@ export default function CmsVerificationModal({
                       className={`px-1.5 py-0.5 rounded tabular-nums border ${
                         clicked === n
                           ? 'bg-yellow-200 dark:bg-yellow-600/50 border-yellow-500 text-gray-900 dark:text-yellow-100 font-bold'
-                          : 'bg-gray-100 dark:bg-gray-700 border-transparent text-gray-600 dark:text-gray-300 hover:bg-blue-100 dark:hover:bg-blue-900'}`}>
+                          : 'bg-gray-100 dark:bg-slate-700 border-transparent text-gray-600 dark:text-slate-100 hover:bg-blue-100 dark:hover:bg-blue-900'}`}>
                       {n.toLocaleString('ko-KR')}
                       <span className="text-[9px] text-gray-400 ml-0.5">p{activeExt.pageMap.get(n) ?? 1}</span>
                     </button>
@@ -451,8 +451,8 @@ export default function CmsVerificationModal({
               </details>
             )}
 
-            <div className="rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-3 text-xs text-gray-500 space-y-1">
-              <div className="font-medium text-gray-600 dark:text-gray-300">대사 방법</div>
+            <div className="rounded-lg bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 p-3 text-xs text-gray-500 space-y-1">
+              <div className="font-medium text-gray-600 dark:text-slate-100">대사 방법</div>
               <div>① 카드 클릭 → 매칭 PDF·페이지로 이동 + 금액 목록 강조</div>
               <div>② 좌측 PDF에서 금액 확인 (PDF가 여러 개면 상단 탭 전환)</div>
               <div>③ "대사 완료" 클릭 → 확인한 PDF가 출처로 자동 기록</div>
@@ -474,3 +474,4 @@ export default function CmsVerificationModal({
     </div>
   )
 }
+

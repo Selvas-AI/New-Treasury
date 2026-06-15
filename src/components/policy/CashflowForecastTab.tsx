@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+﻿import { useState, useMemo } from 'react'
 import { useCashflowPlan, get12Weeks } from '../../hooks/useCashflowPlan'
 import { fmtKRW } from '../../lib/format'
 import type { Company } from '../../types'
@@ -90,8 +90,8 @@ export default function CashflowForecastTab({ company, openingBalance, isMaster,
 
       {/* 요약 KPI */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
-          <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">현재 운전자금</p>
+        <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-4">
+          <p className="text-xs text-gray-500 dark:text-slate-300 mb-1">현재 운전자금</p>
           <p className="text-base font-bold text-gray-800 dark:text-white">{fmtKRW(openingBalance)}</p>
         </div>
         <div className="bg-blue-50 dark:bg-blue-950/30 rounded-xl border border-blue-200 dark:border-blue-800 p-4">
@@ -115,8 +115,8 @@ export default function CashflowForecastTab({ company, openingBalance, isMaster,
       </div>
 
       {/* 포캐스트 테이블 */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-        <div className="px-5 py-3 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
+      <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 overflow-hidden">
+        <div className="px-5 py-3 border-b border-gray-100 dark:border-slate-700 flex items-center justify-between">
           <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">주별 자금수지 계획 (12주)</h3>
           <p className="text-xs text-gray-400 dark:text-gray-500">금액 단위: 억원</p>
         </div>
@@ -127,7 +127,7 @@ export default function CashflowForecastTab({ company, openingBalance, isMaster,
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-100 dark:border-gray-700">
+                <tr className="border-b border-gray-100 dark:border-slate-700">
                   {['주차', '기간', '기초잔고', '유입 (계획)', '유출 (계획)', '순증감', '기말잔고', '메모', ''].map(h => (
                     <th key={h} className="text-left text-xs text-gray-400 dark:text-gray-500 font-medium px-4 py-2.5 whitespace-nowrap">{h}</th>
                   ))}
@@ -141,19 +141,19 @@ export default function CashflowForecastTab({ company, openingBalance, isMaster,
 
                   return (
                     <tr key={row.week}
-                      className={`border-b border-gray-50 dark:border-gray-700/50 ${
+                      className={`border-b border-gray-50 dark:border-slate-700/50 ${
                         isPast    ? 'opacity-50' :
-                        isCurrent ? 'bg-blue-50/40 dark:bg-blue-950/10' : 'hover:bg-gray-50 dark:hover:bg-gray-700'
+                        isCurrent ? 'bg-blue-50/40 dark:bg-blue-950/10' : 'hover:bg-gray-50 dark:hover:bg-slate-700'
                       } ${row.closing < 0 ? 'bg-red-50/30 dark:bg-red-950/10' : ''}`}>
 
-                      <td className="px-4 py-2.5 text-xs font-medium text-gray-600 dark:text-gray-300 whitespace-nowrap">
+                      <td className="px-4 py-2.5 text-xs font-medium text-gray-600 dark:text-slate-100 whitespace-nowrap">
                         {fmtWkLabel(row.idx)}
                         {isCurrent && <span className="ml-1 text-[10px] bg-blue-500 text-white px-1 py-0.5 rounded">현재</span>}
                       </td>
-                      <td className="px-4 py-2.5 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap tabular-nums">
+                      <td className="px-4 py-2.5 text-xs text-gray-500 dark:text-slate-300 whitespace-nowrap tabular-nums">
                         {fmtWeek(row.week)}~
                       </td>
-                      <td className="px-4 py-2.5 text-right tabular-nums text-xs text-gray-600 dark:text-gray-300">
+                      <td className="px-4 py-2.5 text-right tabular-nums text-xs text-gray-600 dark:text-slate-100">
                         {(row.opening / 1e8).toFixed(1)}억
                       </td>
 
@@ -163,13 +163,13 @@ export default function CashflowForecastTab({ company, openingBalance, isMaster,
                             <input type="number" step="0.1" placeholder="0"
                               value={form.inflow}
                               onChange={e => setForm(f => ({ ...f, inflow: e.target.value }))}
-                              className="w-20 border border-blue-300 rounded px-2 py-1 text-xs text-right dark:bg-gray-700 dark:border-blue-600 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                              className="w-20 border border-blue-300 rounded px-2 py-1 text-xs text-right dark:bg-slate-700 dark:border-blue-600 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-400" />
                           </td>
                           <td className="px-2 py-1.5">
                             <input type="number" step="0.1" placeholder="0"
                               value={form.outflow}
                               onChange={e => setForm(f => ({ ...f, outflow: e.target.value }))}
-                              className="w-20 border border-red-300 rounded px-2 py-1 text-xs text-right dark:bg-gray-700 dark:border-red-600 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-red-400" />
+                              className="w-20 border border-red-300 rounded px-2 py-1 text-xs text-right dark:bg-slate-700 dark:border-red-600 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-red-400" />
                           </td>
                           <td className="px-4 py-2.5 text-right tabular-nums text-xs">—</td>
                           <td className="px-4 py-2.5 text-right tabular-nums text-xs">—</td>
@@ -177,7 +177,7 @@ export default function CashflowForecastTab({ company, openingBalance, isMaster,
                             <input type="text" placeholder="메모"
                               value={form.memo}
                               onChange={e => setForm(f => ({ ...f, memo: e.target.value }))}
-                              className="w-28 border border-gray-300 rounded px-2 py-1 text-xs dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                              className="w-28 border border-gray-300 rounded px-2 py-1 text-xs dark:bg-slate-700 dark:border-slate-600 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-400" />
                           </td>
                           <td className="px-3 py-1.5 whitespace-nowrap">
                             <div className="flex gap-1">
@@ -229,8 +229,8 @@ export default function CashflowForecastTab({ company, openingBalance, isMaster,
                 })}
               </tbody>
               <tfoot>
-                <tr className="border-t-2 border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/30">
-                  <td colSpan={3} className="px-4 py-2.5 text-xs font-semibold text-gray-600 dark:text-gray-300">12주 합계</td>
+                <tr className="border-t-2 border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-gray-700/30">
+                  <td colSpan={3} className="px-4 py-2.5 text-xs font-semibold text-gray-600 dark:text-slate-100">12주 합계</td>
                   <td className="px-4 py-2.5 text-right tabular-nums text-xs font-semibold text-blue-700 dark:text-blue-400">
                     +{(totalInflow / 1e8).toFixed(1)}억
                   </td>
@@ -260,3 +260,4 @@ export default function CashflowForecastTab({ company, openingBalance, isMaster,
     </div>
   )
 }
+

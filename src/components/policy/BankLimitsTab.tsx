@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+﻿import { useState, useMemo } from 'react'
 import { usePolicyBankLimits } from '../../hooks/usePolicyBankLimits'
 import { getLatestInvestments } from '../../hooks/useInvestments'
 import { fmtKRW } from '../../lib/format'
@@ -31,7 +31,7 @@ function StatusBadge({ status }: { status: BankRow['status'] }) {
   if (status === 'ok')   return <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300 font-medium">✓ 정상</span>
   if (status === 'warn') return <span className="text-xs px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300 font-medium">⚠ 주의</span>
   if (status === 'over') return <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 font-medium">✕ 초과</span>
-  return <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400">—</span>
+  return <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 dark:bg-slate-700 dark:text-slate-300">—</span>
 }
 
 const EMPTY_FORM = { bankType: '은행' as typeof BANK_TYPES[number], limitPct: '30', limitAmt: '', note: '' }
@@ -170,8 +170,8 @@ export default function BankLimitsTab({ company, investments, isMaster, userLabe
 
       {/* KPI 요약 */}
       <div className="grid grid-cols-3 gap-3">
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
-          <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">총 운용자금</p>
+        <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-4">
+          <p className="text-xs text-gray-500 dark:text-slate-300 mb-1">총 운용자금</p>
           <p className="text-lg font-bold text-gray-800 dark:text-white">{fmtKRW(totalAmt)}</p>
           <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
             운용 {activeCount}개 · 등록 {bankRows.length}개 기관
@@ -180,22 +180,22 @@ export default function BankLimitsTab({ company, investments, isMaster, userLabe
         <div className={`rounded-xl border p-4 ${overCount > 0
           ? 'bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-800'
           : 'bg-green-50 border-green-200 dark:bg-green-950/30 dark:border-green-800'}`}>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">한도 초과 기관</p>
+          <p className="text-xs text-gray-500 dark:text-slate-300 mb-1">한도 초과 기관</p>
           <p className={`text-lg font-bold ${overCount > 0 ? 'text-red-700 dark:text-red-300' : 'text-green-700 dark:text-green-300'}`}>
             {overCount}개
           </p>
           <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">주의 {warnCount}개</p>
         </div>
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
-          <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">규정 기본 한도</p>
+        <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-4">
+          <p className="text-xs text-gray-500 dark:text-slate-300 mb-1">규정 기본 한도</p>
           <p className="text-lg font-bold text-gray-800 dark:text-white">30%</p>
           <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">자금운용관리규정 §9</p>
         </div>
       </div>
 
       {/* 기관별 운용 현황 테이블 */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-        <div className="px-5 py-3 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
+      <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 overflow-hidden">
+        <div className="px-5 py-3 border-b border-gray-100 dark:border-slate-700 flex items-center justify-between">
           <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">기관별 운용 현황</h3>
           <div className="flex items-center gap-3">
             <p className="text-xs text-gray-400 dark:text-gray-500">90%↑ 주의 · 100%↑ 초과</p>
@@ -219,7 +219,7 @@ export default function BankLimitsTab({ company, investments, isMaster, userLabe
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-100 dark:border-gray-700">
+                <tr className="border-b border-gray-100 dark:border-slate-700">
                   {['금융기관', '구분', '잔고', '비중', '한도', '상태', ''].map(h => (
                     <th key={h} className="text-left text-xs text-gray-400 dark:text-gray-500 font-medium px-4 py-2.5 whitespace-nowrap">{h}</th>
                   ))}
@@ -228,36 +228,36 @@ export default function BankLimitsTab({ company, investments, isMaster, userLabe
               <tbody>
                 {bankRows.map(row => (
                   <tr key={row.bank}
-                    className={`border-b border-gray-50 dark:border-gray-700/50 ${
+                    className={`border-b border-gray-50 dark:border-slate-700/50 ${
                       row.amount === 0  ? 'opacity-50' :
-                      row.status === 'over' ? 'bg-red-50/40 dark:bg-red-950/10' : 'hover:bg-gray-50 dark:hover:bg-gray-700'
+                      row.status === 'over' ? 'bg-red-50/40 dark:bg-red-950/10' : 'hover:bg-gray-50 dark:hover:bg-slate-700'
                     }`}>
                     <td className="px-4 py-3 font-medium text-gray-800 dark:text-gray-100 whitespace-nowrap">
                       {row.bank}
                       {!row.registered && (
-                        <span className="ml-1.5 text-[10px] text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-700 px-1 rounded">미등록</span>
+                        <span className="ml-1.5 text-[10px] text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-slate-700 px-1 rounded">미등록</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400">{row.bankType}</td>
+                    <td className="px-4 py-3 text-xs text-gray-500 dark:text-slate-300">{row.bankType}</td>
                     <td className="px-4 py-3 text-right tabular-nums text-gray-700 dark:text-gray-200">
                       {row.amount > 0 ? fmtKRW(row.amount) : <span className="text-gray-300 dark:text-gray-600">미운용</span>}
                     </td>
                     <td className="px-4 py-3">
                       {row.amount > 0 ? (
                         <div className="flex items-center gap-2 min-w-[100px]">
-                          <div className="flex-1 bg-gray-100 dark:bg-gray-700 rounded-full h-1.5">
+                          <div className="flex-1 bg-gray-100 dark:bg-slate-700 rounded-full h-1.5">
                             <div
                               className={`h-1.5 rounded-full ${row.status === 'over' ? 'bg-red-500' : row.status === 'warn' ? 'bg-orange-400' : 'bg-blue-500'}`}
                               style={{ width: `${Math.min(row.pct, 100)}%` }}
                             />
                           </div>
-                          <span className="text-xs tabular-nums text-gray-600 dark:text-gray-300 w-10 text-right">
+                          <span className="text-xs tabular-nums text-gray-600 dark:text-slate-100 w-10 text-right">
                             {row.pct.toFixed(1)}%
                           </span>
                         </div>
                       ) : <span className="text-gray-300 dark:text-gray-600 text-xs">—</span>}
                     </td>
-                    <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                    <td className="px-4 py-3 text-xs text-gray-500 dark:text-slate-300 whitespace-nowrap">
                       {row.limitAmt ? fmtKRW(row.limitAmt) : `${row.limitPct}%`}
                       {!row.registered && <span className="ml-1 text-gray-300 dark:text-gray-600">(기본)</span>}
                     </td>
@@ -283,12 +283,12 @@ export default function BankLimitsTab({ company, investments, isMaster, userLabe
               </tbody>
               {totalAmt > 0 && (
                 <tfoot>
-                  <tr className="border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/30">
-                    <td colSpan={2} className="px-4 py-2.5 text-xs font-semibold text-gray-600 dark:text-gray-300">합계</td>
+                  <tr className="border-t border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-gray-700/30">
+                    <td colSpan={2} className="px-4 py-2.5 text-xs font-semibold text-gray-600 dark:text-slate-100">합계</td>
                     <td className="px-4 py-2.5 text-right tabular-nums font-semibold text-gray-800 dark:text-gray-100">
                       {fmtKRW(totalAmt)}
                     </td>
-                    <td className="px-4 py-2.5 text-xs text-right text-gray-500 dark:text-gray-400">100%</td>
+                    <td className="px-4 py-2.5 text-xs text-right text-gray-500 dark:text-slate-300">100%</td>
                     <td colSpan={3} />
                   </tr>
                 </tfoot>
@@ -302,28 +302,28 @@ export default function BankLimitsTab({ company, investments, isMaster, userLabe
       {addOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 dark:bg-black/50"
           onClick={() => setAddOpen(false)}>
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 w-full max-w-sm space-y-4 mx-4"
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl p-6 w-full max-w-sm space-y-4 mx-4"
             onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100">거래 금융기관 등록</h3>
               <button onClick={() => setAddOpen(false)} className="text-gray-400 hover:text-gray-600 text-lg leading-none">×</button>
             </div>
-            <p className="text-xs text-gray-500 dark:text-gray-400">
+            <p className="text-xs text-gray-500 dark:text-slate-300">
               운용자금 입력 시 드롭다운에 표시됩니다. 한도는 등록 후 수정 가능합니다.
             </p>
             <div className="space-y-3">
               <div>
-                <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">기관명 *</label>
+                <label className="block text-xs text-gray-500 dark:text-slate-300 mb-1">기관명 *</label>
                 <input type="text" value={addForm.bankName}
                   onChange={e => setAddForm(f => ({ ...f, bankName: e.target.value }))}
                   placeholder="예: KB국민은행"
-                  className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                  className="w-full border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm dark:bg-slate-700 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-400" />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">기관 구분 *</label>
+                <label className="block text-xs text-gray-500 dark:text-slate-300 mb-1">기관 구분 *</label>
                 <select value={addForm.bankType}
                   onChange={e => setAddForm(f => ({ ...f, bankType: e.target.value as typeof BANK_TYPES[number] }))}
-                  className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-400">
+                  className="w-full border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm dark:bg-slate-700 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-400">
                   {BANK_TYPES.map(t => <option key={t}>{t}</option>)}
                 </select>
               </div>
@@ -331,7 +331,7 @@ export default function BankLimitsTab({ company, investments, isMaster, userLabe
             {addErr && <p className="text-xs text-red-500">{addErr}</p>}
             <div className="flex gap-2">
               <button onClick={() => setAddOpen(false)}
-                className="flex-1 text-sm border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded-lg py-2 hover:bg-gray-50 dark:hover:bg-gray-700">
+                className="flex-1 text-sm border border-gray-300 dark:border-slate-600 text-gray-600 dark:text-slate-100 rounded-lg py-2 hover:bg-gray-50 dark:hover:bg-slate-700">
                 취소
               </button>
               <button onClick={handleAddBank}
@@ -347,7 +347,7 @@ export default function BankLimitsTab({ company, investments, isMaster, userLabe
       {editBank && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 dark:bg-black/50"
           onClick={() => setEditBank(null)}>
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 w-full max-w-sm space-y-4 mx-4"
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl p-6 w-full max-w-sm space-y-4 mx-4"
             onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100">
@@ -357,42 +357,42 @@ export default function BankLimitsTab({ company, investments, isMaster, userLabe
             </div>
             <div className="space-y-3">
               <div>
-                <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">기관 구분</label>
+                <label className="block text-xs text-gray-500 dark:text-slate-300 mb-1">기관 구분</label>
                 <select value={form.bankType}
                   onChange={e => setForm(f => ({ ...f, bankType: e.target.value as typeof BANK_TYPES[number] }))}
-                  className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-400">
+                  className="w-full border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm dark:bg-slate-700 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-400">
                   {BANK_TYPES.map(t => <option key={t}>{t}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">한도 비율 (%)</label>
+                <label className="block text-xs text-gray-500 dark:text-slate-300 mb-1">한도 비율 (%)</label>
                 <input type="number" min="1" max="100" step="0.5"
                   value={form.limitPct}
                   onChange={e => setForm(f => ({ ...f, limitPct: e.target.value }))}
-                  className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm text-right dark:bg-gray-700 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                  className="w-full border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm text-right dark:bg-slate-700 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-400" />
                 <p className="text-xs text-gray-400 mt-0.5">규정 §9 기본값: 30%</p>
               </div>
               <div>
-                <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">한도 금액 (억원, 미입력 시 비율 적용)</label>
+                <label className="block text-xs text-gray-500 dark:text-slate-300 mb-1">한도 금액 (억원, 미입력 시 비율 적용)</label>
                 <input type="number" min="0" step="0.1"
                   value={form.limitAmt}
                   onChange={e => setForm(f => ({ ...f, limitAmt: e.target.value }))}
                   placeholder="직접 지정 시 입력"
-                  className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm text-right dark:bg-gray-700 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                  className="w-full border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm text-right dark:bg-slate-700 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-400" />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">비고</label>
+                <label className="block text-xs text-gray-500 dark:text-slate-300 mb-1">비고</label>
                 <input type="text"
                   value={form.note}
                   onChange={e => setForm(f => ({ ...f, note: e.target.value }))}
                   placeholder="예: 주거래은행, 특수목적 등"
-                  className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                  className="w-full border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm dark:bg-slate-700 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-400" />
               </div>
             </div>
             {saveError && <p className="text-xs text-red-500">{saveError}</p>}
             <div className="flex gap-2">
               <button onClick={() => setEditBank(null)}
-                className="flex-1 text-sm border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded-lg py-2 hover:bg-gray-50 dark:hover:bg-gray-700">
+                className="flex-1 text-sm border border-gray-300 dark:border-slate-600 text-gray-600 dark:text-slate-100 rounded-lg py-2 hover:bg-gray-50 dark:hover:bg-slate-700">
                 취소
               </button>
               <button onClick={handleSave} disabled={saving}
@@ -406,3 +406,4 @@ export default function BankLimitsTab({ company, investments, isMaster, userLabe
     </div>
   )
 }
+

@@ -1,4 +1,4 @@
-import {
+﻿import {
   useReactTable,
   getCoreRowModel,
   getSortedRowModel,
@@ -115,15 +115,15 @@ export function NotionTable<T extends object>({
         <div className="relative" ref={settingsRef}>
           <button
             onClick={() => setSettingsOpen(o => !o)}
-            className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+            className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs text-gray-500 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
           >
             <span>⚙️</span>
             <span>뷰 설정</span>
           </button>
 
           {settingsOpen && (
-            <div className="absolute right-0 top-full z-50 mt-1 w-52 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-xl">
-              <div className="border-b border-gray-100 dark:border-gray-700 px-3.5 py-2.5">
+            <div className="absolute right-0 top-full z-50 mt-1 w-52 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-xl">
+              <div className="border-b border-gray-100 dark:border-slate-700 px-3.5 py-2.5">
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
                   컬럼 표시
                 </p>
@@ -131,14 +131,14 @@ export function NotionTable<T extends object>({
               <ul className="max-h-72 overflow-y-auto py-1">
                 {allLeafColumns.map(col => (
                   <li key={col.id}>
-                    <label className="flex cursor-pointer items-center gap-2.5 px-3.5 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                    <label className="flex cursor-pointer items-center gap-2.5 px-3.5 py-2 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors">
                       <input
                         type="checkbox"
                         checked={col.getIsVisible()}
                         onChange={col.getToggleVisibilityHandler()}
                         className="h-3.5 w-3.5 rounded border-gray-300 accent-blue-500"
                       />
-                      <span className="text-xs text-gray-700 dark:text-gray-300">
+                      <span className="text-xs text-gray-700 dark:text-slate-100">
                         {typeof col.columnDef.header === 'string'
                           ? col.columnDef.header
                           : col.id}
@@ -147,7 +147,7 @@ export function NotionTable<T extends object>({
                   </li>
                 ))}
               </ul>
-              <div className="border-t border-gray-100 dark:border-gray-700 px-3.5 py-2">
+              <div className="border-t border-gray-100 dark:border-slate-700 px-3.5 py-2">
                 <button
                   onClick={() =>
                     allLeafColumns.forEach(col => col.toggleVisibility(true))
@@ -163,11 +163,11 @@ export function NotionTable<T extends object>({
       </div>
 
       {/* ── Table ────────────────────────────────────────────────────── */}
-      <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700">
+      <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-slate-700">
         <table className="w-full min-w-full border-collapse text-sm">
           <thead>
             {table.getHeaderGroups().map(hg => (
-              <tr key={hg.id} className="border-b border-gray-200 dark:border-gray-700 bg-gray-50/60 dark:bg-gray-800/60">
+              <tr key={hg.id} className="border-b border-gray-200 dark:border-slate-700 bg-gray-50/60 dark:bg-slate-800/60">
                 {hg.headers.map(header => {
                   const canSort = header.column.getCanSort()
                   const sorted = header.column.getIsSorted()
@@ -177,8 +177,8 @@ export function NotionTable<T extends object>({
                       colSpan={header.colSpan}
                       onClick={canSort ? header.column.getToggleSortingHandler() : undefined}
                       className={[
-                        'select-none whitespace-nowrap px-3.5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400',
-                        canSort ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-700 dark:hover:text-gray-200' : '',
+                        'select-none whitespace-nowrap px-3.5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-sky-300',
+                        canSort ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-700 hover:text-gray-700 dark:hover:text-gray-200' : '',
                         'transition-colors',
                       ].join(' ')}
                     >
@@ -199,7 +199,7 @@ export function NotionTable<T extends object>({
             ))}
           </thead>
 
-          <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+          <tbody className="divide-y divide-gray-100 dark:divide-slate-700">
             {table.getRowModel().rows.length === 0 ? (
               <tr>
                 <td
@@ -215,7 +215,7 @@ export function NotionTable<T extends object>({
                   {row.getVisibleCells().map(cell => (
                     <td
                       key={cell.id}
-                      className="whitespace-nowrap px-3.5 py-2.5 text-xs text-gray-700 dark:text-gray-300"
+                      className="whitespace-nowrap px-3.5 py-2.5 text-xs text-gray-700 dark:text-slate-100"
                     >
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </td>
@@ -229,3 +229,4 @@ export function NotionTable<T extends object>({
     </div>
   )
 }
+

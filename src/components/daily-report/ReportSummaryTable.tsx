@@ -1,4 +1,4 @@
-/**
+﻿/**
  * ReportSummaryTable — 자금일보 자금현황 요약 테이블
  *
  * 구조:
@@ -80,9 +80,9 @@ function DeltaCell({ diff, isFx, code, onClick }: {
 // ── 섹션 헤더 ──────────────────────────────────────────────────
 function SectionHeader({ label, sub }: { label: string; sub?: string }) {
   return (
-    <tr className="bg-gray-50 dark:bg-gray-700/40">
+    <tr className="bg-gray-50 dark:bg-slate-700/40">
       <td colSpan={7} className="px-4 py-1.5">
-        <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+        <span className="text-[11px] font-semibold text-gray-500 dark:text-slate-300 uppercase tracking-wider">
           {label}
         </span>
         {sub && (
@@ -117,8 +117,8 @@ function SubtotalRow({
 }) {
   const diff = (currKrw || prevKrw) - prevKrw
   return (
-    <tr className="border-t border-gray-200 dark:border-gray-600 font-semibold text-xs bg-gray-50/50 dark:bg-gray-700/20">
-      <td className={`px-4 py-2 text-gray-600 dark:text-gray-300 ${indent ? 'pl-7' : 'pl-4'}`}>
+    <tr className="border-t border-gray-200 dark:border-slate-600 font-semibold text-xs bg-gray-50/50 dark:bg-gray-700/20">
+      <td className={`px-4 py-2 text-gray-600 dark:text-slate-100 ${indent ? 'pl-7' : 'pl-4'}`}>
         {label}
         {note && <span className="ml-1.5 text-[10px] font-normal text-gray-400 dark:text-gray-500">{note}</span>}
       </td>
@@ -173,15 +173,15 @@ function KrwRow({ label, prevVal, currVal, inVal, outVal, isMissing, accountType
 
   return (
     <tr className="hover:bg-gray-50/50 dark:hover:bg-gray-700/20 text-xs">
-      <td className="px-4 py-2 pl-7 text-gray-600 dark:text-gray-400">{label}</td>
-      <td className="px-4 py-2 text-right tabular-nums text-gray-600 dark:text-gray-400">{fmt(prevVal)}</td>
+      <td className="px-4 py-2 pl-7 text-gray-600 dark:text-slate-300">{label}</td>
+      <td className="px-4 py-2 text-right tabular-nums text-gray-600 dark:text-slate-300">{fmt(prevVal)}</td>
       <td className="px-4 py-2 text-right tabular-nums text-green-700 dark:text-green-400">
         {inVal > 0 ? fmt(inVal) : '—'}
       </td>
       <td className="px-4 py-2 text-right tabular-nums text-red-600 dark:text-red-400">
         {outVal > 0 ? fmt(outVal) : '—'}
       </td>
-      <td className={`px-4 py-2 text-right tabular-nums ${isMissing && estimated === null ? 'text-gray-300 dark:text-gray-600 italic' : 'text-gray-600 dark:text-gray-400'}`}>
+      <td className={`px-4 py-2 text-right tabular-nums ${isMissing && estimated === null ? 'text-gray-300 dark:text-gray-600 italic' : 'text-gray-600 dark:text-slate-300'}`}>
         {isMissing
           ? (estimated !== null
               ? <span className="text-amber-500 dark:text-amber-400" title="입출금 입력 기반 예상 잔액">~{fmt(estimated)}</span>
@@ -215,8 +215,8 @@ function FxRow({ code, prevRaw, currRaw, prevKrw, currKrw, isMissing, inRaw, out
 
   return (
     <tr className="hover:bg-gray-50/50 dark:hover:bg-gray-700/20 text-xs">
-      <td className="px-4 py-2 pl-7 text-gray-600 dark:text-gray-400">{label}</td>
-      <td className="px-4 py-2 text-right tabular-nums text-gray-600 dark:text-gray-400">
+      <td className="px-4 py-2 pl-7 text-gray-600 dark:text-slate-300">{label}</td>
+      <td className="px-4 py-2 text-right tabular-nums text-gray-600 dark:text-slate-300">
         {prevRaw > 0 ? fmtFx(prevRaw, code) : '—'}
       </td>
       <td className="px-4 py-2 text-right tabular-nums text-green-700 dark:text-green-400">
@@ -225,7 +225,7 @@ function FxRow({ code, prevRaw, currRaw, prevKrw, currKrw, isMissing, inRaw, out
       <td className="px-4 py-2 text-right tabular-nums text-red-600 dark:text-red-400">
         {(outRaw ?? 0) > 0 ? fmtFx(outRaw!, code) : '—'}
       </td>
-      <td className={`px-4 py-2 text-right tabular-nums ${isMissing ? 'text-gray-300 dark:text-gray-600 italic' : 'text-gray-600 dark:text-gray-400'}`}>
+      <td className={`px-4 py-2 text-right tabular-nums ${isMissing ? 'text-gray-300 dark:text-gray-600 italic' : 'text-gray-600 dark:text-slate-300'}`}>
         {isMissing ? '미입력' : currRaw > 0 ? fmtFx(currRaw, code) : '—'}
       </td>
       <td className="px-4 py-2 text-right tabular-nums text-blue-600 dark:text-blue-400 font-medium">
@@ -269,7 +269,7 @@ function InvestRow({ group, inKrw, outKrw, isAutoEval }: {
 
   return (
     <tr className="hover:bg-gray-50/50 dark:hover:bg-gray-700/20 text-xs">
-      <td className="px-4 py-2 pl-9 text-gray-600 dark:text-gray-400">
+      <td className="px-4 py-2 pl-9 text-gray-600 dark:text-slate-300">
         <span className="inline-flex items-center gap-1.5">
           <span className={isBond ? 'font-medium' : ''}>{group.label}</span>
           {isBond && group.bankLabel && (
@@ -288,7 +288,7 @@ function InvestRow({ group, inKrw, outKrw, isAutoEval }: {
           )}
         </span>
       </td>
-      <td className="px-4 py-2 text-right tabular-nums text-gray-600 dark:text-gray-400">
+      <td className="px-4 py-2 text-right tabular-nums text-gray-600 dark:text-slate-300">
         {prevDisplay}
       </td>
       <td className="px-4 py-2 text-right tabular-nums text-green-700 dark:text-green-400">
@@ -297,7 +297,7 @@ function InvestRow({ group, inKrw, outKrw, isAutoEval }: {
       <td className="px-4 py-2 text-right tabular-nums text-red-600 dark:text-red-400">
         {outKrw > 0 ? fmt(outKrw) : '—'}
       </td>
-      <td className="px-4 py-2 text-right tabular-nums text-gray-600 dark:text-gray-400">
+      <td className="px-4 py-2 text-right tabular-nums text-gray-600 dark:text-slate-300">
         {currDisplay}
       </td>
       {/* 원화환산 열: FX예금=KRW환산(파란색), 국채=KRW, 일반=KRW라벨 */}
@@ -362,7 +362,7 @@ export default function ReportSummaryTable({
     return (
       <div className="overflow-x-auto p-4 space-y-2">
         {Array.from({ length: 10 }).map((_, i) => (
-          <div key={i} className="h-3 bg-gray-100 dark:bg-gray-700 rounded animate-pulse"
+          <div key={i} className="h-3 bg-gray-100 dark:bg-slate-700 rounded animate-pulse"
             style={{ width: `${60 + (i % 4) * 10}%` }} />
         ))}
       </div>
@@ -387,7 +387,7 @@ export default function ReportSummaryTable({
 
       <table className="w-full text-xs">
         <thead>
-          <tr className="bg-gray-50 dark:bg-gray-700/50 text-gray-500 dark:text-gray-400 text-[11px]">
+          <tr className="bg-gray-50 dark:bg-gray-700/50 text-gray-500 dark:text-slate-300 text-[11px]">
             <th className="text-left px-4 py-2.5 font-medium w-52">구분</th>
             <th className="text-right px-4 py-2 font-medium leading-tight">
               기초잔액
@@ -410,7 +410,7 @@ export default function ReportSummaryTable({
             </th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-50 dark:divide-gray-700/50">
+        <tbody className="divide-y divide-gray-50 dark:divide-slate-700/50">
 
           {/* ─── 운전자금 ─────────────────────────────────── */}
           <SectionHeader label="운전자금" />
@@ -525,7 +525,7 @@ export default function ReportSummaryTable({
                 const evalOutKrw = evalSums?.outKrw ?? 0
                 return (
                   <tr key={g.name} className="hover:bg-gray-50/50 dark:hover:bg-gray-700/20 text-xs">
-                    <td className="px-4 py-2 pl-7 text-gray-600 dark:text-gray-400 whitespace-nowrap">
+                    <td className="px-4 py-2 pl-7 text-gray-600 dark:text-slate-300 whitespace-nowrap">
                       <span className="inline-flex items-center gap-1.5">
                         {g.name}
                         <span className="text-[10px] text-gray-400 dark:text-gray-500">({g.market})</span>
@@ -539,7 +539,7 @@ export default function ReportSummaryTable({
                       </span>
                     </td>
                     {/* 전일잔액: 직전 평가이력 */}
-                    <td className="px-4 py-2 text-right tabular-nums text-gray-600 dark:text-gray-400">{fmt(g.prevValue)}</td>
+                    <td className="px-4 py-2 text-right tabular-nums text-gray-600 dark:text-slate-300">{fmt(g.prevValue)}</td>
                     {/* 입금액: 평가이익 */}
                     <td className="px-4 py-2 text-right tabular-nums text-green-700 dark:text-green-400">
                       {evalInKrw > 0 ? fmt(evalInKrw) : '—'}
@@ -548,7 +548,7 @@ export default function ReportSummaryTable({
                     <td className="px-4 py-2 text-right tabular-nums text-red-600 dark:text-red-400">
                       {evalOutKrw > 0 ? fmt(evalOutKrw) : '—'}
                     </td>
-                    <td className="px-4 py-2 text-right tabular-nums text-gray-600 dark:text-gray-400">{fmt(g.totalValue)}</td>
+                    <td className="px-4 py-2 text-right tabular-nums text-gray-600 dark:text-slate-300">{fmt(g.totalValue)}</td>
                     <td className="px-4 py-2 text-right text-gray-300 dark:text-gray-700 text-[10px]">KRW</td>
                     {/* Δ: 당일평가 - 전일평가 */}
                     <DeltaCell diff={g.totalValue - g.prevValue} />
@@ -572,15 +572,15 @@ export default function ReportSummaryTable({
               <SectionHeader label="차입금" sub="(총합계 미포함)" />
               {loanGroups.map(g => (
                 <tr key={g.label} className="hover:bg-gray-50/50 dark:hover:bg-gray-700/20 text-xs">
-                  <td className="px-4 py-2 pl-7 text-gray-600 dark:text-gray-400">{g.label}</td>
-                  <td className="px-4 py-2 text-right tabular-nums text-gray-600 dark:text-gray-400">{fmt(g.totalKrw)}</td>
+                  <td className="px-4 py-2 pl-7 text-gray-600 dark:text-slate-300">{g.label}</td>
+                  <td className="px-4 py-2 text-right tabular-nums text-gray-600 dark:text-slate-300">{fmt(g.totalKrw)}</td>
                   <td className="px-4 py-2 text-right tabular-nums text-green-700 dark:text-green-400">
                     {itemSums.loanIn > 0 ? fmt(itemSums.loanIn) : '—'}
                   </td>
                   <td className="px-4 py-2 text-right tabular-nums text-red-600 dark:text-red-400">
                     {itemSums.loanOut > 0 ? fmt(itemSums.loanOut) : '—'}
                   </td>
-                  <td className="px-4 py-2 text-right tabular-nums text-gray-600 dark:text-gray-400">{fmt(g.totalKrw)}</td>
+                  <td className="px-4 py-2 text-right tabular-nums text-gray-600 dark:text-slate-300">{fmt(g.totalKrw)}</td>
                   <td className="px-4 py-2 text-right text-gray-300 dark:text-gray-700 text-[10px]">KRW</td>
                   <td className="px-3 py-2 text-right text-gray-300 dark:text-gray-600 text-[10px]">—</td>
                 </tr>
@@ -596,7 +596,7 @@ export default function ReportSummaryTable({
       </table>
 
       {/* 대시보드 일치 확인 안내 */}
-      <div className="no-print px-4 py-2 border-t border-gray-100 dark:border-gray-700 flex items-center gap-2 text-[10px] text-gray-400 dark:text-gray-500">
+      <div className="no-print px-4 py-2 border-t border-gray-100 dark:border-slate-700 flex items-center gap-2 text-[10px] text-gray-400 dark:text-gray-500">
         <span>ℹ</span>
         <span>자금 총합계(운전+운용) = 통합상황판 가용자금 합계와 일치해야 합니다.</span>
         {equityGroups.length > 0 && (
@@ -606,7 +606,7 @@ export default function ReportSummaryTable({
 
       {/* 환율 기준 */}
       {fx.rates.length > 0 && activeFxCodes.length > 0 && (
-        <div className="no-print px-4 py-2 border-t border-gray-100 dark:border-gray-700 flex flex-wrap gap-3 items-center">
+        <div className="no-print px-4 py-2 border-t border-gray-100 dark:border-slate-700 flex flex-wrap gap-3 items-center">
           <span className="text-[10px] text-gray-400 dark:text-gray-600">적용 환율 :</span>
           {activeFxCodes.map(code => {
             const r = fx.rates.find(x => x.code === code)
@@ -621,3 +621,4 @@ export default function ReportSummaryTable({
     </div>
   )
 }
+

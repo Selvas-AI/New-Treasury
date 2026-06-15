@@ -1,15 +1,15 @@
-@import "tailwindcss";
+﻿@import "tailwindcss";
 
-/* ── Tailwind v4: .dark 클래스 기반 다크 모드 variant ─── */
+/* ?? Tailwind v4: .dark ?대옒??湲곕컲 ?ㅽ겕 紐⑤뱶 variant ??? */
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* ── 다크모드 기본 배경 ──────────────────────────────── */
+/* ?? ?ㅽ겕紐⑤뱶 湲곕낯 諛곌꼍 ???????????????????????????????? */
 .dark body {
-  background-color: #111827;
-  color: #f9fafb;
+  background-color: #0f172a;
+  color: #f1f5f9;
 }
 
-/* ── 이슈 전광판 marquee (이슈 ticker용, 2x content) ─── */
+/* ?? ?댁뒋 ?꾧킅??marquee (?댁뒋 ticker?? 2x content) ??? */
 @keyframes ticker-scroll {
   from { transform: translateX(0); }
   to   { transform: translateX(-50%); }
@@ -25,7 +25,7 @@
   animation-play-state: paused;
 }
 
-/* ── 주가 마퀴 (4x content → -25% = 1 pass, seamless) ── */
+/* ?? 二쇨? 留덊?(4x content ??-25% = 1 pass, seamless) ?? */
 @keyframes stock-ticker-scroll {
   from { transform: translateX(0); }
   to   { transform: translateX(-25%); }
@@ -41,26 +41,26 @@
   animation-play-state: paused;
 }
 
-/* ── 자금흐름 상세 드로어 슬라이드인 ────────────────── */
+/* ?? ?먭툑?먮쫫 ?곸꽭 ?쒕줈???щ씪?대뱶???????????????????? */
 @keyframes slideInRight {
   from { opacity: 0; transform: translateX(16px) translateY(-50%); }
   to   { opacity: 1; transform: translateX(0)    translateY(-50%); }
 }
 
-/* ── 중앙 팝업 페이드인+스케일 ──────────────────────── */
-/* translate는 Tailwind -translate-x/y가 담당, 여기선 opacity+scale만 */
+/* ?? 以묒븰 ?앹뾽 ?섏씠?쒖씤+?ㅼ??????????????????????????? */
+/* translate??Tailwind -translate-x/y媛 ?대떦, ?ш린??opacity+scale留?*/
 @keyframes fadeInScale {
   from { opacity: 0; scale: 0.95; }
   to   { opacity: 1; scale: 1;    }
 }
 
-/* ── 사이드바 접힌 환율 팝업 슬라이드인 ─────────────── */
+/* ?? ?ъ씠?쒕컮 ?묓엺 ?섏쑉 ?앹뾽 ?щ씪?대뱶????????????????? */
 @keyframes slideInLeft {
   from { opacity: 0; transform: translateX(-8px); }
   to   { opacity: 1; transform: translateX(0);    }
 }
 
-/* ── 이슈 전광판 (우→좌 단방향) ─────────────────────── */
+/* ?? ?댁뒋 ?꾧킅??(?겸넂醫??⑤갑?? ??????????????????????? */
 @keyframes issue-scroll {
   0%   { transform: translateX(100%); }
   100% { transform: translateX(-100%); }
@@ -76,7 +76,7 @@
   animation-play-state: paused;
 }
 
-/* ── 사이드바 스크롤바 (얇고 다크) ──────────────────── */
+/* ?? ?ъ씠?쒕컮 ?ㅽ겕濡ㅻ컮 (?뉕퀬 ?ㅽ겕) ???????????????????? */
 .sidebar-scroll::-webkit-scrollbar        { width: 3px; }
 .sidebar-scroll::-webkit-scrollbar-track  { background: transparent; }
 .sidebar-scroll::-webkit-scrollbar-thumb  { background: #374151; border-radius: 999px; }
@@ -84,14 +84,13 @@
 /* Firefox */
 .sidebar-scroll { scrollbar-width: thin; scrollbar-color: #374151 transparent; }
 
-/* ── 인쇄 전용 요소 — 화면에서 숨김 ─────────────────── */
+/* ?? ?몄뇙 ?꾩슜 ?붿냼 ???붾㈃?먯꽌 ?④? ??????????????????? */
 .print-only      { display: none; }
 .print-only-flex { display: none; }
 
-/* ── body.is-printing — beforeprint JS 이벤트로 주입
-   Chrome 미리보기 엔진이 @media print 적용 전에 레이아웃을 계산하므로
-   JS 이벤트로 class를 먼저 추가해 overflow / height 를 해제한다.  */
-/* 1단계: app-shell 레이아웃 잠금 해제 */
+/* ?? body.is-printing ??beforeprint JS ?대깽?몃줈 二쇱엯
+   Chrome 誘몃━蹂닿린 ?붿쭊??@media print ?곸슜 ?꾩뿉 ?덉씠?꾩썐??怨꾩궛?섎?濡?   JS ?대깽?몃줈 class瑜?癒쇱? 異붽???overflow / height 瑜??댁젣?쒕떎.  */
+/* 1?④퀎: app-shell ?덉씠?꾩썐 ?좉툑 ?댁젣 */
 body.is-printing .app-shell,
 body.is-printing .app-shell > *,
 body.is-printing .app-shell > * > * {
@@ -100,7 +99,7 @@ body.is-printing .app-shell > * > * {
   max-height: none !important;
   overflow: visible !important;
 }
-/* 2단계: 화면 전용 요소 숨김 — .app-shell 내부 경로로 specificity 높여 위 규칙 override */
+/* 2?④퀎: ?붾㈃ ?꾩슜 ?붿냼 ?④? ??.app-shell ?대? 寃쎈줈濡?specificity ?믪뿬 ??洹쒖튃 override */
 body.is-printing .app-shell aside,
 body.is-printing .app-shell header,
 body.is-printing aside,
@@ -108,17 +107,17 @@ body.is-printing header,
 body.is-printing .no-print   { display: none  !important; }
 body.is-printing .print-only { display: block !important; }
 
-/* ══════════════════════════════════════════════════════
-   자금일보 인쇄 (S6) — A4 가로 2페이지 레이아웃
-   인쇄 전용 섹션은 inline style로 구성하므로 CSS override 최소화.
-   Page 1: 컬러 헤더 + 결재란 + 자금현황
-   Page 2: 컬러 헤더 + 입출금 2열 + 검증 바(하단)
-   ══════════════════════════════════════════════════════ */
+/* ?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧
+   ?먭툑?쇰낫 ?몄뇙 (S6) ??A4 媛濡?2?섏씠吏 ?덉씠?꾩썐
+   ?몄뇙 ?꾩슜 ?뱀뀡? inline style濡?援ъ꽦?섎?濡?CSS override 理쒖냼??
+   Page 1: 而щ윭 ?ㅻ뜑 + 寃곗옱? + ?먭툑?꾪솴
+   Page 2: 而щ윭 ?ㅻ뜑 + ?낆텧湲?2??+ 寃利?諛??섎떒)
+   ?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧?먥븧 */
 @media print {
-  /* A4 가로 (297 × 210mm), 사방 10mm 여백 */
+  /* A4 媛濡?(297 횞 210mm), ?щ갑 10mm ?щ갚 */
   @page { size: A4 landscape; margin: 10mm 12mm; }
 
-  /* 앱 셸 3단계 block 전환 — print-only 내부 inline style에는 영향 없음 */
+  /* ????3?④퀎 block ?꾪솚 ??print-only ?대? inline style?먮뒗 ?곹뼢 ?놁쓬 */
   .app-shell,
   .app-shell > *,
   .app-shell > * > * {
@@ -128,21 +127,21 @@ body.is-printing .print-only { display: block !important; }
     overflow: visible !important;
   }
 
-  /* 화면 전용 요소 숨김 — .app-shell 경로로 specificity를 높여 위 규칙 override */
+  /* ?붾㈃ ?꾩슜 ?붿냼 ?④? ??.app-shell 寃쎈줈濡?specificity瑜??믪뿬 ??洹쒖튃 override */
   .app-shell aside, .app-shell header,
   aside, header, .no-print { display: none !important; }
 
-  /* 인쇄 전용 요소 표시 */
+  /* ?몄뇙 ?꾩슜 ?붿냼 ?쒖떆 */
   .print-only { display: block !important; }
 
-  /* 페이지 구분 */
+  /* ?섏씠吏 援щ텇 */
   .print-page-break { page-break-before: always !important; break-before: page !important; }
   .print-no-break   { page-break-inside: avoid;  break-inside:  avoid; }
 
-  /* 컬러 배경 보존 */
+  /* 而щ윭 諛곌꼍 蹂댁〈 */
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 
-  /* ── 자금현황 테이블 인쇄 스타일 ── */
+  /* ?? ?먭툑?꾪솴 ?뚯씠釉??몄뇙 ?ㅽ????? */
   .print-summary-table table { width: 100%; border-collapse: collapse; font-size: 9pt; }
   .print-summary-table th    { background: #dbeafe !important; color: #1e3a5f !important; font-size: 8pt; padding: 3px 6px; border: 0.5px solid #bfdbfe; text-align: right; }
   .print-summary-table th:first-child { text-align: left; }
@@ -162,18 +161,18 @@ body.is-printing .print-only { display: block !important; }
   .print-delta-pos { color: #1d4ed8 !important; }
   .print-delta-neg { color: #b91c1c !important; }
 
-  /* ReportSummaryTable 하단 안내문/환율 div 숨김 */
+  /* ReportSummaryTable ?섎떒 ?덈궡臾??섏쑉 div ?④? */
   .print-summary-table > div > div[class*="border-t"] { display: none !important; }
   .print-only .no-print { display: none !important; }
 }
 
-/* ── 커스텀 씬 스크롤바 ──────────────────────────────── */
+/* ?? 而ㅼ뒪? ???ㅽ겕濡ㅻ컮 ???????????????????????????????? */
 .custom-scrollbar {
   scrollbar-width: thin;                          /* Firefox */
   scrollbar-color: rgba(156,163,175,0.45) transparent; /* Firefox thumb / track */
 }
 
-/* Chrome · Safari · Edge (WebKit) */
+/* Chrome 쨌 Safari 쨌 Edge (WebKit) */
 .custom-scrollbar::-webkit-scrollbar {
   width: 6px;
 }
@@ -192,3 +191,4 @@ body.is-printing .print-only { display: block !important; }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background-color: rgba(107, 114, 128, 0.65);
 }
+

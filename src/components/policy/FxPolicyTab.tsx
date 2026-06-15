@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+﻿import { useState, useEffect, useMemo } from 'react'
 import { useAuth } from '../../hooks/useAuth'
 import { useDaily } from '../../hooks/useDaily'
 import { useInvestments, getLatestInvestments, getLatestBonds } from '../../hooks/useInvestments'
@@ -229,7 +229,7 @@ export default function FxPolicyTab({ company }: { company: Company }) {
     <div className="space-y-5">
 
       {/* ── Target Band 게이지 ── */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
+      <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-5">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">FX Target Band 모니터링</h3>
           <div className="flex items-center gap-2">
@@ -307,7 +307,7 @@ export default function FxPolicyTab({ company }: { company: Company }) {
         {/* 0~100% 고정 게이지 */}
         <div className="relative mt-8 mb-8">
           {/* 배경 바 */}
-          <div className="relative h-6 bg-gray-100 dark:bg-gray-700 rounded-full overflow-visible">
+          <div className="relative h-6 bg-gray-100 dark:bg-slate-700 rounded-full overflow-visible">
 
             {/* Target Band 구간 (0~100% 내에 있을 때만 표시) */}
             {bandInRange && targetMaxPos > targetMinPos && (
@@ -370,7 +370,7 @@ export default function FxPolicyTab({ company }: { company: Company }) {
       </div>
 
       {/* ── 최대 환율 변동폭 ── */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
+      <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-5">
         <div className="flex items-center justify-between mb-3">
           <div>
             <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">최대 환율 변동폭 계산</h3>
@@ -397,23 +397,23 @@ export default function FxPolicyTab({ company }: { company: Company }) {
             <div className="grid grid-cols-2 gap-x-6 gap-y-2">
               {FX_CURRENCY_DEFAULTS.map(c => (
                 <div key={c.code} className="space-y-1">
-                  <p className="text-xs font-medium text-gray-600 dark:text-gray-300">{c.code}</p>
+                  <p className="text-xs font-medium text-gray-600 dark:text-slate-100">{c.code}</p>
                   <div className="flex gap-2">
                     <div className="flex-1">
                       <label className="text-xs text-gray-400">표준편차</label>
                       <input type="number" step="0.000001"
                         value={draftStd[c.stdKey] ?? c.defaultStd}
                         onChange={e => setDraftStd(p => ({ ...p, [c.stdKey]: Number(e.target.value) }))}
-                        className="w-full text-xs border border-gray-300 dark:border-gray-600 rounded px-2 py-1
-                                   bg-white dark:bg-gray-700 text-gray-900 dark:text-white" />
+                        className="w-full text-xs border border-gray-300 dark:border-slate-600 rounded px-2 py-1
+                                   bg-white dark:bg-slate-700 text-gray-900 dark:text-white" />
                     </div>
                     <div className="flex-1">
                       <label className="text-xs text-gray-400">가중치</label>
                       <input type="number" step="0.01" min="0" max="1"
                         value={draftStd[c.wgtKey] ?? c.defaultWgt}
                         onChange={e => setDraftStd(p => ({ ...p, [c.wgtKey]: Number(e.target.value) }))}
-                        className="w-full text-xs border border-gray-300 dark:border-gray-600 rounded px-2 py-1
-                                   bg-white dark:bg-gray-700 text-gray-900 dark:text-white" />
+                        className="w-full text-xs border border-gray-300 dark:border-slate-600 rounded px-2 py-1
+                                   bg-white dark:bg-slate-700 text-gray-900 dark:text-white" />
                     </div>
                   </div>
                 </div>
@@ -445,7 +445,7 @@ export default function FxPolicyTab({ company }: { company: Company }) {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-100 dark:border-gray-700 text-xs text-gray-400">
+              <tr className="border-b border-gray-100 dark:border-slate-700 text-xs text-gray-400">
                 <th className="text-left pb-2 pr-4">통화</th>
                 <th className="text-right pb-2 pr-4">연간 표준편차</th>
                 <th className="text-right pb-2 pr-2">
@@ -461,14 +461,14 @@ export default function FxPolicyTab({ company }: { company: Company }) {
             </thead>
             <tbody>
               {currencyRowsWithActual.map(r => (
-                <tr key={r.code} className="border-b border-gray-50 dark:border-gray-700/50">
+                <tr key={r.code} className="border-b border-gray-50 dark:border-slate-700/50">
                   <td className="py-2 pr-4 font-medium text-gray-700 dark:text-gray-200">
                     {FX_META[r.code as FxCode].flag} {r.code}
                   </td>
-                  <td className="py-2 pr-4 text-right tabular-nums text-gray-600 dark:text-gray-300">
+                  <td className="py-2 pr-4 text-right tabular-nums text-gray-600 dark:text-slate-100">
                     {(r.std * 100).toFixed(4)}%
                   </td>
-                  <td className="py-2 pr-2 text-right tabular-nums text-gray-600 dark:text-gray-300">
+                  <td className="py-2 pr-2 text-right tabular-nums text-gray-600 dark:text-slate-100">
                     {(r.wgt * 100).toFixed(0)}%
                   </td>
                   <td className="py-2 pr-4 text-right tabular-nums">
@@ -477,7 +477,7 @@ export default function FxPolicyTab({ company }: { company: Company }) {
                     ) : (
                       <span className={r.wgtDrift
                         ? 'text-amber-500 dark:text-amber-400 font-medium'
-                        : 'text-gray-500 dark:text-gray-400'}>
+                        : 'text-gray-500 dark:text-slate-300'}>
                         {(r.actualWgt * 100).toFixed(0)}%
                         {r.wgtDrift && (
                           <span className="ml-1" title="정책 가중치와 15%p 이상 괴리">⚠️</span>
@@ -492,7 +492,7 @@ export default function FxPolicyTab({ company }: { company: Company }) {
               ))}
             </tbody>
             <tfoot>
-              <tr className="border-t border-gray-200 dark:border-gray-600">
+              <tr className="border-t border-gray-200 dark:border-slate-600">
                 <td colSpan={4} className="pt-2 text-xs text-gray-500 font-medium">전체 통화 변동율 (가중합)</td>
                 <td className="pt-2 text-right tabular-nums font-semibold text-gray-700 dark:text-gray-200">
                   {(weightedStdSum * 100).toFixed(4)}%
@@ -517,7 +517,7 @@ export default function FxPolicyTab({ company }: { company: Company }) {
       </div>
 
       {/* ── 적정 외화보유한도 ── */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
+      <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-5">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">적정 외화보유한도 계산</h3>
           {isMaster && (
@@ -533,8 +533,8 @@ export default function FxPolicyTab({ company }: { company: Company }) {
             <p className="text-xs text-blue-700 dark:text-blue-300">※ 자금정책위원회 의결에 따라 조정</p>
 
             {/* 전체 자금 총액 — 읽기 전용 자동계산 */}
-            <div className="bg-white dark:bg-gray-700 rounded-lg px-3 py-2.5 border border-blue-200 dark:border-blue-700">
-              <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">전체 자금 총액 (자동계산)</p>
+            <div className="bg-white dark:bg-slate-700 rounded-lg px-3 py-2.5 border border-blue-200 dark:border-blue-700">
+              <p className="text-xs text-gray-500 dark:text-slate-300 mb-0.5">전체 자금 총액 (자동계산)</p>
               <p className="text-sm font-bold text-gray-900 dark:text-white">{fmtKRW(totalFund)}</p>
               <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
                 운전 {fmtKRW(operatingCash)} + 운용 {fmtKRW(investCash)} + 국채 {fmtKRW(bondCash)}
@@ -550,12 +550,12 @@ export default function FxPolicyTab({ company }: { company: Company }) {
                 { key: 'fx_target_max',       label: 'Target Band 상한 (%) ← 위원회 의결',  step: 0.1 },
               ].map(({ key, label, step }) => (
                 <div key={key}>
-                  <label className="text-xs text-gray-500 dark:text-gray-400">{label}</label>
+                  <label className="text-xs text-gray-500 dark:text-slate-300">{label}</label>
                   <input type="number" step={step}
                     value={draftBase[key as keyof typeof draftBase]}
                     onChange={e => setDraftBase(p => ({ ...p, [key]: Number(e.target.value) }))}
-                    className="mt-0.5 w-full text-sm border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5
-                               bg-white dark:bg-gray-700 text-gray-900 dark:text-white" />
+                    className="mt-0.5 w-full text-sm border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-1.5
+                               bg-white dark:bg-slate-700 text-gray-900 dark:text-white" />
                 </div>
               ))}
             </div>
@@ -579,13 +579,13 @@ export default function FxPolicyTab({ company }: { company: Company }) {
           </div>
           <div className="bg-gray-50 dark:bg-gray-700/30 rounded-xl p-4 space-y-2.5 text-sm">
             <div className="flex justify-between items-start">
-              <span className="text-gray-500 dark:text-gray-400 text-xs leading-relaxed">
+              <span className="text-gray-500 dark:text-slate-300 text-xs leading-relaxed">
                 허용가능 최대손익 = ({fmtKRW(operatingProfit)} + {fmtKRW(interestIncome)}) × {riskPortion}
               </span>
               <span className="font-semibold text-gray-700 dark:text-gray-200 tabular-nums">{fmtKRW(maxAllowedLoss)}</span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-gray-500 dark:text-gray-400 text-xs">최대 환율 변동폭 (자동계산)</span>
+              <span className="text-gray-500 dark:text-slate-300 text-xs">최대 환율 변동폭 (자동계산)</span>
               <span className="font-semibold text-gray-700 dark:text-gray-200 tabular-nums">{(maxRateChange * 100).toFixed(4)}%</span>
             </div>
             <div className="h-px bg-gray-200 dark:bg-gray-600" />
@@ -623,12 +623,12 @@ export default function FxPolicyTab({ company }: { company: Company }) {
       </div>
 
       {/* ── AS-IS vs TO-BE ── */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
+      <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-5">
         <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-3">통화별 현황 (AS-IS vs TO-BE)</h3>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-100 dark:border-gray-700 text-xs text-gray-400">
+              <tr className="border-b border-gray-100 dark:border-slate-700 text-xs text-gray-400">
                 <th className="text-left pb-2 pr-3">통화</th>
                 <th className="text-right pb-2 pr-3">가중치</th>
                 <th className="text-right pb-2 pr-3">현재잔액 (AS-IS)</th>
@@ -644,14 +644,14 @@ export default function FxPolicyTab({ company }: { company: Company }) {
                 const targetKrw = optimalFxLimit * r.wgt
                 const diff     = krwVal - targetKrw
                 return (
-                  <tr key={r.code} className="border-b border-gray-50 dark:border-gray-700/50">
+                  <tr key={r.code} className="border-b border-gray-50 dark:border-slate-700/50">
                     <td className="py-2.5 pr-3 font-medium text-gray-700 dark:text-gray-200">
                       {FX_META[r.code].flag} {r.code}
                     </td>
                     <td className="py-2.5 pr-3 text-right tabular-nums text-gray-500">{(r.wgt * 100).toFixed(0)}%</td>
-                    <td className="py-2.5 pr-3 text-right tabular-nums text-gray-600 dark:text-gray-300">{fmtNumber(bal, 0)}</td>
+                    <td className="py-2.5 pr-3 text-right tabular-nums text-gray-600 dark:text-slate-100">{fmtNumber(bal, 0)}</td>
                     <td className="py-2.5 pr-3 text-right tabular-nums text-blue-700 dark:text-blue-400">{fmtKRW(krwVal)}</td>
-                    <td className="py-2.5 pr-3 text-right tabular-nums text-gray-600 dark:text-gray-300">{fmtKRW(targetKrw)}</td>
+                    <td className="py-2.5 pr-3 text-right tabular-nums text-gray-600 dark:text-slate-100">{fmtKRW(targetKrw)}</td>
                     <td className="py-2.5 text-right tabular-nums">
                       <span className={`text-xs font-medium ${
                         diff > targetKrw * 0.05  ? 'text-red-500' :
@@ -664,7 +664,7 @@ export default function FxPolicyTab({ company }: { company: Company }) {
                   </tr>
                 )
               })}
-              <tr className="border-t border-gray-200 dark:border-gray-600">
+              <tr className="border-t border-gray-200 dark:border-slate-600">
                 <td colSpan={3} className="pt-2 text-xs text-gray-400 font-medium">합계</td>
                 <td className="pt-2 text-right tabular-nums font-bold text-blue-800 dark:text-blue-300">{fmtKRW(currentFxKrw)}</td>
                 <td className="pt-2 text-right tabular-nums font-bold text-gray-700 dark:text-gray-200">{fmtKRW(optimalFxLimit)}</td>
@@ -677,3 +677,4 @@ export default function FxPolicyTab({ company }: { company: Company }) {
     </div>
   )
 }
+

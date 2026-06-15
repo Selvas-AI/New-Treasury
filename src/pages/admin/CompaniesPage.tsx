@@ -1,4 +1,4 @@
-/**
+﻿/**
  * CompaniesPage — 회사(법인) 관리 (master 전용)
  *
  * companies 테이블 CRUD. 추가/비활성화/삭제 후 invalidateCompanies()로
@@ -14,7 +14,7 @@ import { restInsert, restUpdate, restDelete } from '../../lib/supabase'
 import { useCompanies, invalidateCompanies, type CompanyRecord } from '../../hooks/useCompanies'
 
 const inputCls =
-  'w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-400'
+  'w-full border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-700 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-400'
 
 export default function CompaniesPage() {
   const { user } = useAuth()
@@ -100,19 +100,19 @@ export default function CompaniesPage() {
       </div>
 
       {/* 등록된 법인 목록 */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow border border-gray-100 dark:border-gray-700 p-5">
-        <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-3">
+      <div className="bg-white dark:bg-slate-800 rounded-xl shadow border border-gray-100 dark:border-slate-700 p-5">
+        <p className="text-xs font-semibold text-gray-500 dark:text-slate-300 mb-3">
           등록된 법인 <span className="text-gray-400">({companies.filter(c => c.active).length}개 활성)</span>
         </p>
         <div className="space-y-2">
           {companies.map(rec => (
             <div key={rec.id}
-              className={`flex items-center justify-between px-3 py-2.5 rounded-lg border ${rec.active ? 'border-gray-200 dark:border-gray-600' : 'border-gray-100 dark:border-gray-700 opacity-50'}`}>
+              className={`flex items-center justify-between px-3 py-2.5 rounded-lg border ${rec.active ? 'border-gray-200 dark:border-slate-600' : 'border-gray-100 dark:border-slate-700 opacity-50'}`}>
               <div className="flex items-center gap-3">
                 <span className={`w-2 h-2 rounded-full shrink-0 ${rec.active ? 'bg-emerald-400' : 'bg-gray-300'}`} />
                 <span className="text-sm font-medium text-gray-800 dark:text-gray-100">{rec.name}</span>
                 {rec.short_name && (
-                  <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-1.5 py-0.5 rounded font-mono">
+                  <span className="text-xs bg-gray-100 dark:bg-slate-700 text-gray-500 dark:text-slate-300 px-1.5 py-0.5 rounded font-mono">
                     {rec.short_name}
                   </span>
                 )}
@@ -142,7 +142,7 @@ export default function CompaniesPage() {
 
       {/* 신규 법인 추가 */}
       <form onSubmit={e => void handleAdd(e)}
-        className="bg-white dark:bg-gray-800 rounded-xl shadow border border-gray-100 dark:border-gray-700 p-5 space-y-4">
+        className="bg-white dark:bg-slate-800 rounded-xl shadow border border-gray-100 dark:border-slate-700 p-5 space-y-4">
         <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">+ 새 법인 추가</p>
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
           <div className="sm:col-span-2">
@@ -177,7 +177,7 @@ export default function CompaniesPage() {
       {/* 안내 */}
       <div className="text-xs text-gray-400 dark:text-gray-600 bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4 space-y-1">
         <p className="font-semibold text-gray-500 dark:text-gray-500">📌 안내</p>
-        <p>① 법인 추가 전 Supabase SQL Editor에서 <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">docs/db/companies.sql</code> 실행 필요</p>
+        <p>① 법인 추가 전 Supabase SQL Editor에서 <code className="bg-gray-100 dark:bg-slate-700 px-1 rounded">docs/db/companies.sql</code> 실행 필요</p>
         <p>② 추가된 법인은 마스터·관리자에게 즉시 보이며, 편집자·뷰어는 사용자 관리에서 접근 허용 법인으로 지정해야 보입니다.</p>
         <p>③ 신규 법인은 데이터가 비어 있는 상태로 시작되며, 운전자금·운용자금·자금일보 등 모든 기능을 동일하게 사용할 수 있습니다.</p>
         <p>④ 사용을 중단할 법인은 삭제보다 <strong>비활성화</strong>를 권장합니다 (기존 데이터 보존).</p>
@@ -185,3 +185,4 @@ export default function CompaniesPage() {
     </div>
   )
 }
+

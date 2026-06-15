@@ -1,4 +1,4 @@
-/**
+﻿/**
  * DailyReportPage — 자금일보
  *
  * 라우트: /daily-report/:company?/:date?
@@ -81,7 +81,7 @@ function PrintColorHeader({
 
 // 상태 배지
 const STATUS_LABEL: Record<string, { label: string; cls: string }> = {
-  draft:     { label: '● 작성 중',  cls: 'text-gray-500 bg-gray-100 dark:bg-gray-700' },
+  draft:     { label: '● 작성 중',  cls: 'text-gray-500 bg-gray-100 dark:bg-slate-700' },
   submitted: { label: '● 결재 중',  cls: 'text-amber-600 bg-amber-50 dark:bg-amber-900/30' },
   approved:  { label: '● 승인 완료', cls: 'text-green-600 bg-green-50 dark:bg-green-900/30' },
   rejected:  { label: '● 반려',     cls: 'text-red-600 bg-red-50 dark:bg-red-900/30' },
@@ -145,19 +145,19 @@ function BusinessDatePicker({
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen(o => !o)}
-        className="text-sm font-medium text-gray-700 dark:text-gray-200 bg-transparent border border-gray-200 dark:border-gray-600 rounded px-2 py-1 hover:border-blue-400 transition-colors flex items-center gap-1"
+        className="text-sm font-medium text-gray-700 dark:text-gray-200 bg-transparent border border-gray-200 dark:border-slate-600 rounded px-2 py-1 hover:border-blue-400 transition-colors flex items-center gap-1"
       >
         {value}
         <span className="text-gray-400 text-xs">▾</span>
       </button>
 
       {open && (
-        <div className="absolute top-full mt-1 left-1/2 -translate-x-1/2 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-2xl p-3 w-60">
+        <div className="absolute top-full mt-1 left-1/2 -translate-x-1/2 z-50 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl shadow-2xl p-3 w-60">
           {/* 월 헤더 */}
           <div className="flex items-center justify-between mb-2">
-            <button onClick={goPrevMonth} className="w-6 h-6 flex items-center justify-center rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 text-sm">‹</button>
+            <button onClick={goPrevMonth} className="w-6 h-6 flex items-center justify-center rounded hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 text-sm">‹</button>
             <span className="text-xs font-semibold text-gray-700 dark:text-gray-200">{year}년 {month}월</span>
-            <button onClick={goNextMonth} className="w-6 h-6 flex items-center justify-center rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 text-sm">›</button>
+            <button onClick={goNextMonth} className="w-6 h-6 flex items-center justify-center rounded hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 text-sm">›</button>
           </div>
 
           {/* 요일 헤더 */}
@@ -213,7 +213,7 @@ function BusinessDatePicker({
           </div>
 
           {/* 범례 */}
-          <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-700 flex items-center gap-3 text-[9px] text-gray-400">
+          <div className="mt-2 pt-2 border-t border-gray-100 dark:border-slate-700 flex items-center gap-3 text-[9px] text-gray-400">
             <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-green-400 inline-block" />보고 대상일 데이터</span>
             <span className="text-red-400">토·일 = 비영업일</span>
           </div>
@@ -679,10 +679,10 @@ export default function DailyReportPage() {
   }
 
   return (
-    <div className="flex flex-col h-full bg-gray-50 dark:bg-gray-900">
+    <div className="flex flex-col h-full bg-gray-50 dark:bg-slate-900">
 
       {/* ── 헤더 바 ─────────────────────────────────────────── */}
-      <div className="no-print bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-3 flex items-center gap-4 flex-wrap shrink-0">
+      <div className="no-print bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 px-6 py-3 flex items-center gap-4 flex-wrap shrink-0">
 
         {/* 아이콘 + 제목 */}
         <div className="flex items-center gap-2">
@@ -700,7 +700,7 @@ export default function DailyReportPage() {
                 className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${
                   resolvedCompany === c
                     ? 'bg-blue-600 text-white'
-                    : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'
+                    : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-slate-700'
                 }`}
               >
                 {c}
@@ -716,7 +716,7 @@ export default function DailyReportPage() {
         <div className="flex items-center gap-1 ml-auto">
           <button
             onClick={() => setSelectedDate(prevBizDay(selectedDate))}
-            className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 transition-colors"
+            className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 transition-colors"
             title="전 영업일"
           >
             ‹
@@ -730,7 +730,7 @@ export default function DailyReportPage() {
           <button
             onClick={() => setSelectedDate(nextBizDay(selectedDate, maxWriteDate))}
             disabled={selectedDate >= maxWriteDate}
-            className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 transition-colors disabled:opacity-30"
+            className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 transition-colors disabled:opacity-30"
             title="다음 영업일"
           >
             ›
@@ -748,7 +748,7 @@ export default function DailyReportPage() {
             <button
               onClick={() => void dr.saveReport(resolvedCompany, selectedDate, {})}
               disabled={dr.loading}
-              className="text-xs px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
+              className="text-xs px-3 py-1.5 border border-gray-300 dark:border-slate-600 rounded-lg text-gray-600 dark:text-slate-100 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors disabled:opacity-50"
             >
               💾 임시저장
             </button>
@@ -798,7 +798,7 @@ export default function DailyReportPage() {
               // 레이아웃 재계산 후 print 호출 (rAF × 2 = 2 paint cycle)
               requestAnimationFrame(() => requestAnimationFrame(() => window.print()))
             }}
-            className="text-xs px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+            className="text-xs px-3 py-1.5 border border-gray-300 dark:border-slate-600 rounded-lg text-gray-600 dark:text-slate-100 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
             title="A4 가로 인쇄 (1장: 자금현황, 2장: 입출금+결재란)"
           >
             🖨️
@@ -836,8 +836,8 @@ export default function DailyReportPage() {
         {!dr.loading && (
           <>
             {/* S2: 자금현황 요약 테이블 */}
-            <section className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
-              <div className="px-5 py-3 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
+            <section className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-100 dark:border-slate-700 overflow-hidden">
+              <div className="px-5 py-3 border-b border-gray-100 dark:border-slate-700 flex items-center justify-between">
                 <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-200">자금 현황</h2>
                 {summary.loading && (
                   <span className="text-[10px] text-gray-400 animate-pulse">데이터 불러오는 중…</span>
@@ -895,8 +895,8 @@ export default function DailyReportPage() {
             </div>
 
             {/* S7: CMS 증빙 첨부 */}
-            <section className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
-              <div className="px-5 py-3 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
+            <section className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-100 dark:border-slate-700">
+              <div className="px-5 py-3 border-b border-gray-100 dark:border-slate-700 flex items-center justify-between">
                 <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-200">📎 CMS 잔고내역 증빙</h2>
                 {!isReadOnly && (
                   <button
@@ -926,7 +926,7 @@ export default function DailyReportPage() {
                 ) : (
                   <div className="space-y-2">
                     {attachments.map(att => (
-                      <div key={att.id} className="flex items-center gap-3 p-2 rounded-lg bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-700">
+                      <div key={att.id} className="flex items-center gap-3 p-2 rounded-lg bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-slate-700">
                         <span className="text-lg">📄</span>
                         <div className="flex-1 min-w-0">
                           <div className="text-xs font-medium text-gray-700 dark:text-gray-200 truncate">{att.file_name}</div>
@@ -956,8 +956,8 @@ export default function DailyReportPage() {
             </section>
 
             {/* S5: 검증 바 + 결재선 */}
-            <section className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
-              <div className="px-5 py-3 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
+            <section className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-100 dark:border-slate-700">
+              <div className="px-5 py-3 border-b border-gray-100 dark:border-slate-700 flex items-center justify-between">
                 <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-200">검증 및 결재</h2>
               </div>
               <div className="px-5 py-4 space-y-4">
@@ -970,7 +970,7 @@ export default function DailyReportPage() {
                     <div className={`flex items-center gap-2 flex-wrap text-xs rounded-lg px-4 py-3 ${
                       isValid    ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400'
                       : hasData  ? 'bg-red-50 dark:bg-red-900/10 text-red-600 dark:text-red-400'
-                                 : 'bg-gray-50 dark:bg-gray-700/50 text-gray-500 dark:text-gray-400'
+                                 : 'bg-gray-50 dark:bg-gray-700/50 text-gray-500 dark:text-slate-300'
                     }`}>
                       <span className="text-green-600 dark:text-green-400 font-medium">입금</span>
                       <span className="tabular-nums font-semibold">{hasData ? fmt(inTotal) : '—'}</span>
@@ -1014,11 +1014,11 @@ export default function DailyReportPage() {
                   <div className="flex items-center gap-3 flex-wrap">
                     {/* 작성자 */}
                     <div className="flex items-center gap-2 text-xs">
-                      <span className="text-gray-500 dark:text-gray-400">작성</span>
+                      <span className="text-gray-500 dark:text-slate-300">작성</span>
                       <span className="font-medium text-gray-700 dark:text-gray-200">{user?.label ?? '—'}</span>
                       <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
                         dr.report ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                                  : 'bg-gray-100 text-gray-400 dark:bg-gray-700'
+                                  : 'bg-gray-100 text-gray-400 dark:bg-slate-700'
                       }`}>
                         {dr.report ? '✓' : '미작성'}
                       </span>
@@ -1042,7 +1042,7 @@ export default function DailyReportPage() {
                           <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
                             approved ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
                             : rejected ? 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400'
-                                       : 'bg-gray-100 text-gray-400 dark:bg-gray-700'
+                                       : 'bg-gray-100 text-gray-400 dark:bg-slate-700'
                           }`}>
                             {approved ? '✓ 승인' : rejected ? '✗ 반려' : '미결재'}
                           </span>
@@ -1328,21 +1328,21 @@ export default function DailyReportPage() {
       {/* ── 승인 모달 ─────────────────────────────────────────── */}
       {approveModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setApproveModal(null)}>
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6" onClick={e => e.stopPropagation()}>
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6" onClick={e => e.stopPropagation()}>
             <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100 mb-1">결재 승인</h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+            <p className="text-xs text-gray-500 dark:text-slate-300 mb-4">
               {resolvedCompany} · {reportDate} 자금일보를 승인합니다.
             </p>
-            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">의견 (선택)</label>
+            <label className="block text-xs text-gray-500 dark:text-slate-300 mb-1">의견 (선택)</label>
             <textarea
               value={approveModal.comment}
               onChange={e => setApproveModal({ comment: e.target.value })}
               placeholder="승인 의견을 입력하세요 (선택사항)"
               rows={3}
-              className="w-full text-sm border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-green-400 resize-none"
+              className="w-full text-sm border border-gray-200 dark:border-slate-600 rounded-xl px-3 py-2 bg-gray-50 dark:bg-slate-700 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-green-400 resize-none"
             />
             <div className="flex gap-2 mt-4">
-              <button onClick={() => setApproveModal(null)} className="flex-1 text-sm py-2 border border-gray-200 dark:border-gray-600 rounded-xl text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700">취소</button>
+              <button onClick={() => setApproveModal(null)} className="flex-1 text-sm py-2 border border-gray-200 dark:border-slate-600 rounded-xl text-gray-500 hover:bg-gray-50 dark:hover:bg-slate-700">취소</button>
               <button
                 onClick={() => void handleApprove()}
                 disabled={actionBusy}
@@ -1358,22 +1358,22 @@ export default function DailyReportPage() {
       {/* ── 반려 모달 ─────────────────────────────────────────── */}
       {rejectModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setRejectModal(null)}>
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6" onClick={e => e.stopPropagation()}>
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6" onClick={e => e.stopPropagation()}>
             <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100 mb-1">결재 반려</h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+            <p className="text-xs text-gray-500 dark:text-slate-300 mb-4">
               {resolvedCompany} · {reportDate} 자금일보를 반려합니다.
             </p>
-            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">반려 사유 <span className="text-red-500">*</span></label>
+            <label className="block text-xs text-gray-500 dark:text-slate-300 mb-1">반려 사유 <span className="text-red-500">*</span></label>
             <textarea
               value={rejectModal.comment}
               onChange={e => setRejectModal({ comment: e.target.value })}
               placeholder="반려 사유를 입력하세요 (필수)"
               rows={3}
               autoFocus
-              className="w-full text-sm border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-red-400 resize-none"
+              className="w-full text-sm border border-gray-200 dark:border-slate-600 rounded-xl px-3 py-2 bg-gray-50 dark:bg-slate-700 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-red-400 resize-none"
             />
             <div className="flex gap-2 mt-4">
-              <button onClick={() => setRejectModal(null)} className="flex-1 text-sm py-2 border border-gray-200 dark:border-gray-600 rounded-xl text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700">취소</button>
+              <button onClick={() => setRejectModal(null)} className="flex-1 text-sm py-2 border border-gray-200 dark:border-slate-600 rounded-xl text-gray-500 hover:bg-gray-50 dark:hover:bg-slate-700">취소</button>
               <button
                 onClick={() => void handleReject()}
                 disabled={!rejectModal.comment.trim() || actionBusy}
@@ -1389,7 +1389,7 @@ export default function DailyReportPage() {
       {/* ── 결재선 설정 모달 (master 전용) ───────────────────────── */}
       {configModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setConfigModal(false)}>
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6" onClick={e => e.stopPropagation()}>
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100">결재선 설정</h3>
               <button onClick={() => setConfigModal(false)} className="text-gray-400 hover:text-gray-600 text-lg leading-none">×</button>
@@ -1402,7 +1402,7 @@ export default function DailyReportPage() {
                 <p className="text-xs text-gray-400 dark:text-gray-500 text-center py-3">설정된 결재선이 없습니다</p>
               )}
               {ac.config.map(cfg => (
-                <div key={cfg.step} className="flex items-center gap-2 bg-gray-50 dark:bg-gray-700 rounded-lg px-3 py-2">
+                <div key={cfg.step} className="flex items-center gap-2 bg-gray-50 dark:bg-slate-700 rounded-lg px-3 py-2">
                   <span className="text-[10px] text-gray-400 w-8">Step {cfg.step}</span>
                   <span className="text-xs font-medium text-gray-700 dark:text-gray-200 flex-1">{cfg.role_label}</span>
                   <span className="text-[10px] text-gray-400 font-mono">{cfg.approver_code}</span>
@@ -1417,8 +1417,8 @@ export default function DailyReportPage() {
             </div>
 
             {/* 신규 추가 폼 */}
-            <div className="border-t border-gray-100 dark:border-gray-700 pt-4">
-              <p className="text-[11px] text-gray-500 dark:text-gray-400 font-medium mb-2">결재 단계 추가</p>
+            <div className="border-t border-gray-100 dark:border-slate-700 pt-4">
+              <p className="text-[11px] text-gray-500 dark:text-slate-300 font-medium mb-2">결재 단계 추가</p>
               <div className="grid grid-cols-3 gap-2 mb-2">
                 <div>
                   <label className="block text-[10px] text-gray-400 mb-1">Step 번호</label>
@@ -1427,7 +1427,7 @@ export default function DailyReportPage() {
                     value={cfgForm.step}
                     onChange={e => setCfgForm(f => ({ ...f, step: e.target.value }))}
                     placeholder="1"
-                    className="w-full text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-2 py-1.5 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                    className="w-full text-xs border border-gray-200 dark:border-slate-600 rounded-lg px-2 py-1.5 bg-gray-50 dark:bg-slate-700 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-400"
                   />
                 </div>
                 <div>
@@ -1436,7 +1436,7 @@ export default function DailyReportPage() {
                     value={cfgForm.role_label}
                     onChange={e => setCfgForm(f => ({ ...f, role_label: e.target.value }))}
                     placeholder="팀장"
-                    className="w-full text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-2 py-1.5 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                    className="w-full text-xs border border-gray-200 dark:border-slate-600 rounded-lg px-2 py-1.5 bg-gray-50 dark:bg-slate-700 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-400"
                   />
                 </div>
                 <div>
@@ -1445,7 +1445,7 @@ export default function DailyReportPage() {
                     value={cfgForm.approver_code}
                     onChange={e => setCfgForm(f => ({ ...f, approver_code: e.target.value.toUpperCase() }))}
                     placeholder="KIM01"
-                    className="w-full text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-2 py-1.5 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-400 font-mono"
+                    className="w-full text-xs border border-gray-200 dark:border-slate-600 rounded-lg px-2 py-1.5 bg-gray-50 dark:bg-slate-700 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-400 font-mono"
                   />
                 </div>
               </div>
@@ -1476,3 +1476,4 @@ export default function DailyReportPage() {
     </div>
   )
 }
+

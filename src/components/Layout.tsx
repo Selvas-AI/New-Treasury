@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+﻿import { useState, useEffect, useRef } from 'react'
 import { Outlet, Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import Sidebar from './Sidebar'
@@ -96,7 +96,7 @@ export default function Layout() {
   if (!user) return <Navigate to="/login" replace />
 
   return (
-    <div className="app-shell flex h-screen bg-gray-100 dark:bg-gray-950 overflow-hidden">
+    <div className="app-shell flex h-screen bg-gray-100 dark:bg-slate-950 overflow-hidden">
 
       {/* ── Watchdog 오버레이 ── */}
       {countdown !== null && (
@@ -152,10 +152,11 @@ export default function Layout() {
       {/* 메인 영역 */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <TopBar onMenuClick={() => setDrawerOpen(true)} />
-        <main className="flex-1 overflow-y-auto p-4 md:p-6 dark:bg-gray-950">
+        <main className="flex-1 overflow-y-auto p-4 md:p-6 dark:bg-slate-950">
           <Outlet />
         </main>
       </div>
     </div>
   )
 }
+

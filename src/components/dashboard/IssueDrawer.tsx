@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom'
+﻿import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import type { IssueItem } from '../../hooks/useDashboard'
 import type { IssueStatus } from '../../types'
@@ -16,7 +16,7 @@ interface Props {
 const STATUS_BADGE: Record<IssueStatus, string> = {
   open:   'bg-red-50 text-red-600 ring-1 ring-red-200 dark:bg-red-950/30 dark:text-red-400 dark:ring-red-800',
   review: 'bg-amber-50 text-amber-600 ring-1 ring-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:ring-amber-800',
-  done:   'bg-gray-100 text-gray-400 dark:bg-gray-700 dark:text-gray-500',
+  done:   'bg-gray-100 text-gray-400 dark:bg-slate-700 dark:text-gray-500',
 }
 const STATUS_LABEL: Record<IssueStatus, string> = {
   open: '미조치', review: '검토중', done: '완료',
@@ -41,10 +41,10 @@ export default function IssueDrawer({ open, issues, activeKey, onStatusChange, o
       <div className="fixed inset-0 z-40 bg-black/10 dark:bg-black/30" onClick={onClose} />
 
       {/* 드로어 패널 */}
-      <div style={{ animation: 'fadeInScale 0.18s ease-out both' }} className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-80 max-h-[70vh] bg-white dark:bg-gray-800 rounded-xl shadow-xl flex flex-col overflow-hidden border border-gray-200 dark:border-gray-700">
+      <div style={{ animation: 'fadeInScale 0.18s ease-out both' }} className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-80 max-h-[70vh] bg-white dark:bg-slate-800 rounded-xl shadow-xl flex flex-col overflow-hidden border border-gray-200 dark:border-slate-700">
 
         {/* 헤더 */}
-        <div className="shrink-0 flex items-center justify-between px-4 pt-4 pb-3 border-b border-gray-100 dark:border-gray-700">
+        <div className="shrink-0 flex items-center justify-between px-4 pt-4 pb-3 border-b border-gray-100 dark:border-slate-700">
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">이슈 확인</h3>
             {issues.length > 0 && (
@@ -62,7 +62,7 @@ export default function IssueDrawer({ open, issues, activeKey, onStatusChange, o
             </button>
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors p-1 rounded hover:bg-gray-100 dark:hover:bg-slate-700"
             >
               ✕
             </button>
@@ -89,7 +89,7 @@ export default function IssueDrawer({ open, issues, activeKey, onStatusChange, o
                   className={`rounded-lg px-3 py-2.5 cursor-pointer transition-all ${
                     isActive
                       ? 'bg-blue-50 dark:bg-blue-950/30 ring-1 ring-blue-300 dark:ring-blue-700'
-                      : 'hover:bg-gray-50 dark:hover:bg-gray-700 ring-1 ring-gray-100 dark:ring-gray-700'
+                      : 'hover:bg-gray-50 dark:hover:bg-slate-700 ring-1 ring-gray-100 dark:ring-gray-700'
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2 mb-1">
@@ -112,8 +112,8 @@ export default function IssueDrawer({ open, issues, activeKey, onStatusChange, o
                         disabled={issue.status === s}
                         className={`text-[10px] px-2 py-1 rounded-md transition-colors ${
                           issue.status === s
-                            ? 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-default'
-                            : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-700 dark:hover:text-gray-200'
+                            ? 'bg-gray-100 dark:bg-slate-700 text-gray-400 dark:text-gray-500 cursor-default'
+                            : 'text-gray-500 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700 hover:text-gray-700 dark:hover:text-gray-200'
                         }`}
                       >
                         {STATUS_LABEL[s]}
@@ -137,3 +137,4 @@ export default function IssueDrawer({ open, issues, activeKey, onStatusChange, o
     </>
   )
 }
+

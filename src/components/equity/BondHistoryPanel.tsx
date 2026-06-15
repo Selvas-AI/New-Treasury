@@ -1,4 +1,4 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import { fmtKRW, fmtReturn, returnBadgeClass, calcReturn, calcBondValue } from '../../lib/format'
 import { fetchBondPrice } from '../../hooks/useGas'
 import type { InvestmentRecord } from '../../types'
@@ -159,12 +159,12 @@ export default function BondHistoryPanel({
   }
 
   return (
-    <div className="bg-gray-50 dark:bg-gray-900/50 border-t border-gray-200 dark:border-gray-700 p-4 space-y-4">
+    <div className="bg-gray-50 dark:bg-slate-900/50 border-t border-gray-200 dark:border-slate-700 p-4 space-y-4">
 
       {isEditable && (
-        <form onSubmit={handleSave} className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 space-y-3">
+        <form onSubmit={handleSave} className="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 p-4 space-y-3">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold text-gray-600 dark:text-gray-300">{editId ? '✏️ 수정' : '+ 시세 추가'}</p>
+            <p className="text-xs font-semibold text-gray-600 dark:text-slate-100">{editId ? '✏️ 수정' : '+ 시세 추가'}</p>
             {editId && (
               <button type="button" onClick={resetForm} className="text-xs text-gray-400 hover:text-red-400">취소</button>
             )}
@@ -175,14 +175,14 @@ export default function BondHistoryPanel({
               <label className="block text-xs text-gray-400 dark:text-gray-500 mb-1">기준일</label>
               <input type="date" value={form.priceDate}
                 onChange={e => setForm(f => ({ ...f, priceDate: e.target.value }))}
-                className="w-full border border-gray-200 dark:border-gray-600 rounded px-2 py-1.5 text-xs bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                className="w-full border border-gray-200 dark:border-slate-600 rounded px-2 py-1.5 text-xs bg-white dark:bg-slate-700 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-400" />
             </div>
             <div>
               <label className="block text-xs text-gray-400 dark:text-gray-500 mb-1">보유 좌수</label>
               <input type="text" inputMode="numeric" value={form.bondQty}
                 onChange={e => setForm(f => ({ ...f, bondQty: fmtInt(e.target.value) }))}
                 placeholder="0"
-                className="w-full border border-gray-200 dark:border-gray-600 rounded px-2 py-1.5 text-xs text-right bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                className="w-full border border-gray-200 dark:border-slate-600 rounded px-2 py-1.5 text-xs text-right bg-white dark:bg-slate-700 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-400" />
             </div>
             <div>
               <label className="block text-xs text-gray-400 dark:text-gray-500 mb-1">
@@ -193,7 +193,7 @@ export default function BondHistoryPanel({
                 <input type="text" inputMode="decimal" value={form.bondPrice}
                   onChange={e => setForm(f => ({ ...f, bondPrice: fmtDecimal(e.target.value) }))}
                   placeholder="0"
-                  className="flex-1 min-w-0 border border-gray-200 dark:border-gray-600 rounded px-2 py-1.5 text-xs text-right bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                  className="flex-1 min-w-0 border border-gray-200 dark:border-slate-600 rounded px-2 py-1.5 text-xs text-right bg-white dark:bg-slate-700 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-400" />
                 <button type="button" onClick={handleFetchPrice} disabled={fetching}
                   title="전 영업일 기준가 조회 (공공데이터 T+1)"
                   className="shrink-0 text-xs bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-700 px-2 rounded hover:bg-blue-100 dark:hover:bg-blue-900/50 disabled:opacity-50 whitespace-nowrap">
@@ -206,7 +206,7 @@ export default function BondHistoryPanel({
               <input type="text" inputMode="numeric" value={form.acquisition_cost}
                 onChange={e => setForm(f => ({ ...f, acquisition_cost: fmtInt(e.target.value) }))}
                 placeholder="0"
-                className="w-full border border-gray-200 dark:border-gray-600 rounded px-2 py-1.5 text-xs text-right bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                className="w-full border border-gray-200 dark:border-slate-600 rounded px-2 py-1.5 text-xs text-right bg-white dark:bg-slate-700 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-400" />
             </div>
           </div>
 
@@ -214,7 +214,7 @@ export default function BondHistoryPanel({
             <label className="block text-xs text-gray-400 dark:text-gray-500 mb-1">가용 여부</label>
             <select value={form.available}
               onChange={e => setForm(f => ({ ...f, available: e.target.value as '가용' | '불가용' }))}
-              className="border border-gray-200 dark:border-gray-600 rounded px-2 py-1.5 text-xs bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-400">
+              className="border border-gray-200 dark:border-slate-600 rounded px-2 py-1.5 text-xs bg-white dark:bg-slate-700 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-400">
               <option value="가용">가용</option>
               <option value="불가용">불가용</option>
             </select>
@@ -222,7 +222,7 @@ export default function BondHistoryPanel({
 
           {evalAmt > 0 && (
             <div className="flex items-center gap-3 text-xs">
-              <span className="text-gray-500 dark:text-gray-400">평가금액: <strong>{fmtKRW(evalAmt)}</strong></span>
+              <span className="text-gray-500 dark:text-slate-300">평가금액: <strong>{fmtKRW(evalAmt)}</strong></span>
               {retPreview !== null && (
                 <span className={`px-1.5 py-0.5 rounded font-medium ${returnBadgeClass(retPreview)}`}>
                   {fmtReturn(retPreview)}
@@ -251,14 +251,14 @@ export default function BondHistoryPanel({
             accessorKey: 'bondQty',
             header: '좌수',
             cell: ({ getValue }) => (
-              <span className="tabular-nums text-gray-600">{(getValue<number | undefined>() || 0).toLocaleString()}</span>
+              <span className="tabular-nums text-gray-600 dark:text-slate-100">{(getValue<number | undefined>() || 0).toLocaleString()}</span>
             ),
           },
           {
             accessorKey: 'bondPrice',
             header: '기준가',
             cell: ({ getValue }) => (
-              <span className="tabular-nums text-gray-600">{getValue<number | undefined>() ?? '-'}</span>
+              <span className="tabular-nums text-gray-600 dark:text-slate-100">{getValue<number | undefined>() ?? '-'}</span>
             ),
           },
           {
@@ -331,3 +331,5 @@ export default function BondHistoryPanel({
     </div>
   )
 }
+
+

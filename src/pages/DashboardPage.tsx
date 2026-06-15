@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+﻿import { useEffect, useState, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useDashboard } from '../hooks/useDashboard'
@@ -89,7 +89,7 @@ export default function DashboardPage() {
                 .map(issue => (
                   <span key={issue.key} className="inline-flex items-center gap-1.5 mr-12 text-xs">
                     <span className="text-amber-500">⚠</span>
-                    <span className="text-gray-600 dark:text-gray-300">{issue.title}</span>
+                    <span className="text-gray-600 dark:text-slate-100">{issue.title}</span>
                   </span>
                 ))}
             </div>
@@ -201,3 +201,4 @@ export default function DashboardPage() {
     </div>
   )
 }
+

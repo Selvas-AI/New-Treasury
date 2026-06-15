@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+﻿import { useState, useMemo } from 'react'
 import {
   ComposedChart, Bar, Line,
   XAxis, YAxis, CartesianGrid,
@@ -100,11 +100,11 @@ export default function CashflowChart({ dailyRecords, investments, loans }: Prop
     : { backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, fontSize: 11 }
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl shadow p-4 flex flex-col h-full">
+    <div className="bg-white dark:bg-slate-800 rounded-xl shadow p-4 flex flex-col h-full">
 
       {/* 헤더 */}
       <div className="shrink-0 flex items-center justify-between mb-3">
-        <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+        <h3 className="text-xs font-semibold text-gray-500 dark:text-slate-300 uppercase tracking-wide">
           현금흐름 추이
         </h3>
         <div className="flex gap-0.5">
@@ -115,7 +115,7 @@ export default function CashflowChart({ dailyRecords, investments, loans }: Prop
               className={`text-xs px-2 py-1 rounded-md transition-colors ${
                 period === p.value
                   ? 'bg-blue-600 text-white'
-                  : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+                  : 'text-gray-500 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700'
               }`}
             >
               {p.label}
@@ -138,7 +138,7 @@ export default function CashflowChart({ dailyRecords, investments, loans }: Prop
             title="클릭: 단독 보기 · Ctrl(⌘)+클릭: 다중 선택"
             className={`flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md transition-all ${
               isVisible(s.key)
-                ? 'text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700'
+                ? 'text-gray-600 dark:text-slate-100 bg-gray-100 dark:bg-slate-700'
                 : 'text-gray-300 dark:text-gray-600 opacity-50'
             }`}
           >
@@ -193,28 +193,28 @@ export default function CashflowChart({ dailyRecords, investments, loans }: Prop
                       {isVisible('operating') && (
                         <div className="flex items-center gap-2 text-[11px]">
                           <span className="w-2 h-2 rounded-sm bg-blue-500 inline-block" />
-                          <span className="text-gray-500 dark:text-gray-400">운전자금</span>
+                          <span className="text-gray-500 dark:text-slate-300">운전자금</span>
                           <span className="ml-auto font-medium tabular-nums">{fmtKRW(d.opRaw)}</span>
                         </div>
                       )}
                       {isVisible('investAvail') && (
                         <div className="flex items-center gap-2 text-[11px]">
                           <span className="w-2 h-2 rounded-sm bg-emerald-500 inline-block" />
-                          <span className="text-gray-500 dark:text-gray-400">운용(가용)</span>
+                          <span className="text-gray-500 dark:text-slate-300">운용(가용)</span>
                           <span className="ml-auto font-medium tabular-nums">{fmtKRW(d.invAvailRaw)}</span>
                         </div>
                       )}
                       {isVisible('investUnavail') && (
                         <div className="flex items-center gap-2 text-[11px]">
                           <span className="w-2 h-2 rounded-sm bg-emerald-300 inline-block" />
-                          <span className="text-gray-500 dark:text-gray-400">운용(불가용)</span>
+                          <span className="text-gray-500 dark:text-slate-300">운용(불가용)</span>
                           <span className="ml-auto font-medium tabular-nums">{fmtKRW(d.invUnavailRaw)}</span>
                         </div>
                       )}
                       {isVisible('loan') && (
-                        <div className="flex items-center gap-2 text-[11px] border-t border-gray-100 dark:border-gray-700 pt-1 mt-1">
+                        <div className="flex items-center gap-2 text-[11px] border-t border-gray-100 dark:border-slate-700 pt-1 mt-1">
                           <span className="w-2 h-2 rounded-sm bg-rose-400 inline-block" />
-                          <span className="text-gray-500 dark:text-gray-400">차입금</span>
+                          <span className="text-gray-500 dark:text-slate-300">차입금</span>
                           <span className="ml-auto font-medium tabular-nums text-rose-600">{fmtKRW(d.loanRaw)}</span>
                         </div>
                       )}
@@ -257,3 +257,4 @@ export default function CashflowChart({ dailyRecords, investments, loans }: Prop
     </div>
   )
 }
+

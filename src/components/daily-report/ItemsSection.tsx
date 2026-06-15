@@ -1,4 +1,4 @@
-/**
+﻿/**
  * ItemsSection — 입금 또는 출금 라인 아이템 입력 섹션
  *
  * 기능:
@@ -244,10 +244,10 @@ export default function ItemsSection({
   }
 
   return (
-    <section className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col">
+    <section className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-100 dark:border-slate-700 flex flex-col">
 
       {/* 헤더 */}
-      <div className="px-5 py-3 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
+      <div className="px-5 py-3 border-b border-gray-100 dark:border-slate-700 flex items-center justify-between">
         <h2 className={`text-sm font-semibold ${colorHdr}`}>
           {direction === 'in' ? '📥 입금 내역' : '📤 출금 내역'}
         </h2>
@@ -258,7 +258,7 @@ export default function ItemsSection({
       </div>
 
       {/* 아이템 목록 */}
-      <div className="divide-y divide-gray-50 dark:divide-gray-700/50">
+      <div className="divide-y divide-gray-50 dark:divide-slate-700/50">
         {myItems.length === 0 && !draft && (
           <div className="text-center py-8 text-xs text-gray-400 dark:text-gray-600">
             <p className="text-xl mb-1">{direction === 'in' ? '📥' : '📤'}</p>
@@ -292,7 +292,7 @@ export default function ItemsSection({
 
               {/* 계좌구분 배지 */}
               {acctLabel && (
-                <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">
+                <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] bg-gray-100 dark:bg-slate-700 text-gray-500 dark:text-slate-300">
                   {acctLabel}
                 </span>
               )}
@@ -315,7 +315,7 @@ export default function ItemsSection({
                       if (e.key === 'Enter') void commitEdit(item)
                       if (e.key === 'Escape') setEditId(null)
                     }}
-                    className="w-32 text-right text-xs px-2 py-0.5 rounded border border-blue-300 dark:border-blue-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 tabular-nums focus:outline-none"
+                    className="w-32 text-right text-xs px-2 py-0.5 rounded border border-blue-300 dark:border-blue-600 bg-white dark:bg-slate-700 text-gray-700 dark:text-gray-200 tabular-nums focus:outline-none"
                   />
                 ) : (
                   <button
@@ -390,7 +390,7 @@ export default function ItemsSection({
                 <select
                   value={draft.category}
                   onChange={e => setDraft(d => d ? { ...d, category: e.target.value } : d)}
-                  className="text-xs px-2 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                  className="text-xs px-2 py-1.5 rounded-lg border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-400"
                 >
                   {categories.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
                 </select>
@@ -409,7 +409,7 @@ export default function ItemsSection({
                     <select
                       value={draft.accountType}
                       onChange={e => setDraft(d => d ? { ...d, accountType: e.target.value } : d)}
-                      className="text-xs px-2 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                      className="text-xs px-2 py-1.5 rounded-lg border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-gray-600 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-blue-400"
                     >
                       <option value="">계좌구분 (선택)</option>
                       {activeAccounts.map(k => (
@@ -435,7 +435,7 @@ export default function ItemsSection({
                         if (e.key === 'Escape') setDraft(null)
                       }}
                       placeholder="금액 입력"
-                      className="w-32 text-xs text-right px-2 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 tabular-nums focus:outline-none focus:ring-1 focus:ring-blue-400"
+                      className="w-32 text-xs text-right px-2 py-1.5 rounded-lg border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-gray-700 dark:text-gray-200 tabular-nums focus:outline-none focus:ring-1 focus:ring-blue-400"
                     />
 
                     {/* 통화 */}
@@ -452,7 +452,7 @@ export default function ItemsSection({
                           return { ...d, currency: newCurrency, amtStr: newAmt }
                         })
                       }}
-                      className="text-xs px-2 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                      className="text-xs px-2 py-1.5 rounded-lg border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-400"
                     >
                       {FX_OPTIONS.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
@@ -467,7 +467,7 @@ export default function ItemsSection({
                         if (e.key === 'Escape') setDraft(null)
                       }}
                       placeholder="메모 (선택)"
-                      className="flex-1 min-w-[100px] text-xs px-2 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-500 dark:text-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                      className="flex-1 min-w-[100px] text-xs px-2 py-1.5 rounded-lg border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-gray-500 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-400"
                     />
 
                     {/* 저장/취소 */}
@@ -498,7 +498,7 @@ export default function ItemsSection({
 
       {/* 항목 추가 버튼 */}
       {!isReadOnly && !draft && (
-        <div className="p-3 border-t border-gray-50 dark:border-gray-700/50">
+        <div className="p-3 border-t border-gray-50 dark:border-slate-700/50">
           <button
             onClick={() => setDraft({ category: defaultCat, amtStr: '', currency: DEFAULT_CURRENCY, accountType: '', memo: '' })}
             className={`w-full py-2 border border-dashed rounded-lg text-xs font-medium transition-colors ${addBtnCls}`}
@@ -557,3 +557,4 @@ export default function ItemsSection({
     </section>
   )
 }
+

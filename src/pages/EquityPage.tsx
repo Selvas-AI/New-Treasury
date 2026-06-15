@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+﻿import { useState, useEffect, useMemo } from 'react'
 import { useParams } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useEquities, getLatestEquities } from '../hooks/useEquities'
@@ -220,8 +220,8 @@ export default function EquityPage() {
       </div>
 
       {/* 탭 */}
-      <div className="bg-white rounded-xl shadow dark:bg-gray-800">
-        <div className="flex border-b border-gray-100 dark:border-gray-700">
+      <div className="bg-white rounded-xl shadow dark:bg-slate-800">
+        <div className="flex border-b border-gray-100 dark:border-slate-700">
           {([
             { key: 'stock',    label: `지분 (${stocks.length})` },
             { key: 'bond',     label: `국채/채권 (${bonds.length})` },
@@ -232,7 +232,7 @@ export default function EquityPage() {
               className={`px-5 py-3 text-sm font-medium transition-colors ${
                 tab === t.key
                   ? 'border-b-2 border-blue-600 text-blue-700'
-                  : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+                  : 'text-gray-500 hover:text-gray-700 dark:text-slate-300 dark:hover:text-gray-200'
               }`}>
               {t.label}
             </button>
@@ -256,10 +256,10 @@ export default function EquityPage() {
               const isOpen = openPanel === s.name
               const ret    = calcReturn(s.total_value, s.acquisition_cost)
               return (
-                <div key={s.name} className="border-b border-gray-50 last:border-0 dark:border-gray-700">
+                <div key={s.name} className="border-b border-gray-50 last:border-0 dark:border-slate-700">
                   <button
                     onClick={() => togglePanel(s.name)}
-                    className="w-full text-left px-5 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                    className="w-full text-left px-5 py-3 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors">
                     <div className="flex items-center gap-3">
                       <div className="flex-1 min-w-0 grid grid-cols-2 md:grid-cols-5 gap-2 items-center">
                         <div>
@@ -320,10 +320,10 @@ export default function EquityPage() {
               ).sort((a, b2) => (b2.priceDate ?? '').localeCompare(a.priceDate ?? ''))
 
               return (
-                <div key={panelKey} className="border-b border-gray-50 last:border-0 dark:border-gray-700">
+                <div key={panelKey} className="border-b border-gray-50 last:border-0 dark:border-slate-700">
                   <button
                     onClick={() => togglePanel(panelKey)}
-                    className="w-full text-left px-5 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                    className="w-full text-left px-5 py-3 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors">
                     <div className="flex items-center gap-3">
                       <div className="flex-1 min-w-0 grid grid-cols-2 md:grid-cols-5 gap-2 items-center">
                         <div>
@@ -382,10 +382,10 @@ export default function EquityPage() {
               const isOpen = openPanel === s.name
               const ret    = calcReturn(s.total_value, s.acquisition_cost)
               return (
-                <div key={s.name} className="border-b border-gray-50 last:border-0 dark:border-gray-700">
+                <div key={s.name} className="border-b border-gray-50 last:border-0 dark:border-slate-700">
                   <button
                     onClick={() => togglePanel(s.name)}
-                    className="w-full text-left px-5 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                    className="w-full text-left px-5 py-3 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors">
                     <div className="flex items-center gap-3">
                       <div className="flex-1 min-w-0 grid grid-cols-2 md:grid-cols-4 gap-2 items-center">
                         <div>
@@ -427,11 +427,11 @@ export default function EquityPage() {
       {acqPopupOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
           onClick={() => !acqSaving && setAcqPopupOpen(false)}>
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden"
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden"
             onClick={e => e.stopPropagation()}>
 
             {/* 헤더 */}
-            <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
+            <div className="px-6 py-4 border-b border-gray-100 dark:border-slate-700 flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100">취득가액 일괄 입력</h3>
                 <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
@@ -457,15 +457,15 @@ export default function EquityPage() {
                 </thead>
                 <tbody>
                   {acqMissing.map(e => (
-                    <tr key={e.name} className="border-t border-gray-50 dark:border-gray-700/50">
+                    <tr key={e.name} className="border-t border-gray-50 dark:border-slate-700/50">
                       <td className="px-5 py-3">
                         <p className="font-medium text-gray-800 dark:text-gray-100 text-xs">{e.name}</p>
                         <p className="text-[10px] text-gray-400 dark:text-gray-500">{e.market}</p>
                       </td>
-                      <td className="px-3 py-3 text-right text-xs tabular-nums text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                      <td className="px-3 py-3 text-right text-xs tabular-nums text-gray-500 dark:text-slate-300 whitespace-nowrap">
                         {e.price > 0 ? e.price.toLocaleString() + '원' : '—'}
                       </td>
-                      <td className="px-3 py-3 text-right text-xs tabular-nums text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                      <td className="px-3 py-3 text-right text-xs tabular-nums text-gray-500 dark:text-slate-300 whitespace-nowrap">
                         {e.shares > 0 ? e.shares.toLocaleString() + '주' : '—'}
                       </td>
                       <td className="px-5 py-3">
@@ -481,7 +481,7 @@ export default function EquityPage() {
                               [e.name]: raw ? Number(raw).toLocaleString() : '',
                             }))
                           }}
-                          className="w-full text-right text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-amber-400 dark:bg-gray-700 dark:text-gray-100 tabular-nums"
+                          className="w-full text-right text-xs border border-gray-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-amber-400 dark:bg-slate-700 dark:text-gray-100 tabular-nums"
                         />
                       </td>
                     </tr>
@@ -500,11 +500,11 @@ export default function EquityPage() {
             )}
 
             {/* 푸터 */}
-            <div className="px-6 py-4 border-t border-gray-100 dark:border-gray-700 flex gap-2">
+            <div className="px-6 py-4 border-t border-gray-100 dark:border-slate-700 flex gap-2">
               <button
                 onClick={() => setAcqPopupOpen(false)}
                 disabled={acqSaving}
-                className="flex-1 text-sm border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded-xl py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50">
+                className="flex-1 text-sm border border-gray-300 dark:border-slate-600 text-gray-600 dark:text-slate-100 rounded-xl py-2.5 hover:bg-gray-50 dark:hover:bg-slate-700 disabled:opacity-50">
                 취소
               </button>
               <button
@@ -522,3 +522,4 @@ export default function EquityPage() {
     </div>
   )
 }
+

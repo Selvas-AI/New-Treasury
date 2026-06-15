@@ -1,4 +1,4 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import { usePolicyParams } from '../../hooks/usePolicyParams'
 import { fmtKRW, calcBondValue } from '../../lib/format'
 import type { InvestmentRecord } from '../../types'
@@ -61,14 +61,14 @@ export default function FvplRiskTab({
         const isEditing      = editingDuration[bond.id] !== undefined
 
         return (
-          <div key={bond.id} className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+          <div key={bond.id} className="border border-gray-200 dark:border-slate-700 rounded-xl overflow-hidden">
 
             {/* 채권 헤더 */}
             <div className="p-4 bg-gray-50 dark:bg-gray-700/50">
               <div className="flex items-start justify-between">
                 <div>
                   <p className="font-semibold text-gray-800 dark:text-gray-100">{bond.bondName ?? bond.bank}</p>
-                  <div className="flex gap-3 mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  <div className="flex gap-3 mt-1 text-xs text-gray-500 dark:text-slate-300">
                     {bond.bondTicker && <span>ISIN: {bond.bondTicker}</span>}
                     <span>만기: {bond.maturity}</span>
                     <span>금리: {bond.rate}%</span>
@@ -82,8 +82,8 @@ export default function FvplRiskTab({
                       <input type="number" step="0.1" min="0"
                         value={editingDuration[bond.id]}
                         onChange={e => setEditingDuration(p => ({ ...p, [bond.id]: e.target.value }))}
-                        className="w-20 text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1
-                                   bg-white dark:bg-gray-700 text-gray-900 dark:text-white" />
+                        className="w-20 text-sm border border-gray-300 dark:border-slate-600 rounded px-2 py-1
+                                   bg-white dark:bg-slate-700 text-gray-900 dark:text-white" />
                       <button onClick={() => saveDuration(bond)} disabled={savingId === bond.id}
                         className="text-xs px-2 py-1 bg-blue-600 text-white rounded disabled:opacity-50">
                         {savingId === bond.id ? '…' : '저장'}
@@ -127,7 +127,7 @@ export default function FvplRiskTab({
 
             {/* 금리 시나리오 */}
             <div className="p-4">
-              <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-3">
+              <p className="text-xs font-medium text-gray-500 dark:text-slate-300 mb-3">
                 금리 변동 시나리오 분석
                 {duration <= 0 && (
                   <span className="ml-2 text-amber-500">⚠️ Duration 미입력 — 계산 불가</span>
@@ -137,7 +137,7 @@ export default function FvplRiskTab({
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b border-gray-100 dark:border-gray-700">
+                      <tr className="border-b border-gray-100 dark:border-slate-700">
                         {['시나리오', '채권가격 변동', '추가 손익', '누적 평가손익', ''].map(h => (
                           <th key={h} className="text-left text-xs text-gray-400 font-medium pb-2 pr-4">{h}</th>
                         ))}
@@ -152,7 +152,7 @@ export default function FvplRiskTab({
                         const isBad        = cumulativePL < -acquisitionCost * 0.1
                         return (
                           <tr key={sc.bp}
-                            className={`border-b border-gray-50 dark:border-gray-700/50 ${isBase ? 'bg-blue-50 dark:bg-blue-950/20' : ''}`}>
+                            className={`border-b border-gray-50 dark:border-slate-700/50 ${isBase ? 'bg-blue-50 dark:bg-blue-950/20' : ''}`}>
                             <td className={`py-2.5 pr-4 font-medium ${isBase ? 'text-blue-700 dark:text-blue-300' : 'text-gray-700 dark:text-gray-200'}`}>
                               {sc.label}
                             </td>
@@ -192,3 +192,4 @@ export default function FvplRiskTab({
     </div>
   )
 }
+

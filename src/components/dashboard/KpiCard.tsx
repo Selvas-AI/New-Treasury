@@ -1,4 +1,4 @@
-import { fmtKRW } from '../../lib/format'
+﻿import { fmtKRW } from '../../lib/format'
 
 interface Props {
   label: string
@@ -14,7 +14,7 @@ const COLOR: Record<string, string> = {
   blue:   'bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-950/40 dark:border-blue-800 dark:text-blue-300',
   green:  'bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-300',
   red:    'bg-red-50 border-red-200 text-red-700 dark:bg-red-950/40 dark:border-red-800 dark:text-red-300',
-  gray:   'bg-gray-50 border-gray-200 text-gray-700 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300',
+  gray:   'bg-gray-50 border-gray-200 text-gray-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100',
   purple: 'bg-purple-50 border-purple-200 text-purple-700 dark:bg-purple-950/40 dark:border-purple-800 dark:text-purple-300',
 }
 
@@ -22,7 +22,7 @@ const BADGE_COLOR: Record<string, string> = {
   blue:   'bg-blue-100 text-blue-500 dark:bg-blue-900/50 dark:text-blue-400',
   green:  'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/50 dark:text-emerald-400',
   red:    'bg-red-100 text-red-500 dark:bg-red-900/50 dark:text-red-400',
-  gray:   'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400',
+  gray:   'bg-gray-100 text-gray-500 dark:bg-slate-700 dark:text-slate-300',
   purple: 'bg-purple-100 text-purple-500 dark:bg-purple-900/50 dark:text-purple-400',
 }
 
@@ -45,3 +45,4 @@ export default function KpiCard({ label, value, sub, color = 'gray', linkedChart
     </div>
   )
 }
+

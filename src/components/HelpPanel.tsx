@@ -1,4 +1,4 @@
-/**
+﻿/**
  * HelpPanel — 인앱 도움말 슬라이드 패널
  * TopBar의 ? 버튼 클릭 시 우측에서 슬라이드 인
  */
@@ -34,7 +34,7 @@ export default function HelpPanel({ open, onClose }: Props) {
 
       {/* 패널 */}
       <aside
-        className={`fixed top-0 right-0 h-full z-50 w-80 sm:w-96 bg-white dark:bg-gray-900 shadow-2xl flex flex-col transition-transform duration-300 ease-out ${open ? 'translate-x-0' : 'translate-x-full'}`}
+        className={`fixed top-0 right-0 h-full z-50 w-80 sm:w-96 bg-white dark:bg-slate-900 shadow-2xl flex flex-col transition-transform duration-300 ease-out ${open ? 'translate-x-0' : 'translate-x-full'}`}
       >
         {/* 헤더 */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-800 shrink-0">
@@ -50,7 +50,7 @@ export default function HelpPanel({ open, onClose }: Props) {
           <button
             onClick={onClose}
             aria-label="닫기"
-            className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
           >
             ✕
           </button>
@@ -69,7 +69,7 @@ export default function HelpPanel({ open, onClose }: Props) {
                 </h3>
                 <ul className="space-y-2">
                   {sec.items.map((item, ii) => (
-                    <li key={ii} className="flex gap-2.5 text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
+                    <li key={ii} className="flex gap-2.5 text-sm text-gray-600 dark:text-slate-100 leading-relaxed">
                       <span className="mt-1.5 w-1 h-1 rounded-full bg-blue-400 shrink-0" />
                       <span>{item}</span>
                     </li>
@@ -90,3 +90,4 @@ export default function HelpPanel({ open, onClose }: Props) {
     </>
   )
 }
+

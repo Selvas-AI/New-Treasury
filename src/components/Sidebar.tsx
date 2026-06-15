@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+﻿import { useEffect, useRef, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useIssueCount } from '../contexts/issueCount'
@@ -282,11 +282,11 @@ export default function Sidebar({ collapsed, onCollapse, onNavClick }: Props) {
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs text-gray-500 uppercase tracking-wider">실시간 환율</span>
               {fx.loading ? (
-                <span className="text-xs text-gray-600 animate-pulse">조회 중…</span>
+                <span className="text-xs text-gray-600 dark:text-slate-300 animate-pulse">조회 중…</span>
               ) : (
                 <button
                   onClick={() => void fx.fetchRates()}
-                  className="text-xs text-gray-600 hover:text-gray-400 transition-colors"
+                  className="text-xs text-gray-600 dark:text-slate-300 hover:text-gray-400 transition-colors"
                   title="환율 새로고침"
                 >↺</button>
               )}
@@ -296,7 +296,7 @@ export default function Sidebar({ collapsed, onCollapse, onNavClick }: Props) {
               <div className="space-y-1.5">
                 {FX_CODES.map(code => (
                   <div key={code} className="flex justify-between items-center">
-                    <span className="text-xs text-gray-600">{code}</span>
+                    <span className="text-xs text-gray-600 dark:text-slate-300">{code}</span>
                     <div className="h-2.5 w-16 bg-gray-800 rounded animate-pulse" />
                   </div>
                 ))}
@@ -322,13 +322,13 @@ export default function Sidebar({ collapsed, onCollapse, onNavClick }: Props) {
               <div className="space-y-1.5">
                 {FX_CODES.map(code => (
                   <div key={code} className="flex justify-between items-center">
-                    <span className="text-xs text-gray-600">{code}</span>
+                    <span className="text-xs text-gray-600 dark:text-slate-300">{code}</span>
                     <span className="text-xs text-gray-700">—</span>
                   </div>
                 ))}
                 <button
                   onClick={() => void fx.fetchRates()}
-                  className="text-xs text-gray-600 hover:text-gray-400 mt-1 w-full text-left"
+                  className="text-xs text-gray-600 dark:text-slate-300 hover:text-gray-400 mt-1 w-full text-left"
                 >↺ 재시도</button>
               </div>
             )}
@@ -357,7 +357,7 @@ export default function Sidebar({ collapsed, onCollapse, onNavClick }: Props) {
                   <span className="text-xs text-gray-400 font-medium">실시간 환율</span>
                   <button
                     onClick={() => void fx.fetchRates()}
-                    className="text-xs text-gray-600 hover:text-gray-400 transition-colors"
+                    className="text-xs text-gray-600 dark:text-slate-300 hover:text-gray-400 transition-colors"
                     title="새로고침"
                   >↺</button>
                 </div>
@@ -397,3 +397,4 @@ export default function Sidebar({ collapsed, onCollapse, onNavClick }: Props) {
     </aside>
   )
 }
+

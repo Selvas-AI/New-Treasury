@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 시안 미리보기 페이지 — 개발 완료 후 삭제
  * /mockup 에서 접근
  */
@@ -31,20 +31,20 @@ function PopupA() {
     <div className="relative">
       <h4 className="text-xs font-bold text-gray-500 uppercase mb-2">A안 — 우측 드로어(슬라이드아웃)</h4>
       <p className="text-[11px] text-gray-400 mb-3">자금흐름 항목 클릭 시 화면 우측에서 드로어가 슬라이드인</p>
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow p-4 space-y-2 relative overflow-hidden" style={{minHeight:180}}>
+      <div className="bg-white dark:bg-slate-800 rounded-xl shadow p-4 space-y-2 relative overflow-hidden" style={{minHeight:180}}>
         {items.map(it => (
           <button key={it.key} onClick={() => setOpen(open === it.key ? null : it.key)}
             className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs transition-all ${
-              open === it.key ? 'ring-2 ring-blue-400 bg-blue-50 dark:bg-blue-900/20' : 'hover:bg-gray-50 dark:hover:bg-gray-700'
+              open === it.key ? 'ring-2 ring-blue-400 bg-blue-50 dark:bg-blue-900/20' : 'hover:bg-gray-50 dark:hover:bg-slate-700'
             }`}>
             <span className="flex items-center gap-2 font-medium text-gray-700 dark:text-gray-200">
               <span className={`w-2 h-2 rounded-full ${it.color}`} />{it.label}
             </span>
-            <span className="text-gray-600 dark:text-gray-300 tabular-nums">{it.value}</span>
+            <span className="text-gray-600 dark:text-slate-100 tabular-nums">{it.value}</span>
           </button>
         ))}
         {/* 드로어 */}
-        <div className={`absolute inset-y-0 right-0 w-56 bg-white dark:bg-gray-750 border-l border-gray-200 dark:border-gray-600 shadow-xl transition-transform duration-300 ${open ? 'translate-x-0' : 'translate-x-full'}`}
+        <div className={`absolute inset-y-0 right-0 w-56 bg-white dark:bg-gray-750 border-l border-gray-200 dark:border-slate-600 shadow-xl transition-transform duration-300 ${open ? 'translate-x-0' : 'translate-x-full'}`}
           style={{backgroundColor: 'var(--tw-bg-opacity, 1)', background: 'rgb(31 41 55)'}}>
           {open && details[open] && (
             <div className="p-4">
@@ -80,12 +80,12 @@ function PopupB() {
     <div>
       <h4 className="text-xs font-bold text-gray-500 uppercase mb-2">B안 — 인라인 아코디언(항목 아래 펼침)</h4>
       <p className="text-[11px] text-gray-400 mb-3">클릭한 항목 바로 아래로 상세 내용이 펼쳐짐 (새 창 없음)</p>
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow p-4 space-y-1">
+      <div className="bg-white dark:bg-slate-800 rounded-xl shadow p-4 space-y-1">
         {items.map(it => (
           <div key={it.key}>
             <button onClick={() => setOpen(open === it.key ? null : it.key)}
               className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs transition-all ${
-                open === it.key ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300' : 'hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200'
+                open === it.key ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300' : 'hover:bg-gray-50 dark:hover:bg-slate-700 text-gray-700 dark:text-gray-200'
               }`}>
               <span className="flex items-center gap-2 font-medium">
                 <span className={`w-2 h-2 rounded-full ${it.color}`} />{it.label}
@@ -96,10 +96,10 @@ function PopupB() {
               </span>
             </button>
             {open === it.key && (
-              <div className="mx-3 mb-1 rounded-lg bg-gray-50 dark:bg-gray-700/50 border border-gray-100 dark:border-gray-600 px-3 py-2 space-y-1">
+              <div className="mx-3 mb-1 rounded-lg bg-gray-50 dark:bg-gray-700/50 border border-gray-100 dark:border-slate-600 px-3 py-2 space-y-1">
                 {it.rows.map(r => (
                   <div key={r.k} className="flex justify-between text-[11px]">
-                    <span className="text-gray-500 dark:text-gray-400">{r.k}</span>
+                    <span className="text-gray-500 dark:text-slate-300">{r.k}</span>
                     <span className="font-medium text-gray-800 dark:text-gray-200 tabular-nums">{r.v}</span>
                   </div>
                 ))}
@@ -125,8 +125,8 @@ function IssueA() {
     <div>
       <h4 className="text-xs font-bold text-gray-500 uppercase mb-2">A안 — 주가 티커형 마퀴</h4>
       <p className="text-[11px] text-gray-400 mb-3">이슈들이 오른쪽→왼쪽으로 흘러감. TopBar 내 주가 티커와 동일한 패턴</p>
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow overflow-hidden">
-        <div className="flex items-center h-10 bg-gray-900 dark:bg-gray-950 px-3 gap-3">
+      <div className="bg-white dark:bg-slate-800 rounded-xl shadow overflow-hidden">
+        <div className="flex items-center h-10 bg-gray-900 dark:bg-slate-950 px-3 gap-3">
           <span className="text-[10px] font-bold text-red-400 shrink-0">🔔 이슈 {DEMO_ISSUES.length}건</span>
           <div className="flex-1 overflow-hidden">
             <div className="flex items-center gap-8 whitespace-nowrap"
@@ -159,8 +159,8 @@ function IssueB() {
     <div>
       <h4 className="text-xs font-bold text-gray-500 uppercase mb-2">B안 — 슬라이드쇼 (2.5초 자동 전환)</h4>
       <p className="text-[11px] text-gray-400 mb-3">한 건씩 강조 표시, 자동 순환. 클릭 시 이슈 이력으로 이동</p>
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow overflow-hidden">
-        <div className="flex items-center h-10 bg-gray-900 dark:bg-gray-950 px-4 gap-3">
+      <div className="bg-white dark:bg-slate-800 rounded-xl shadow overflow-hidden">
+        <div className="flex items-center h-10 bg-gray-900 dark:bg-slate-950 px-4 gap-3">
           <span className="text-[10px] font-bold text-red-400 shrink-0">🔔 {curr + 1}/{DEMO_ISSUES.length}</span>
           <div className="flex-1 min-w-0">
             <span className={`inline-flex items-center gap-1.5 text-[11px] transition-all`}>
@@ -188,8 +188,8 @@ function IssueC() {
     <div>
       <h4 className="text-xs font-bold text-gray-500 uppercase mb-2">C안 — 배지+드롭다운</h4>
       <p className="text-[11px] text-gray-400 mb-3">건수 배지 + 최신 이슈 1줄 요약. 클릭 시 이슈 목록 드롭다운</p>
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow overflow-hidden">
-        <div className="flex items-center h-10 bg-gray-900 dark:bg-gray-950 px-4 gap-3">
+      <div className="bg-white dark:bg-slate-800 rounded-xl shadow overflow-hidden">
+        <div className="flex items-center h-10 bg-gray-900 dark:bg-slate-950 px-4 gap-3">
           <button onClick={() => setOpen(o => !o)}
             className="flex items-center gap-2 text-[11px] hover:bg-gray-800 px-2 py-1 rounded transition-colors">
             <span className="bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">3</span>
@@ -230,7 +230,7 @@ export default function MockupPage() {
 
       {/* ── ② 팝업 방식 ── */}
       <section className="space-y-2">
-        <h2 className="text-base font-bold text-gray-700 dark:text-gray-200 border-b border-gray-200 dark:border-gray-700 pb-2">
+        <h2 className="text-base font-bold text-gray-700 dark:text-gray-200 border-b border-gray-200 dark:border-slate-700 pb-2">
           ② 자금흐름 상세 팝업 방식
         </h2>
         <div className="grid grid-cols-1 gap-6 pt-2">
@@ -241,7 +241,7 @@ export default function MockupPage() {
 
       {/* ── ③ 이슈 전광판 ── */}
       <section className="space-y-2">
-        <h2 className="text-base font-bold text-gray-700 dark:text-gray-200 border-b border-gray-200 dark:border-gray-700 pb-2">
+        <h2 className="text-base font-bold text-gray-700 dark:text-gray-200 border-b border-gray-200 dark:border-slate-700 pb-2">
           ③ 이슈 전광판 방식
         </h2>
         <div className="grid grid-cols-1 gap-6 pt-2">
@@ -253,3 +253,4 @@ export default function MockupPage() {
     </div>
   )
 }
+

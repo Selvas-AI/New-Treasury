@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+﻿import { useState, useEffect, useMemo } from 'react'
 import { useParams } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useIssues } from '../hooks/useIssues'
@@ -168,7 +168,7 @@ export default function IssueHistoryPage() {
               className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
                 filterStatus === f.key
                   ? 'bg-blue-600 text-white border-blue-600'
-                  : 'border-gray-300 text-gray-600 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-700'
+                  : 'border-gray-300 text-gray-600 hover:bg-gray-50 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-700'
               }`}>
               {f.label}
             </button>
@@ -178,9 +178,9 @@ export default function IssueHistoryPage() {
 
       {/* 이슈 없음 */}
       {issues.loading ? (
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow p-8 text-center text-sm text-gray-400 dark:text-gray-500">로딩 중...</div>
+        <div className="bg-white dark:bg-slate-800 rounded-xl shadow p-8 text-center text-sm text-gray-400 dark:text-gray-500">로딩 중...</div>
       ) : groups.length === 0 ? (
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow p-8 text-center text-sm text-gray-400 dark:text-gray-500">
+        <div className="bg-white dark:bg-slate-800 rounded-xl shadow p-8 text-center text-sm text-gray-400 dark:text-gray-500">
           {filterStatus === 'all' ? '이슈가 없습니다.' : `[${STATUS_LABEL[filterStatus as IssueStatus]}] 상태의 이슈가 없습니다.`}
         </div>
       ) : (
@@ -188,12 +188,12 @@ export default function IssueHistoryPage() {
           {groups.map(group => {
             const isOpen = openKey === group.key
             return (
-              <div key={group.key} className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow">
+              <div key={group.key} className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl shadow">
 
                 {/* 이슈 헤더 행 */}
                 <button
                   onClick={() => setOpenKey(isOpen ? null : group.key)}
-                  className="w-full text-left px-5 py-4 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors rounded-xl">
+                  className="w-full text-left px-5 py-4 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors rounded-xl">
                   <div className="flex items-start gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
@@ -205,7 +205,7 @@ export default function IssueHistoryPage() {
                         <span className="text-xs text-gray-400 dark:text-gray-500">💬 {group.comments.length}개</span>
                       </div>
                       {group.desc && (
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-1">{group.desc}</p>
+                        <p className="text-xs text-gray-500 dark:text-slate-300 mt-0.5 line-clamp-1">{group.desc}</p>
                       )}
                     </div>
                     <span className={`text-gray-400 dark:text-gray-500 transition-transform shrink-0 mt-0.5 ${isOpen ? 'rotate-180' : ''}`}>▾</span>
@@ -214,7 +214,7 @@ export default function IssueHistoryPage() {
 
                 {/* 코멘트 스레드 */}
                 {isOpen && (
-                  <div className="border-t border-gray-100 dark:border-gray-700 px-5 pb-5 space-y-4">
+                  <div className="border-t border-gray-100 dark:border-slate-700 px-5 pb-5 space-y-4">
 
                     {/* 상태 변경 버튼 */}
                     {isEditable && (
@@ -227,7 +227,7 @@ export default function IssueHistoryPage() {
                             className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
                               group.latestStatus === s
                                 ? `${STATUS_COLOR[s]} border-transparent cursor-default`
-                                : 'border-gray-300 text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700'
+                                : 'border-gray-300 text-gray-600 hover:bg-gray-50 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-700'
                             }`}>
                             {STATUS_LABEL[s]}
                           </button>
@@ -264,13 +264,13 @@ export default function IssueHistoryPage() {
                                   value={editBody}
                                   onChange={e => setEditBody(e.target.value)}
                                   rows={2}
-                                  className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+                                  className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none dark:bg-slate-700 dark:border-slate-600 dark:text-gray-100"
                                 />
                                 <div className="flex items-center gap-2">
                                   <select
                                     value={editStatus}
                                     onChange={e => setEditStatus(e.target.value as IssueStatus)}
-                                    className="text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100">
+                                    className="text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none dark:bg-slate-700 dark:border-slate-600 dark:text-gray-100">
                                     {(['open', 'review', 'done'] as IssueStatus[]).map(s => (
                                       <option key={s} value={s}>{STATUS_LABEL[s]}</option>
                                     ))}
@@ -301,8 +301,8 @@ export default function IssueHistoryPage() {
 
                     {/* 새 코멘트 입력 */}
                     {isEditable && (
-                      <div className="flex gap-3 pt-2 border-t border-gray-100 dark:border-gray-700">
-                        <div className="w-7 h-7 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center shrink-0 text-xs font-bold text-gray-500 dark:text-gray-400">
+                      <div className="flex gap-3 pt-2 border-t border-gray-100 dark:border-slate-700">
+                        <div className="w-7 h-7 rounded-full bg-gray-200 dark:bg-slate-700 flex items-center justify-center shrink-0 text-xs font-bold text-gray-500 dark:text-slate-300">
                           {user?.label.slice(0, 1)}
                         </div>
                         <div className="flex-1 space-y-2">
@@ -311,7 +311,7 @@ export default function IssueHistoryPage() {
                             onChange={e => setNewBody(e.target.value)}
                             placeholder="코멘트를 입력하세요..."
                             rows={2}
-                            className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+                            className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none dark:bg-slate-700 dark:border-slate-600 dark:text-gray-100"
                           />
                           <button
                             onClick={() => handleAddComment(group)}
@@ -332,3 +332,4 @@ export default function IssueHistoryPage() {
     </div>
   )
 }
+

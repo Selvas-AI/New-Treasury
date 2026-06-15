@@ -1,4 +1,4 @@
-/**
+﻿/**
  * LoanRepaymentPopup — 차입금 상환 연동 팝업
  * 활성 차입금 선택 → loans.active=false 처리 + 일보 아이템 저장
  */
@@ -59,9 +59,9 @@ export default function LoanRepaymentPopup({ company, onSaved, onClose }: Props)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-lg mx-4 flex flex-col max-h-[80vh]" style={{ animation: 'fadeInScale 0.18s ease-out both' }}>
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg mx-4 flex flex-col max-h-[80vh]" style={{ animation: 'fadeInScale 0.18s ease-out both' }}>
         {/* 헤더 */}
-        <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between shrink-0">
+        <div className="px-6 py-4 border-b border-gray-100 dark:border-slate-700 flex items-center justify-between shrink-0">
           <div>
             <h2 className="text-sm font-bold text-gray-800 dark:text-gray-100">🏦 차입금 상환 연동</h2>
             <p className="text-[11px] text-gray-400 mt-0.5">상환할 차입금을 선택하세요</p>
@@ -81,11 +81,11 @@ export default function LoanRepaymentPopup({ company, onSaved, onClose }: Props)
                 const dday = Math.ceil((new Date(loan.maturity).getTime() - Date.now()) / 86400000)
                 return (
                   <button key={loan.id} onClick={() => handleSelect(loan)}
-                    className={`w-full text-left px-4 py-3 rounded-xl border transition-colors ${selectedId === loan.id ? 'border-red-400 bg-red-50 dark:bg-red-900/20' : 'border-gray-100 dark:border-gray-700 hover:border-red-200 dark:hover:border-red-700'}`}>
+                    className={`w-full text-left px-4 py-3 rounded-xl border transition-colors ${selectedId === loan.id ? 'border-red-400 bg-red-50 dark:bg-red-900/20' : 'border-gray-100 dark:border-slate-700 hover:border-red-200 dark:hover:border-red-700'}`}>
                     <div className="flex items-center justify-between">
                       <div>
                         <span className="text-xs font-semibold text-gray-800 dark:text-gray-100">{loan.lender}</span>
-                        <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-500">
+                        <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-slate-700 text-gray-500">
                           {LOAN_TYPE_LABELS[loan.type] ?? loan.type}
                         </span>
                       </div>
@@ -109,17 +109,17 @@ export default function LoanRepaymentPopup({ company, onSaved, onClose }: Props)
 
         {/* 금액 입력 + 저장 */}
         {selectedId && (
-          <div className="px-6 py-4 border-t border-gray-100 dark:border-gray-700 space-y-3 shrink-0">
+          <div className="px-6 py-4 border-t border-gray-100 dark:border-slate-700 space-y-3 shrink-0">
             <div className="flex gap-2 items-center">
               <label className="text-xs text-gray-500 w-16 shrink-0">상환금액</label>
               <input type="text" inputMode="numeric" value={amtStr}
                 onChange={e => setAmtStr(e.target.value.replace(/[^\d,]/g, ''))}
-                className="flex-1 text-xs px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-right tabular-nums focus:outline-none focus:ring-1 focus:ring-red-400" />
+                className="flex-1 text-xs px-3 py-2 rounded-lg border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-right tabular-nums focus:outline-none focus:ring-1 focus:ring-red-400" />
             </div>
             <div className="flex gap-2 items-center">
               <label className="text-xs text-gray-500 w-16 shrink-0">메모</label>
               <input type="text" value={memo} onChange={e => setMemo(e.target.value)}
-                className="flex-1 text-xs px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 focus:outline-none focus:ring-1 focus:ring-red-400" />
+                className="flex-1 text-xs px-3 py-2 rounded-lg border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-700 focus:outline-none focus:ring-1 focus:ring-red-400" />
             </div>
             <p className="text-[10px] text-amber-600 dark:text-amber-400">
               ⚠ 저장 시 해당 차입금을 상환처리(비활성)합니다 — {selected?.lender} {selected?.amount.toLocaleString()}원
@@ -138,3 +138,4 @@ export default function LoanRepaymentPopup({ company, onSaved, onClose }: Props)
     </div>
   )
 }
+

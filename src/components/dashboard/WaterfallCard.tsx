@@ -1,4 +1,4 @@
-import { fmtKRW } from '../../lib/format'
+﻿import { fmtKRW } from '../../lib/format'
 import type { KpiData } from '../../hooks/useDashboard'
 
 export type FlowItemKey = 'operating' | 'invest' | 'fx' | 'loan' | 'net' | 'unavailable' | 'available' | 'asset' | 'equity_avail'
@@ -42,7 +42,7 @@ function BarRow({
       onClick={onClick}
     >
       <div className="flex items-center justify-between mb-1 gap-2">
-        <span className="flex items-center gap-1.5 text-[11px] text-gray-600 dark:text-gray-300 min-w-0">
+        <span className="flex items-center gap-1.5 text-[11px] text-gray-600 dark:text-slate-100 min-w-0">
           {indent && <span className="text-gray-400 dark:text-gray-600 text-[10px]">~</span>}
           <span className="truncate">{label}</span>
           {badge}
@@ -53,7 +53,7 @@ function BarRow({
           {onClick && <span className="text-[10px] text-gray-400">›</span>}
         </span>
       </div>
-      <div className="h-2 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+      <div className="h-2 bg-gray-100 dark:bg-slate-700 rounded-full overflow-hidden">
         <div
           className={`h-full rounded-full transition-all duration-500 ${barColor}`}
           style={{ width: `${pct}%` }}
@@ -69,7 +69,7 @@ export default function WaterfallCard({ kpi, fxKrw, prevOperatingCash, onItemCli
   const opDelta = prevOperatingCash !== null ? kpi.operatingCash - prevOperatingCash : null
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl shadow p-5">
+    <div className="bg-white dark:bg-slate-800 rounded-xl shadow p-5">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">자금 흐름</h3>
         <span className="text-[10px] text-gray-400 dark:text-gray-500">가용 합계 − 차입 = 순현금</span>
@@ -121,8 +121,8 @@ export default function WaterfallCard({ kpi, fxKrw, prevOperatingCash, onItemCli
         )}
 
         {/* 가용자산 소계 */}
-        <div className="flex items-center justify-between py-1 border-t border-gray-100 dark:border-gray-700 mt-1">
-          <span className="text-[11px] text-gray-500 dark:text-gray-400">가용자산 소계</span>
+        <div className="flex items-center justify-between py-1 border-t border-gray-100 dark:border-slate-700 mt-1">
+          <span className="text-[11px] text-gray-500 dark:text-slate-300">가용자산 소계</span>
           <span className="text-xs font-bold text-gray-800 dark:text-gray-100 tabular-nums">{fmtKRW(kpi.availableCash)}</span>
         </div>
 
@@ -158,7 +158,7 @@ export default function WaterfallCard({ kpi, fxKrw, prevOperatingCash, onItemCli
               {kpi.netCashPosition >= 0 ? '+' : ''}{fmtKRW(kpi.netCashPosition)}
             </span>
           </div>
-          <div className="h-2.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+          <div className="h-2.5 bg-gray-100 dark:bg-slate-700 rounded-full overflow-hidden">
             <div
               className={`h-full rounded-full transition-all duration-500 ${
                 kpi.netCashPosition >= 0 ? 'bg-blue-500' : 'bg-red-500'
@@ -170,7 +170,7 @@ export default function WaterfallCard({ kpi, fxKrw, prevOperatingCash, onItemCli
 
         {/* 참고 자산 (순현금 미포함) — 지분(가용) · 불가용 */}
         {(kpi.equityAvail > 0 || kpi.unavailableAssets > 0) && (
-          <div className="pt-1 border-t border-gray-100 dark:border-gray-700 space-y-2.5">
+          <div className="pt-1 border-t border-gray-100 dark:border-slate-700 space-y-2.5">
             <p className="text-[10px] text-gray-400 dark:text-gray-500">참고 — 순현금 미포함</p>
 
             {/* 지분(가용) — 상장주식, 현금성과 구분해 별도 표시 */}
@@ -204,3 +204,4 @@ export default function WaterfallCard({ kpi, fxKrw, prevOperatingCash, onItemCli
     </div>
   )
 }
+
