@@ -930,7 +930,7 @@ export default function DailyReportPage() {
                 ) : (
                   <div className="space-y-2">
                     {attachments.map(att => (
-                      <div key={att.id} className="flex items-center gap-3 p-2 rounded-lg bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-slate-700">
+                      <div key={att.id} className="flex items-center gap-3 p-2 rounded-lg bg-gray-50 dark:bg-slate-700/50 border border-gray-200 dark:border-slate-700">
                         <span className="text-lg">📄</span>
                         <div className="flex-1 min-w-0">
                           <div className="text-xs font-medium text-gray-700 dark:text-gray-200 truncate">{att.file_name}</div>
@@ -974,7 +974,7 @@ export default function DailyReportPage() {
                     <div className={`flex items-center gap-2 flex-wrap text-xs rounded-lg px-4 py-3 ${
                       isValid    ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400'
                       : hasData  ? 'bg-red-50 dark:bg-red-900/10 text-red-600 dark:text-red-400'
-                                 : 'bg-gray-50 dark:bg-gray-700/50 text-gray-500 dark:text-slate-300'
+                                 : 'bg-gray-50 dark:bg-slate-700/50 text-gray-500 dark:text-slate-300'
                     }`}>
                       <span className="text-green-600 dark:text-green-400 font-medium">입금</span>
                       <span className="tabular-nums font-semibold">{hasData ? fmt(inTotal) : '—'}</span>

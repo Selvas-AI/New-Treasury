@@ -64,7 +64,7 @@ export default function FvplRiskTab({
           <div key={bond.id} className="border border-gray-200 dark:border-slate-700 rounded-xl overflow-hidden">
 
             {/* 채권 헤더 */}
-            <div className="p-4 bg-gray-50 dark:bg-gray-700/50">
+            <div className="p-4 bg-gray-50 dark:bg-slate-700/50">
               <div className="flex items-start justify-between">
                 <div>
                   <p className="font-semibold text-gray-800 dark:text-gray-100">{bond.bondName ?? bond.bank}</p>

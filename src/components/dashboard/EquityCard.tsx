@@ -168,7 +168,7 @@ export default function EquityCard({
               className={`flex items-center justify-between py-1.5 border-b border-gray-50 dark:border-slate-700/60 last:border-0 rounded px-1 cursor-pointer select-none transition-colors ${
                 isSelected
                   ? 'bg-pink-50 dark:bg-pink-900/20 ring-1 ring-inset ring-pink-200 dark:ring-pink-700'
-                  : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                  : 'hover:bg-gray-50 dark:hover:bg-slate-700/50'
               }`}
             >
               <div className="min-w-0">
@@ -211,7 +211,7 @@ export default function EquityCard({
               className={`flex items-center justify-between py-1.5 border-b border-gray-50 dark:border-slate-700/60 last:border-0 rounded px-1 cursor-pointer select-none transition-colors ${
                 isSelected
                   ? 'bg-blue-50 dark:bg-blue-900/20 ring-1 ring-inset ring-blue-200 dark:ring-blue-700'
-                  : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                  : 'hover:bg-gray-50 dark:hover:bg-slate-700/50'
               }`}
             >
               <div className="min-w-0">

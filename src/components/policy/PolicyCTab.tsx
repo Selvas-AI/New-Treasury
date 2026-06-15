@@ -317,7 +317,7 @@ function ProductChecklist({ isMaster }: ChecklistProps) {
       {/* 카테고리별 체크리스트 */}
       {categories.map(cat => (
         <div key={cat} className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 overflow-hidden">
-          <div className="px-4 py-2 bg-gray-50 dark:bg-gray-700/50 border-b border-gray-100 dark:border-slate-700">
+          <div className="px-4 py-2 bg-gray-50 dark:bg-slate-700/50 border-b border-gray-100 dark:border-slate-700">
             <span className="text-xs font-semibold text-gray-600 dark:text-slate-100">{cat}</span>
           </div>
           <div className="divide-y divide-gray-50 dark:divide-slate-700/50">

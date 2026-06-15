@@ -447,7 +447,7 @@ export default function EquityPage() {
             {/* 테이블 */}
             <div className="overflow-y-auto max-h-[60vh]">
               <table className="w-full text-sm">
-                <thead className="sticky top-0 bg-gray-50 dark:bg-gray-700/60">
+                <thead className="sticky top-0 bg-gray-50 dark:bg-slate-700/60">
                   <tr>
                     <th className="text-left text-xs text-gray-400 font-medium px-5 py-2.5">종목명</th>
                     <th className="text-right text-xs text-gray-400 font-medium px-3 py-2.5">현재가</th>

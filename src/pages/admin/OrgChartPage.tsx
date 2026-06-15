@@ -107,7 +107,7 @@ function ApprovalConfigPanel({ company }: { company: Company }) {
       ) : (
         <table className="w-full text-xs">
           <thead>
-            <tr className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-100 dark:border-slate-700">
+            <tr className="bg-gray-50 dark:bg-slate-700/50 border-b border-gray-100 dark:border-slate-700">
               <th className="px-4 py-2.5 text-left font-medium text-gray-500 w-16">단계</th>
               <th className="px-4 py-2.5 text-left font-medium text-gray-500">직책</th>
               <th className="px-4 py-2.5 text-left font-medium text-gray-500">결재자 코드</th>
@@ -116,7 +116,7 @@ function ApprovalConfigPanel({ company }: { company: Company }) {
           </thead>
           <tbody className="divide-y divide-gray-50 dark:divide-slate-700/50">
             {sorted.map(cfg => (
-              <tr key={cfg.step} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
+              <tr key={cfg.step} className="hover:bg-gray-50 dark:hover:bg-slate-700/30">
                 <td className="px-4 py-3 font-semibold text-blue-600 dark:text-blue-400">{cfg.step}단계</td>
                 <td className="px-4 py-3 text-gray-700 dark:text-gray-200">{cfg.role_label}</td>
                 <td className="px-4 py-3 font-mono text-gray-500 dark:text-slate-300">{cfg.approver_code}</td>
@@ -137,7 +137,7 @@ function ApprovalConfigPanel({ company }: { company: Company }) {
       )}
 
       {/* 추가/수정 폼 */}
-      <div className="px-5 py-4 border-t border-gray-100 dark:border-slate-700 bg-gray-50/50 dark:bg-gray-700/20">
+      <div className="px-5 py-4 border-t border-gray-100 dark:border-slate-700 bg-gray-50/50 dark:bg-slate-700/20">
         <p className="text-xs font-semibold text-gray-500 dark:text-slate-300 mb-3">
           {editTarget ? `${editTarget}단계 수정` : '새 결재단계 추가'}
         </p>

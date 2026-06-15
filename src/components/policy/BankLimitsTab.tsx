@@ -283,7 +283,7 @@ export default function BankLimitsTab({ company, investments, isMaster, userLabe
               </tbody>
               {totalAmt > 0 && (
                 <tfoot>
-                  <tr className="border-t border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-gray-700/30">
+                  <tr className="border-t border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-700/30">
                     <td colSpan={2} className="px-4 py-2.5 text-xs font-semibold text-gray-600 dark:text-slate-100">합계</td>
                     <td className="px-4 py-2.5 text-right tabular-nums font-semibold text-gray-800 dark:text-gray-100">
                       {fmtKRW(totalAmt)}

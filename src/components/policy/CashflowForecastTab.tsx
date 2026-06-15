@@ -230,7 +230,7 @@ export default function CashflowForecastTab({ company, openingBalance, isMaster,
                 })}
               </tbody>
               <tfoot>
-                <tr className="border-t-2 border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-gray-700/30">
+                <tr className="border-t-2 border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-700/30">
                   <td colSpan={3} className="px-4 py-2.5 text-xs font-semibold text-gray-600 dark:text-slate-100">12주 합계</td>
                   <td className="px-4 py-2.5 text-right tabular-nums text-xs font-semibold text-blue-700 dark:text-blue-400">
                     +{(totalInflow / 1e8).toFixed(1)}억

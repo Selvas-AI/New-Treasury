@@ -38,7 +38,7 @@ function BarRow({
   const pct = maxVal > 0 ? Math.min((value / maxVal) * 100, 100) : 0
   return (
     <div
-      className={`rounded-lg transition-colors ${indent ? 'pl-4' : ''} ${onClick ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 px-2 -mx-2 py-1' : ''} ${active ? 'bg-blue-50 dark:bg-blue-900/20 ring-1 ring-blue-200 dark:ring-blue-700 px-2 -mx-2 py-1' : ''}`}
+      className={`rounded-lg transition-colors ${indent ? 'pl-4' : ''} ${onClick ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-slate-700/50 px-2 -mx-2 py-1' : ''} ${active ? 'bg-blue-50 dark:bg-blue-900/20 ring-1 ring-blue-200 dark:ring-blue-700 px-2 -mx-2 py-1' : ''}`}
       onClick={onClick}
     >
       <div className="flex items-center justify-between mb-1 gap-2">
@@ -144,7 +144,7 @@ export default function WaterfallCard({ kpi, fxKrw, prevOperatingCash, onItemCli
 
         {/* 순현금 */}
         <div
-          className={`rounded-lg transition-colors ${onItemClick ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 px-2 -mx-2 py-1' : ''} ${activeItem === 'net' ? 'bg-blue-50 dark:bg-blue-900/20 ring-1 ring-blue-200 dark:ring-blue-700 px-2 -mx-2 py-1' : ''}`}
+          className={`rounded-lg transition-colors ${onItemClick ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-slate-700/50 px-2 -mx-2 py-1' : ''} ${activeItem === 'net' ? 'bg-blue-50 dark:bg-blue-900/20 ring-1 ring-blue-200 dark:ring-blue-700 px-2 -mx-2 py-1' : ''}`}
           onClick={onItemClick ? () => onItemClick('net') : undefined}
         >
           <div className="flex items-center justify-between mb-1">

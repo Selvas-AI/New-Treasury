@@ -175,7 +175,7 @@ export default function CompaniesPage() {
       </form>
 
       {/* 안내 */}
-      <div className="text-xs text-gray-400 dark:text-gray-600 bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4 space-y-1">
+      <div className="text-xs text-gray-400 dark:text-gray-600 bg-gray-50 dark:bg-slate-800/50 rounded-xl p-4 space-y-1">
         <p className="font-semibold text-gray-500 dark:text-gray-500">📌 안내</p>
         <p>① 법인 추가 전 Supabase SQL Editor에서 <code className="bg-gray-100 dark:bg-slate-700 px-1 rounded">docs/db/companies.sql</code> 실행 필요</p>
         <p>② 추가된 법인은 마스터·관리자에게 즉시 보이며, 편집자·뷰어는 사용자 관리에서 접근 허용 법인으로 지정해야 보입니다.</p>

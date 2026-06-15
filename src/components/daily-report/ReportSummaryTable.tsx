@@ -117,7 +117,7 @@ function SubtotalRow({
 }) {
   const diff = (currKrw || prevKrw) - prevKrw
   return (
-    <tr className="border-t border-gray-200 dark:border-slate-600 font-semibold text-xs bg-gray-50/50 dark:bg-gray-700/20">
+    <tr className="border-t border-gray-200 dark:border-slate-600 font-semibold text-xs bg-gray-50/50 dark:bg-slate-700/20">
       <td className={`px-4 py-2 text-gray-600 dark:text-slate-100 ${indent ? 'pl-7' : 'pl-4'}`}>
         {label}
         {note && <span className="ml-1.5 text-[10px] font-normal text-gray-400 dark:text-gray-500">{note}</span>}
@@ -172,7 +172,7 @@ function KrwRow({ label, prevVal, currVal, inVal, outVal, isMissing, accountType
     : undefined
 
   return (
-    <tr className="hover:bg-gray-50/50 dark:hover:bg-gray-700/20 text-xs">
+    <tr className="hover:bg-gray-50/50 dark:hover:bg-slate-700/20 text-xs">
       <td className="px-4 py-2 pl-7 text-gray-600 dark:text-slate-300">{label}</td>
       <td className="px-4 py-2 text-right tabular-nums text-gray-600 dark:text-slate-300">{fmt(prevVal)}</td>
       <td className="px-4 py-2 text-right tabular-nums text-green-700 dark:text-green-400">
@@ -214,7 +214,7 @@ function FxRow({ code, prevRaw, currRaw, prevKrw, currKrw, isMissing, inRaw, out
     : undefined
 
   return (
-    <tr className="hover:bg-gray-50/50 dark:hover:bg-gray-700/20 text-xs">
+    <tr className="hover:bg-gray-50/50 dark:hover:bg-slate-700/20 text-xs">
       <td className="px-4 py-2 pl-7 text-gray-600 dark:text-slate-300">{label}</td>
       <td className="px-4 py-2 text-right tabular-nums text-gray-600 dark:text-slate-300">
         {prevRaw > 0 ? fmtFx(prevRaw, code) : '—'}
@@ -268,7 +268,7 @@ function InvestRow({ group, inKrw, outKrw, isAutoEval }: {
       : fmt(group.totalKrw)
 
   return (
-    <tr className="hover:bg-gray-50/50 dark:hover:bg-gray-700/20 text-xs">
+    <tr className="hover:bg-gray-50/50 dark:hover:bg-slate-700/20 text-xs">
       <td className="px-4 py-2 pl-9 text-gray-600 dark:text-slate-300">
         <span className="inline-flex items-center gap-1.5">
           <span className={isBond ? 'font-medium' : ''}>{group.label}</span>
@@ -387,7 +387,7 @@ export default function ReportSummaryTable({
 
       <table className="w-full text-xs">
         <thead>
-          <tr className="bg-gray-50 dark:bg-gray-700/50 text-gray-500 dark:text-slate-300 text-[11px]">
+          <tr className="bg-gray-50 dark:bg-slate-700/50 text-gray-500 dark:text-slate-300 text-[11px]">
             <th className="text-left px-4 py-2.5 font-medium w-52">구분</th>
             <th className="text-right px-4 py-2 font-medium leading-tight">
               기초잔액
@@ -524,7 +524,7 @@ export default function ReportSummaryTable({
                 const evalInKrw  = evalSums?.inKrw  ?? 0
                 const evalOutKrw = evalSums?.outKrw ?? 0
                 return (
-                  <tr key={g.name} className="hover:bg-gray-50/50 dark:hover:bg-gray-700/20 text-xs">
+                  <tr key={g.name} className="hover:bg-gray-50/50 dark:hover:bg-slate-700/20 text-xs">
                     <td className="px-4 py-2 pl-7 text-gray-600 dark:text-slate-300 whitespace-nowrap">
                       <span className="inline-flex items-center gap-1.5">
                         {g.name}
@@ -571,7 +571,7 @@ export default function ReportSummaryTable({
             <>
               <SectionHeader label="차입금" sub="(총합계 미포함)" />
               {loanGroups.map(g => (
-                <tr key={g.label} className="hover:bg-gray-50/50 dark:hover:bg-gray-700/20 text-xs">
+                <tr key={g.label} className="hover:bg-gray-50/50 dark:hover:bg-slate-700/20 text-xs">
                   <td className="px-4 py-2 pl-7 text-gray-600 dark:text-slate-300">{g.label}</td>
                   <td className="px-4 py-2 text-right tabular-nums text-gray-600 dark:text-slate-300">{fmt(g.totalKrw)}</td>
                   <td className="px-4 py-2 text-right tabular-nums text-green-700 dark:text-green-400">

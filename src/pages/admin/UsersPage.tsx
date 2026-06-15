@@ -441,7 +441,7 @@ export default function UsersPage() {
               <tbody>
                 {rows.map(row => (
                   <tr key={row.id}
-                    className={`border-b border-gray-50 dark:border-slate-700 hover:bg-gray-50/50 dark:hover:bg-gray-700/30 transition-colors ${!row.is_active ? 'opacity-50' : ''}`}>
+                    className={`border-b border-gray-50 dark:border-slate-700 hover:bg-gray-50/50 dark:hover:bg-slate-700/30 transition-colors ${!row.is_active ? 'opacity-50' : ''}`}>
                     <td className="px-4 py-3 font-medium text-gray-800 dark:text-gray-100 whitespace-nowrap">
                       {row.name}
                       {row.id === user?.sb_id && <span className="ml-1.5 text-[10px] text-blue-500">(나)</span>}
@@ -491,7 +491,7 @@ export default function UsersPage() {
       </div>
 
       {/* 안내 */}
-      <div className="text-xs text-gray-400 dark:text-gray-600 bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4 space-y-1">
+      <div className="text-xs text-gray-400 dark:text-gray-600 bg-gray-50 dark:bg-slate-800/50 rounded-xl p-4 space-y-1">
         <p className="font-semibold text-gray-500 dark:text-gray-500">📌 신규 사용자 등록 절차</p>
         <p>① 위 폼에서 이메일 + 권한 설정 후 저장</p>
         <p>② 사용자에게 <strong>로그인 URL + 이메일</strong> 안내</p>

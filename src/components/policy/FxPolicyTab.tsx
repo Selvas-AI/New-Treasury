@@ -568,16 +568,16 @@ export default function FxPolicyTab({ company }: { company: Company }) {
 
         <div className="space-y-2">
           <div className="grid grid-cols-2 gap-3">
-            <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3">
+            <div className="bg-gray-50 dark:bg-slate-700/50 rounded-xl p-3">
               <p className="text-xs text-gray-400">사업계획 영업이익</p>
               <p className="text-sm font-medium text-gray-700 dark:text-gray-200">{fmtKRW(operatingProfit)}</p>
             </div>
-            <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3">
+            <div className="bg-gray-50 dark:bg-slate-700/50 rounded-xl p-3">
               <p className="text-xs text-gray-400">예상 이자수익</p>
               <p className="text-sm font-medium text-gray-700 dark:text-gray-200">{fmtKRW(interestIncome)}</p>
             </div>
           </div>
-          <div className="bg-gray-50 dark:bg-gray-700/30 rounded-xl p-4 space-y-2.5 text-sm">
+          <div className="bg-gray-50 dark:bg-slate-700/30 rounded-xl p-4 space-y-2.5 text-sm">
             <div className="flex justify-between items-start">
               <span className="text-gray-500 dark:text-slate-300 text-xs leading-relaxed">
                 허용가능 최대손익 = ({fmtKRW(operatingProfit)} + {fmtKRW(interestIncome)}) × {riskPortion}

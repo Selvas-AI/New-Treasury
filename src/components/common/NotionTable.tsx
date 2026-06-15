@@ -211,7 +211,7 @@ export function NotionTable<T extends object>({
               </tr>
             ) : (
               table.getRowModel().rows.map(row => (
-                <tr key={row.id} className="hover:bg-gray-50/60 dark:hover:bg-gray-700/40 transition-colors">
+                <tr key={row.id} className="hover:bg-gray-50/60 dark:hover:bg-slate-700/40 transition-colors">
                   {row.getVisibleCells().map(cell => (
                     <td
                       key={cell.id}

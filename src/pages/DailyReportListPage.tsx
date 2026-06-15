@@ -150,7 +150,7 @@ export default function DailyReportListPage() {
 
           <table className="w-full text-xs">
             <thead>
-              <tr className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-100 dark:border-slate-700">
+              <tr className="bg-gray-50 dark:bg-slate-700/50 border-b border-gray-100 dark:border-slate-700">
                 <th className="px-4 py-2.5 text-left font-medium text-gray-500 dark:text-slate-300 w-28">보고 대상일</th>
                 <th className="px-4 py-2.5 text-left font-medium text-gray-500 dark:text-slate-300 w-24">상태</th>
                 <th className="px-4 py-2.5 text-left font-medium text-gray-500 dark:text-slate-300">상신</th>

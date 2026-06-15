@@ -151,12 +151,12 @@ function LiquidityCard({
       </div>
 
       <div className="grid grid-cols-2 gap-2 text-xs">
-        <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-2">
+        <div className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-2">
           <p className="text-gray-400 dark:text-slate-300">현재 원화 현금성</p>
           <p className="font-semibold text-gray-900 dark:text-white mt-0.5">{fmtKRW(currentCash)}</p>
           <p className="text-gray-400 mt-0.5">보통예금+국책+MMDA</p>
         </div>
-        <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-2">
+        <div className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-2">
           <p className="text-gray-400 dark:text-slate-300">최소 유동성 한도</p>
           <p className={`font-semibold mt-0.5 ${minTarget === 0 ? 'text-gray-400' : 'text-gray-900 dark:text-white'}`}>
             {minTarget === 0 ? '미설정' : fmtKRW(minTarget)}
@@ -250,14 +250,14 @@ function FxStatusCard({
       </div>
 
       <div className="grid grid-cols-2 gap-2 text-xs">
-        <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-2">
+        <div className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-2">
           <p className="text-gray-400">현재 외화 비중</p>
           <p className="font-semibold text-gray-900 dark:text-white mt-0.5 text-base">
             {fxRatio.toFixed(1)}%
           </p>
           <p className="text-gray-400 mt-0.5">{fmtKRW(data.fxKrw)}</p>
         </div>
-        <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-2">
+        <div className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-2">
           <p className="text-gray-400">Target Band</p>
           <p className={`font-semibold mt-0.5 text-base ${targetMin === null ? 'text-gray-400' : 'text-gray-900 dark:text-white'}`}>
             {targetMin !== null && targetMax !== null
@@ -327,12 +327,12 @@ function LoanStatusCard({
       </div>
 
       <div className="grid grid-cols-2 gap-2 text-xs">
-        <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-2">
+        <div className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-2">
           <p className="text-gray-400">총 차입금</p>
           <p className="font-semibold text-gray-900 dark:text-white mt-0.5">{fmtKRW(data.totalLoan)}</p>
           <p className="text-gray-400 mt-0.5">{data.loans.length}건</p>
         </div>
-        <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-2">
+        <div className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-2">
           <p className="text-gray-400">차입 비율</p>
           <p className={`font-semibold mt-0.5 text-base ${status === 'na' ? 'text-gray-400' : 'text-gray-900 dark:text-white'}`}>
             {totalFund > 0 ? `${loanRatio.toFixed(1)}%` : '-'}
@@ -408,12 +408,12 @@ function InvestConcentrationCard({ data, onNavigate }: { data: PolicyRealData; o
       </div>
 
       <div className="grid grid-cols-2 gap-2 text-xs">
-        <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-2">
+        <div className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-2">
           <p className="text-gray-400">은행 운용자금</p>
           <p className="font-semibold text-gray-900 dark:text-white mt-0.5">{fmtKRW(total)}</p>
           <p className="text-gray-400 mt-0.5">{data.investByBank.length}개 은행</p>
         </div>
-        <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-2">
+        <div className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-2">
           <p className="text-gray-400">집중도 한도</p>
           <p className="font-semibold text-gray-900 dark:text-white mt-0.5">{LIMIT_PCT}% 이내</p>
           <p className="text-gray-400 mt-0.5">기관별 규정 §9</p>
@@ -477,7 +477,7 @@ function AllCompanySummary({
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
-            <tr className="bg-gray-50 dark:bg-gray-700/50 text-gray-500 dark:text-slate-300">
+            <tr className="bg-gray-50 dark:bg-slate-700/50 text-gray-500 dark:text-slate-300">
               <th className="px-4 py-2 text-left font-medium">항목</th>
               {companies.map(c => (
                 <th key={c} className="px-4 py-2 text-right font-medium">{c}</th>
@@ -1109,7 +1109,7 @@ export default function PolicyPage() {
                             )}
                           </div>
                           <p className="font-semibold text-gray-900 dark:text-white text-sm">{d.title}</p>
-                          <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                          <div className="p-3 bg-gray-50 dark:bg-slate-700/50 rounded-lg">
                             <p className="text-sm text-gray-700 dark:text-slate-100 leading-relaxed">{d.decision}</p>
                           </div>
                           {cardData && cardParams && (
@@ -1123,7 +1123,7 @@ export default function PolicyPage() {
                           )}
                         </div>
                         <button onClick={() => setOpenThreadId(isThreadOpen ? null : d.id)}
-                          className="w-full flex items-center justify-between px-4 py-2 bg-gray-50 dark:bg-gray-700/30
+                          className="w-full flex items-center justify-between px-4 py-2 bg-gray-50 dark:bg-slate-700/30
                                      border-t border-gray-100 dark:border-slate-700 text-xs text-gray-500 dark:text-slate-300">
                           <span>💬 후속조치 {thread.length > 0 ? `(${thread.length})` : ''}</span>
                           <span>{isThreadOpen ? '▲' : '▼'}</span>
@@ -1588,7 +1588,7 @@ export default function PolicyPage() {
                   )}
                 </div>
 
-                <div className="mt-2 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                <div className="mt-2 p-3 bg-gray-50 dark:bg-slate-700/50 rounded-lg">
                   <p className="text-sm text-gray-700 dark:text-slate-100 leading-relaxed">{d.decision}</p>
                 </div>
 
@@ -1610,9 +1610,9 @@ export default function PolicyPage() {
 
               {/* 후속조치 스레드 */}
               <button onClick={() => setOpenThreadId(isThreadOpen ? null : d.id)}
-                className="w-full flex items-center justify-between px-4 py-2 bg-gray-50 dark:bg-gray-700/30
+                className="w-full flex items-center justify-between px-4 py-2 bg-gray-50 dark:bg-slate-700/30
                            border-t border-gray-100 dark:border-slate-700 text-xs text-gray-500 dark:text-slate-300
-                           hover:bg-gray-100 dark:hover:bg-gray-700/60 transition-colors">
+                           hover:bg-gray-100 dark:hover:bg-slate-700/60 transition-colors">
                 <span>💬 후속조치 {thread.length > 0 ? `(${thread.length})` : ''}</span>
                 <span>{isThreadOpen ? '▲' : '▼'}</span>
               </button>

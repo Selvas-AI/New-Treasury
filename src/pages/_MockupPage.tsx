@@ -96,7 +96,7 @@ function PopupB() {
               </span>
             </button>
             {open === it.key && (
-              <div className="mx-3 mb-1 rounded-lg bg-gray-50 dark:bg-gray-700/50 border border-gray-100 dark:border-slate-600 px-3 py-2 space-y-1">
+              <div className="mx-3 mb-1 rounded-lg bg-gray-50 dark:bg-slate-700/50 border border-gray-100 dark:border-slate-600 px-3 py-2 space-y-1">
                 {it.rows.map(r => (
                   <div key={r.k} className="flex justify-between text-[11px]">
                     <span className="text-gray-500 dark:text-slate-300">{r.k}</span>

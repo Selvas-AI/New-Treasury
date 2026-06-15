@@ -160,7 +160,7 @@ function LoanDetail({ loans, kpi }: { loans: LoanRecord[]; kpi: KpiData }) {
       {loans.map(loan => {
         const dday = calcDday(loan.maturity)
         return (
-          <div key={loan.id} className="px-2 py-2.5 rounded-lg border border-transparent hover:bg-gray-50 dark:hover:bg-gray-700/50">
+          <div key={loan.id} className="px-2 py-2.5 rounded-lg border border-transparent hover:bg-gray-50 dark:hover:bg-slate-700/50">
             <div className="flex justify-between items-center">
               <span className="text-xs font-semibold text-gray-700 dark:text-gray-200">{loan.lender}</span>
               <span className="text-xs tabular-nums font-semibold text-gray-700 dark:text-gray-200">{fmtKRW(loan.amount)}</span>

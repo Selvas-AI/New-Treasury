@@ -275,7 +275,7 @@ export default function ItemsSection({
           const acctLabel  = item.account_type ? ACCOUNT_LABELS[item.account_type] : null
 
           return (
-            <div key={item.id} className={`px-4 py-2.5 flex items-center gap-2 hover:bg-gray-50/50 dark:hover:bg-gray-700/20 group text-xs ${isAuto ? 'bg-purple-50/30 dark:bg-purple-900/10' : ''}`}>
+            <div key={item.id} className={`px-4 py-2.5 flex items-center gap-2 hover:bg-gray-50/50 dark:hover:bg-slate-700/20 group text-xs ${isAuto ? 'bg-purple-50/30 dark:bg-purple-900/10' : ''}`}>
 
               {/* 🔄 자동생성 배지 */}
               {isAuto && (

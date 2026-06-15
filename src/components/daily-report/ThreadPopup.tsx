@@ -108,7 +108,7 @@ export default function ThreadPopup({
             <p className="text-xs text-gray-300 dark:text-gray-600 text-center py-4">사유 기록 없음</p>
           )}
           {threads.map(t => (
-            <div key={t.id} className="bg-gray-50 dark:bg-gray-700/50 rounded-lg px-3 py-2">
+            <div key={t.id} className="bg-gray-50 dark:bg-slate-700/50 rounded-lg px-3 py-2">
               <div className="flex items-center gap-2 mb-1">
                 <span className="text-[11px] font-semibold text-gray-600 dark:text-slate-100">
                   {t.author_label ?? t.author_code}
