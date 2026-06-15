@@ -216,8 +216,8 @@ export default function NewEquityForm({ company, fixedMarket, onSave, isEditable
 
               {/* 후보 드롭다운 */}
               {candidates.length > 0 && (
-                <div className="absolute top-full left-0 right-0 z-20 mt-0.5 bg-white border border-blue-200 rounded-lg shadow-lg overflow-hidden">
-                  <p className="text-[10px] text-gray-400 px-2 pt-1.5 pb-0.5">검색 결과 — 선택하세요</p>
+                <div className="absolute top-full left-0 right-0 z-20 mt-0.5 bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-700 rounded-lg shadow-lg overflow-hidden">
+                  <p className="text-[10px] text-gray-400 dark:text-gray-500 px-2 pt-1.5 pb-0.5">검색 결과 — 선택하세요</p>
                   {candidates.map(c => (
                     <button
                       key={c.ticker}
@@ -314,7 +314,7 @@ export default function NewEquityForm({ company, fixedMarket, onSave, isEditable
                   <button
                     type="button" onClick={handleTickerSearch} disabled={fetching}
                     title="주가 재조회"
-                    className="shrink-0 text-xs bg-white text-blue-600 border border-blue-200 px-2 rounded hover:bg-blue-50 disabled:opacity-50">
+                    className="shrink-0 text-xs bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-700 px-2 rounded hover:bg-blue-50 dark:hover:bg-blue-900/30 disabled:opacity-50">
                     {fetching ? '…' : '↺'}
                   </button>
                 )}

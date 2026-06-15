@@ -214,17 +214,14 @@ export default function TopBar({ onMenuClick }: Props) {
           </>
         )}
 
-        {/* 도움말 — 툴팁을 아래쪽으로 표시 (overflow-hidden 헤더 밖으로 잘리지 않게) */}
+        {/* 도움말 */}
         <button
           onClick={() => setHelpOpen(v => !v)}
           aria-label="도움말"
           title="도움말"
-          className="relative group flex items-center justify-center w-8 h-8 rounded-lg font-bold text-blue-500 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors text-sm"
+          className="flex items-center justify-center w-8 h-8 rounded-lg font-bold text-blue-500 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors text-sm"
         >
           ?
-          <span className="pointer-events-none absolute top-full mt-1.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-gray-800 text-white text-[10px] px-2 py-0.5 opacity-0 group-hover:opacity-100 transition-opacity z-50">
-            도움말
-          </span>
         </button>
 
         <Divider />
