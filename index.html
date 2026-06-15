@@ -4,7 +4,18 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>new-treasury</title>
+    <title>Selvas Treasury</title>
+    <script>
+      // GitHub Pages SPA: 404.html에서 전달된 경로 복원
+      (function() {
+        var p = new URLSearchParams(window.location.search).get('p');
+        if (p) {
+          var base = '/New-Treasury';
+          var target = base + decodeURIComponent(p);
+          window.history.replaceState(null, '', target);
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

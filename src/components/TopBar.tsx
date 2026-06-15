@@ -1,8 +1,10 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useStockTicker } from '../hooks/useStockTicker'
 import { useDarkMode } from '../hooks/useDarkMode'
 import { useCompanies } from '../hooks/useCompanies'
+import HelpPanel from './HelpPanel'
 import type { Company } from '../types'
 
 /** GAS 자동 갱신 스케줄: 09:15 / 12:15 / 15:45 */
@@ -56,6 +58,7 @@ export default function TopBar({ onMenuClick }: Props) {
   const { dark, toggle: toggleDark } = useDarkMode()
   const { names: companyNames } = useCompanies()
   const navigate = useNavigate()
+  const [helpOpen, setHelpOpen] = useState(false)
 
   const activeTickers = tickers.filter(t => t.price > 0)
   const hasPrices     = activeTickers.length > 0
@@ -211,6 +214,21 @@ export default function TopBar({ onMenuClick }: Props) {
           </>
         )}
 
+        {/* 도움말 — 툴팁을 아래쪽으로 표시 (overflow-hidden 헤더 밖으로 잘리지 않게) */}
+        <button
+          onClick={() => setHelpOpen(v => !v)}
+          aria-label="도움말"
+          title="도움말"
+          className="relative group flex items-center justify-center w-8 h-8 rounded-lg font-bold text-blue-500 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors text-sm"
+        >
+          ?
+          <span className="pointer-events-none absolute top-full mt-1.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-gray-800 text-white text-[10px] px-2 py-0.5 opacity-0 group-hover:opacity-100 transition-opacity z-50">
+            도움말
+          </span>
+        </button>
+
+        <Divider />
+
         {/* 로그아웃 */}
         {/* lg 이상: 텍스트 */}
         <button
@@ -224,6 +242,8 @@ export default function TopBar({ onMenuClick }: Props) {
         <IconBtn icon="⎋" label="로그아웃" onClick={logout} className="lg:hidden" />
 
       </div>
+
+      <HelpPanel open={helpOpen} onClose={() => setHelpOpen(false)} />
     </header>
   )
 }
