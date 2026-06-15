@@ -245,9 +245,9 @@ export default function EquityCard({
           </div>
         </div>
 
-        {/* 복수 선택 힌트 */}
+        {/* 복수 선택 힌트 — PC만 표시 */}
         {isAll && (equities.length + bonds.length) > 1 && (
-          <p className="text-[10px] text-gray-300 dark:text-gray-600 mb-1">
+          <p className="hidden md:block text-[10px] text-gray-300 dark:text-gray-600 mb-1">
             Ctrl+클릭으로 복수 선택
           </p>
         )}

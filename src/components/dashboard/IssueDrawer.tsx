@@ -41,7 +41,7 @@ export default function IssueDrawer({ open, issues, activeKey, onStatusChange, o
       <div className="fixed inset-0 z-40 bg-black/10 dark:bg-black/30" onClick={onClose} />
 
       {/* 드로어 패널 */}
-      <div style={{ animation: 'fadeInScale 0.18s ease-out both' }} className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-80 max-h-[70vh] bg-white dark:bg-slate-800 rounded-xl shadow-xl flex flex-col overflow-hidden border border-gray-200 dark:border-slate-700">
+      <div style={{ animation: 'fadeInScale 0.18s ease-out both' }} className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-[calc(100vw-2rem)] max-w-sm max-h-[80vh] bg-white dark:bg-slate-800 rounded-xl shadow-xl flex flex-col overflow-hidden border border-gray-200 dark:border-slate-700">
 
         {/* 헤더 */}
         <div className="shrink-0 flex items-center justify-between px-4 pt-4 pb-3 border-b border-gray-100 dark:border-slate-700">

@@ -100,7 +100,7 @@ export default function CashflowChart({ dailyRecords, investments, loans }: Prop
     : { backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, fontSize: 11 }
 
   return (
-    <div className="bg-white dark:bg-slate-800 rounded-xl shadow p-4 flex flex-col h-full">
+    <div className="bg-white dark:bg-slate-800 rounded-xl shadow p-4 flex flex-col h-72 md:h-full">
 
       {/* 헤더 */}
       <div className="shrink-0 flex items-center justify-between mb-3">
@@ -136,7 +136,7 @@ export default function CashflowChart({ dailyRecords, investments, loans }: Prop
             key={s.key}
             onClick={e => toggleSeries(s.key, e.ctrlKey || e.metaKey)}
             title="클릭: 단독 보기 · Ctrl(⌘)+클릭: 다중 선택"
-            className={`flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md transition-all ${
+            className={`flex items-center gap-1 text-[10px] px-2 py-1 rounded-md transition-all ${
               isVisible(s.key)
                 ? 'text-gray-600 dark:text-slate-100 bg-gray-100 dark:bg-slate-700'
                 : 'text-gray-300 dark:text-gray-600 opacity-50'
@@ -145,10 +145,11 @@ export default function CashflowChart({ dailyRecords, investments, loans }: Prop
             {s.swatch}{s.label}
           </button>
         ))}
+        <span className="hidden md:inline text-[9px] text-gray-400 dark:text-gray-600 ml-1">Ctrl+클릭 다중선택</span>
         {selected.size > 0 && (
           <button
             onClick={() => setSelected(new Set())}
-            className="text-[10px] text-blue-500 hover:text-blue-700 px-1"
+            className="text-[10px] text-blue-500 hover:text-blue-700 px-2 py-1"
           >전체</button>
         )}
       </div>
