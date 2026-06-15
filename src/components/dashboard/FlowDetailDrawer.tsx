@@ -1,4 +1,5 @@
-﻿import { useNavigate } from 'react-router-dom'
+﻿import { useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { fmtKRW, calcDday, calcBondValue } from '../../lib/format'
 import { useFx } from '../../hooks/useFx'
 import type { FlowItemKey } from './WaterfallCard'
@@ -39,6 +40,9 @@ const TITLES: Record<FlowItemKey, string> = {
 export default function FlowDetailDrawer({ itemKey, kpi, latestDaily, latestInvests, loans, equities, company, onClose }: Props) {
   const navigate = useNavigate()
   const fx = useFx()
+
+  // 팝업 열릴 때 환율 즉시 로드 (자체 useFx 인스턴스라 별도 fetch 필요)
+  useEffect(() => { void fx.fetchRates() }, [fx.fetchRates])
 
   // 외화 → 원화 환산 (useDashboard.kpi 계산과 동일 로직)
   const toKRWAmt = (amount: number, currency: string): number => {

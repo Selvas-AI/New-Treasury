@@ -121,9 +121,10 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
     // ── 2. Supabase 세션 localStorage에서 즉시 읽기 (네트워크 없음) ─
     if (!legacyRef.current) {
       const localSession = readLocalSession()
+      const cached = loadProfileCache()
+
       if (localSession) {
         // 캐시된 프로필이 있으면 즉시 복원 → 새로고침 시 로그아웃 방지
-        const cached = loadProfileCache()
         if (cached && cached.sb_id === localSession.sub) {
           setUser(cached)
           setLoading(false)
@@ -149,9 +150,42 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
             setLoading(false)
           })
       } else {
-        // 저장된 세션 없음 → 즉시 LoginPage 표시
-        clearProfileCache()
-        setLoading(false)
+        // access_token 만료 or 없음 → getSession()으로 자동 갱신 시도
+        // (refresh_token이 유효하면 Supabase SDK가 새 access_token 발급)
+        if (cached) {
+          // 캐시 프로필 즉시 복원하여 로그인 화면 flash 방지
+          setUser(cached)
+          setLoading(false)
+        }
+        supabase.auth.getSession()
+          .then(async ({ data }) => {
+            if (!mounted) return
+            const session = data.session
+            if (session?.user) {
+              // 토큰 갱신 성공 → 프로필 재로드
+              try {
+                const profile = await withTimeout(
+                  loadProfile(session.user.email!, session.user.id), 6000, '세션 갱신'
+                )
+                if (!mounted) return
+                if (profile) { saveProfileCache(profile); setUser(profile) }
+                else if (!cached) setUser(null)
+              } catch {
+                if (!mounted) return
+                if (!cached) setUser(null)
+              }
+            } else {
+              // refresh_token도 만료 → 진짜 로그아웃
+              if (mounted) { clearProfileCache(); setUser(null) }
+            }
+            if (mounted) setLoading(false)
+          })
+          .catch(() => {
+            if (!mounted) return
+            // 네트워크 오류 → 캐시 있으면 유지
+            if (!cached) setUser(null)
+            setLoading(false)
+          })
       }
     }
 

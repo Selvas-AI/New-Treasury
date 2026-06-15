@@ -6,7 +6,7 @@ export const MENU_DEFAULTS: Record<string, string[]> = {
   master:  ['*'],
   admin:   ['dashboard','daily','input','invest','loans','equity','history','fx','policy'],
   editor:  ['dashboard','daily','input','invest','loans','equity','history','fx'],
-  viewer:  ['dashboard','invest','loans','equity','history','fx'],
+  viewer:  ['dashboard','policy','invest','loans','equity','history','fx'],
 }
 
 export interface AuthContextValue {
