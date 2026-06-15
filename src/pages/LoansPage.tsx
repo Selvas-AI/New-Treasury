@@ -33,7 +33,7 @@ function DdayBadge({ dday }: { dday: number }) {
 
 export default function LoansPage() {
   const { company: paramCompany, id: paramId } = useParams<{ company?: string; id?: string }>()
-  const { user, currentCompany, setCurrentCompany } = useAuth()
+  const { user, currentCompany, setCurrentCompany, canEdit } = useAuth()
   const loans = useLoans()
 
   const [tab, setTab]         = useState<'active' | 'inactive'>('active')
@@ -128,7 +128,7 @@ export default function LoansPage() {
     await loans.remove(id)
   }
 
-  const isEditable = user?.role !== 'ceo'
+  const isEditable = canEdit()
 
   return (
     <div className="space-y-5 max-w-5xl mx-auto">

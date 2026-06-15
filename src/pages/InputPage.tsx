@@ -34,7 +34,7 @@ type FormState = typeof EMPTY_FORM
 
 export default function InputPage() {
   const { company: paramCompany, date: paramDate } = useParams<{ company?: string; date?: string }>()
-  const { user, currentCompany, setCurrentCompany } = useAuth()
+  const { user, currentCompany, setCurrentCompany, canEdit } = useAuth()
   const { data, loading, upsert, remove } = useDaily()
   const fx = useFx()
 
@@ -162,7 +162,7 @@ export default function InputPage() {
   }
 
   const today = new Date().toISOString().slice(0, 10)
-  const isEditable = user?.role !== 'ceo'
+  const isEditable = canEdit()
 
   return (
     <div className="space-y-6 max-w-3xl mx-auto">
