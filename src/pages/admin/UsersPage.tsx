@@ -102,8 +102,6 @@ function genCode(name: string): string {
 
 export default function UsersPage() {
   const { user } = useAuth()
-  if (user?.role !== 'master') return <Navigate to="/dashboard" replace />
-
   const { names: companyNames, shortName } = useCompanies()
 
   const [rows,      setRows]      = useState<UserRow[]>([])
@@ -117,6 +115,9 @@ export default function UsersPage() {
   const [success,   setSuccess]   = useState(false)
 
   useEffect(() => { void load() }, [])
+
+  // 훅 호출 완료 후 권한 체크 (Rules of Hooks: 조건부 return은 훅 이후에)
+  if (user?.role !== 'master') return <Navigate to="/dashboard" replace />
 
   async function load() {
     setLoading(true)

@@ -58,7 +58,8 @@ export function useTableSettings(tableId: string): UseTableSettingsReturn {
 
     void fetch()
     return () => { cancelled = true }
-  }, [tableId, user?.sb_id])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tableId, user?.sb_id])  // user 객체 전체 대신 sb_id만 dep으로 사용 (불필요한 재실행 방지)
 
   // ── upsert ───────────────────────────────────────────────────────────────
   const upsert = useCallback(async (next: ViewState) => {

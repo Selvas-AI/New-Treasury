@@ -352,6 +352,7 @@ export default function DailyReportPage() {
       byEquityName,
       byBondLabel,
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itemHook.items, summary.toKRW])
 
   // 활성 계좌 목록 (daily 데이터에서 추출)
@@ -382,8 +383,10 @@ export default function DailyReportPage() {
   // (Maximum update depth)를 일으키지 않도록, 배열은 ref로 최신값만 보관하고
   // effect deps는 안정적인 primitive(report id·법인·날짜·loading)로만 구성한다.
   const equityGroupsLatest = useRef(summary.equityGroups)
-  equityGroupsLatest.current = summary.equityGroups
+  // eslint-disable-next-line react-hooks/refs
+  equityGroupsLatest.current = summary.equityGroups   // latest-value 패턴: 렌더마다 갱신, effect 재실행 없음
   const investGroupsLatest = useRef(summary.investGroups)
+  // eslint-disable-next-line react-hooks/refs
   investGroupsLatest.current = summary.investGroups
 
   useEffect(() => {
@@ -630,6 +633,7 @@ export default function DailyReportPage() {
     const hasData = inTotal > 0 || outTotal > 0
     const isValid = hasData && Math.abs(diff) < 1
     return { inTotal, outTotal, prevKRW, currKRW, delta, diff, hasData, isValid }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itemHook.items, summary.prevDaily, summary.currDaily, summary.toKRW])
 
   // ── 액션 핸들러 ──────────────────────────────────────────────

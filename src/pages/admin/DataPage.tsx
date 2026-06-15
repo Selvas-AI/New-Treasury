@@ -21,9 +21,6 @@ const TABLE_DEFS = [
 
 export default function DataPage() {
   const { user } = useAuth()
-  if (user?.role !== 'master') return <Navigate to="/dashboard" replace />
-
-  const COMPANIES = getCompanyNames()
 
   const [stats,   setStats]   = useState<TableStat[]>([])
   const [loading, setLoading] = useState(true)
@@ -32,6 +29,11 @@ export default function DataPage() {
   const [cleanResult, setCleanResult] = useState<string | null>(null)
 
   useEffect(() => { void loadStats() }, [])
+
+  // 훅 호출 완료 후 권한 체크 (Rules of Hooks: 조건부 return은 훅 이후에)
+  if (user?.role !== 'master') return <Navigate to="/dashboard" replace />
+
+  const COMPANIES = getCompanyNames()
 
   async function loadStats() {
     setLoading(true)

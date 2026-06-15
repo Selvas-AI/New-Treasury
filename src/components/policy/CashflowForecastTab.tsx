@@ -36,7 +36,8 @@ export default function CashflowForecastTab({ company, openingBalance, isMaster,
     const m = new Map<string, typeof plan.data[0]>()
     for (const r of plan.data) m.set(r.week_start, r)
     return m
-  }, [plan.data])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plan])
 
   // 주별 잔고 누적 계산
   const rows = useMemo(() => {
