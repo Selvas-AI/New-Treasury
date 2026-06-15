@@ -71,7 +71,7 @@ export default function FlowDetailDrawer({ itemKey, kpi, latestDaily, latestInve
           {itemKey === 'fx'         && <FxDetail daily={latestDaily} />}
           {itemKey === 'net'        && <NetDetail kpi={kpi} />}
           {itemKey === 'unavailable' && <UnavailableDetail kpi={kpi} latestInvests={latestInvests} equities={equities} />}
-          {itemKey === 'available'  && <AvailableDetail kpi={kpi} daily={latestDaily} latestInvests={latestInvests} />}
+          {itemKey === 'available'  && <AvailableDetail kpi={kpi} daily={latestDaily} latestInvests={latestInvests} equities={equities} />}
           {itemKey === 'asset'      && <AssetDetail kpi={kpi} fxKrw={latestDaily?.fx_krw ?? 0} />}
           {itemKey === 'equity_avail' && <EquityAvailDetail equities={equities.filter(e => e.available === '가용')} total={kpi.equityAvail} />}
         </div>
@@ -250,16 +250,19 @@ function NetDetail({ kpi }: { kpi: KpiData }) {
 }
 
 // ── 가용자금 합계 상세 ───────────────────────────────────────
-function AvailableDetail({ kpi, daily, latestInvests }: {
+function AvailableDetail({ kpi, daily, latestInvests, equities }: {
   kpi: KpiData
   daily: DailyRecord | null
   latestInvests: InvestmentRecord[]
+  equities: EquityItem[]
 }) {
-  const availInvest = latestInvests.filter(i => i.product !== '국채' && i.available !== '불가용')
-  const availBond   = latestInvests.filter(i => i.product === '국채'  && i.available !== '불가용')
+  const availInvest  = latestInvests.filter(i => i.product !== '국채' && i.available !== '불가용')
+  const availBond    = latestInvests.filter(i => i.product === '국채'  && i.available !== '불가용')
+  const availEquity  = equities.filter(e => e.available === '가용')
 
   return (
     <div className="space-y-3">
+      {/* 운전자금 */}
       <div>
         <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">운전자금</p>
         <div className="divide-y divide-gray-50 dark:divide-slate-700">
@@ -276,6 +279,7 @@ function AvailableDetail({ kpi, daily, latestInvests }: {
           ))}
         </div>
       </div>
+      {/* 가용 운용자금 */}
       {(availInvest.length > 0 || availBond.length > 0) && (
         <div>
           <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">가용 운용자금</p>
@@ -284,6 +288,20 @@ function AvailableDetail({ kpi, daily, latestInvests }: {
               <div key={i.id} className="flex justify-between items-center py-1.5">
                 <span className="text-[11px] text-gray-400 truncate mr-2">{i.bank}</span>
                 <span className="text-xs tabular-nums font-semibold text-gray-700 dark:text-gray-200 shrink-0">{fmtKRW(i.amount)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {/* 가용 지분/장기투자 */}
+      {availEquity.length > 0 && (
+        <div>
+          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">가용 지분/장기투자</p>
+          <div className="divide-y divide-gray-50 dark:divide-slate-700">
+            {availEquity.map(e => (
+              <div key={e.name} className="flex justify-between items-center py-1.5">
+                <span className="text-[11px] text-gray-400 truncate mr-2">{e.name}</span>
+                <span className="text-xs tabular-nums font-semibold text-gray-700 dark:text-gray-200 shrink-0">{fmtKRW(e.total_value)}</span>
               </div>
             ))}
           </div>

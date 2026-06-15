@@ -121,12 +121,12 @@ export function useDashboard() {
       .filter(e => e.available === '불가용')
       .reduce((s, e) => s + (e.total_value || 0), 0)
 
-    // 지분 가용 (상장·가용) — 별도 표시용, 가용자금/순현금엔 미포함
+    // 지분 가용 (상장·가용) — 가용자금 합계에 포함
     const equityAvail = equities.latest
       .filter(e => e.available === '가용')
       .reduce((s, e) => s + (e.total_value || 0), 0)
 
-    const availableCash   = operatingCash + investAvail + bondAvail
+    const availableCash   = operatingCash + investAvail + bondAvail + equityAvail
     const netCashPosition = availableCash - totalLoan
     const unavailableAssets = investUnavail + bondUnavail + equityUnavail
 

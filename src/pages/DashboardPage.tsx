@@ -119,7 +119,7 @@ export default function DashboardPage() {
           label="가용자금 합계"
           value={db.kpi.availableCash}
           color="blue"
-          sub={`운전 ${fmtKRW(db.kpi.operatingCash)} + 가용운용 ${fmtKRW(db.kpi.investCash)}`}
+          sub={`운전 ${fmtKRW(db.kpi.operatingCash)} + 가용운용 ${fmtKRW(db.kpi.investCash + db.kpi.bondCash)}${db.kpi.equityAvail > 0 ? ` + 가용지분 ${fmtKRW(db.kpi.equityAvail)}` : ''}`}
           linkedChart="상세 보기"
           onClick={() => setFlowDetail(prev => prev === 'available' ? null : 'available')}
         />
