@@ -50,7 +50,8 @@ export default function CashflowForecastTab({ company, openingBalance, isMaster,
       balance += net
       return { week, idx, inflow, outflow, net, opening, closing: balance, memo: rec?.memo ?? '', hasData: !!rec }
     })
-  }, [weeks, planMap, openingBalance])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weeks, planMap, openingBalance, plan.loading])
 
   const totalInflow  = rows.reduce((s, r) => s + r.inflow, 0)
   const totalOutflow = rows.reduce((s, r) => s + r.outflow, 0)

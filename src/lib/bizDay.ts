@@ -93,7 +93,7 @@ const HARDCODED: readonly string[] = [
 ]
 
 // ── 런타임 공휴일 Set (하드코딩 + localStorage 캐시 병합) ──────────
-let HOLIDAYS = new Set<string>(HARDCODED)
+const HOLIDAYS = new Set<string>(HARDCODED)
 
 const LS_PREFIX = 'treasury_holidays_'
 

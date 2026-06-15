@@ -54,7 +54,8 @@ export function useDashboard() {
   const fx       = useFx()
 
   // 외화 운용자금 환산에 필요한 환율 (Sidebar와 별도 인스턴스이므로 자체 fetch)
-  useEffect(() => { void fx.fetchRates() }, [fx.fetchRates])
+  const fetchRates = fx.fetchRates
+  useEffect(() => { void fetchRates() }, [fetchRates])
 
   const loading = daily.loading || invest.loading || loans.loading || equities.loading
 
@@ -139,6 +140,7 @@ export function useDashboard() {
       unavailableAssets,
       equityAvail,
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [latestDaily, latestInvests, loans.data, equities.latest, fx.rates])
 
   const waterfall = useMemo<WaterfallItem[]>(() => [

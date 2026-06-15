@@ -15,17 +15,7 @@ import LoanRepaymentPopup from './LoanRepaymentPopup'
 import type { ReportItem, ThreadEntry } from '../../hooks/useDailyReportItems'
 import type { Company, FxCode } from '../../types'
 
-// ── 계좌구분 레이블 (ReportSummaryTable 등 외부에서도 임포트 가능) ─
-export const ACCOUNT_LABELS: Record<string, string> = {
-  krw_demand: '보통예금/CMA',
-  krw_govt:   '국책자금',
-  krw_mmda:   '증권예수금/MMDA',
-  fx_usd:     'USD',
-  fx_eur:     'EUR',
-  fx_jpy:     'JPY',
-  fx_gbp:     'GBP',
-  fx_cny:     'CNY',
-}
+import { ACCOUNT_LABELS } from '../../lib/accountLabels'
 
 // ── 카테고리 정의 ───────────────────────────────────────────────
 interface CategoryDef {
@@ -144,7 +134,6 @@ export default function ItemsSection({
   // ── 연동 팝업 저장 콜백 ──────────────────────────────────────
   async function handleLinkedSaved(
     amount: number, currency: string, memo: string,
-    _linkedType: string, _linkedId: string
   ) {
     if (!reportId) {
       const newId = await onEnsureReport()
@@ -523,28 +512,28 @@ export default function ItemsSection({
       {linkedPopup === 'invest_return' && (
         <InvestReturnPopup
           company={company} reportDate={reportDate}
-          onSaved={(amt, cur, memo, lt, li) => handleLinkedSaved(amt, cur, memo, lt, li)}
+          onSaved={(amt, cur, memo) => handleLinkedSaved(amt, cur, memo)}
           onClose={() => setLinkedPopup(null)}
         />
       )}
       {linkedPopup === 'loan_drawdown' && (
         <LoanDrawdownPopup
           company={company}
-          onSaved={(amt, cur, memo, lt, li) => handleLinkedSaved(amt, cur, memo, lt, li)}
+          onSaved={(amt, cur, memo) => handleLinkedSaved(amt, cur, memo)}
           onClose={() => setLinkedPopup(null)}
         />
       )}
       {linkedPopup === 'invest_execute' && (
         <InvestExecutePopup
           company={company}
-          onSaved={(amt, cur, memo, lt, li) => handleLinkedSaved(amt, cur, memo, lt, li)}
+          onSaved={(amt, cur, memo) => handleLinkedSaved(amt, cur, memo)}
           onClose={() => setLinkedPopup(null)}
         />
       )}
       {linkedPopup === 'loan_repayment' && (
         <LoanRepaymentPopup
           company={company}
-          onSaved={(amt, cur, memo, lt, li) => handleLinkedSaved(amt, cur, memo, lt, li)}
+          onSaved={(amt, cur, memo) => handleLinkedSaved(amt, cur, memo)}
           onClose={() => setLinkedPopup(null)}
         />
       )}

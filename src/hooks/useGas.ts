@@ -95,7 +95,7 @@ async function gasGetOnce<T>(params: Record<string, string>): Promise<T> {
   } catch (e) {
     clearTimeout(timer)
     if (e instanceof DOMException && e.name === 'AbortError') {
-      throw new Error(`GAS 응답 시간 초과 (${TIMEOUT_MS / 1000}s)`)
+      throw new Error(`GAS 응답 시간 초과 (${TIMEOUT_MS / 1000}s)`, { cause: e })
     }
     throw e
   }

@@ -2,23 +2,10 @@ import { useState, useMemo } from 'react'
 import { usePolicyBankLimits } from '../../hooks/usePolicyBankLimits'
 import { getLatestInvestments } from '../../hooks/useInvestments'
 import { fmtKRW } from '../../lib/format'
+import { BANK_TYPES, normBank } from '../../lib/bankUtils'
 import type { Company, InvestmentRecord } from '../../types'
 
-export const BANK_TYPES = ['은행', '증권사', '보험', '기타'] as const
 const DEFAULT_LIMIT_PCT = 30
-
-/**
- * 금융기관명 정규화 — 동일 은행의 계좌별 등록명을 하나로 합산
- * 예) "국민은행(231)-2" → "국민은행"
- *     "기업은행(007)"   → "기업은행"
- *     "산업은행"        → "산업은행"
- * 규칙: "은행" 문자가 있으면 "은행"까지만 추출, 없으면 괄호 suffix 제거
- */
-export function normBank(bank: string): string {
-  const idx = bank.indexOf('은행')
-  if (idx >= 0) return bank.slice(0, idx + 2).trim()
-  return bank.replace(/\s*\([^)]*\)\s*$/, '').trim()
-}
 
 interface Props {
   company:     Company

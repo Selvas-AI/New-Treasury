@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Company, DailyRecord, InvestmentRecord, LoanRecord } from '../types'
 import { calcBondValue } from '../lib/format'
-import { normBank } from '../components/policy/BankLimitsTab'
+import { normBank } from '../lib/bankUtils'
 
 // ── DB row → InvestmentRecord (간소화 버전) ───────────────────────────────
 type DbRow = Record<string, unknown>

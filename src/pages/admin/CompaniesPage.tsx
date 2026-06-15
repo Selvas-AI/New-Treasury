@@ -18,15 +18,14 @@ const inputCls =
 
 export default function CompaniesPage() {
   const { user } = useAuth()
-  if (user?.role !== 'master') return <Navigate to="/dashboard" replace />
-
   const { companies } = useCompanies()
-
   const [form, setForm] = useState({ name: '', short_name: '', sort_order: '' })
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [success, setSuccess] = useState(false)
   const [busyId, setBusyId] = useState<number | null>(null)
+
+  if (user?.role !== 'master') return <Navigate to="/dashboard" replace />
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault()
