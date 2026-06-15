@@ -3,33 +3,47 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
 
-// 모든 Supabase 네트워크 요청에 12초 타임아웃 적용
-// → 토큰 갱신·로그인 등이 Chrome에서 hang 하는 문제 방지
+// Supabase 네트워크 요청 타임아웃 5초
+// → 네트워크 hang 시 빠른 감지 + withTimeout(6s)과 조합해 완전 보호
 function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const controller = new AbortController()
-  const tid = window.setTimeout(() => controller.abort(), 12_000)
+  const tid = window.setTimeout(() => controller.abort(), 5_000)
   return fetch(input as RequestInfo, { ...init, signal: controller.signal })
     .finally(() => window.clearTimeout(tid))
 }
 
-// ⚠️ [CRITICAL] Web Locks 데드락 우회 — signInWithPassword '처리 중...' 무한 행 원인
-// supabase-js 는 모든 auth 작업(signIn/getSession/토큰갱신)을 navigator.locks 의
-// exclusive 락 `lock:sb-..-auth-token` 으로 감싼다. 락 보유자가 한 번 멈추면
-// (탭 전환·새로고침 중 갱신 중단 등) 락이 영구 점유되어 이후 모든 로그인이 무한 대기.
-// 본 앱은 단일 탭 사용 → 크로스탭 락 조정 불필요 → no-op 락으로 교체해 데드락 원천 차단.
+// ⚠️ [CRITICAL] Web Locks 데드락 우회
 async function noopLock<R>(_name: string, _acquireTimeout: number, fn: () => Promise<R>): Promise<R> {
   return fn()
 }
 
-export const supabase = createClient(supabaseUrl, supabaseKey, {
-  auth: {
-    lock: noopLock,
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-  },
-  global: { fetch: fetchWithTimeout },
-})
+// ── Supabase 클라이언트 팩토리 ─────────────────────────────────
+// export let 로 선언 → ES 모듈 live binding → resetSupabaseClient() 후
+// 모든 import 위치에서 자동으로 새 클라이언트 참조
+function makeClient() {
+  return createClient(supabaseUrl, supabaseKey, {
+    auth: {
+      lock: noopLock,
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+    },
+    global: { fetch: fetchWithTimeout },
+  })
+}
+
+// eslint-disable-next-line prefer-const
+export let supabase = makeClient()
+
+/**
+ * supabase-js Wedge 상태 복구용 클라이언트 재생성.
+ * 내부 상태머신이 꼬인 경우(네트워크 에러 후 Promise 영구 미해결) 새 인스턴스로 교체.
+ * - ES 모듈 live binding → 재생성 즉시 모든 훅이 새 클라이언트 사용
+ * - 기존 onAuthStateChange 구독은 무효화되나, Auth는 localStorage 세션으로 복원됨
+ */
+export function resetSupabaseClient(): void {
+  supabase = makeClient()
+}
 
 // ─────────────────────────────────────────────────────────────
 // REST 쓰기 헬퍼 (raw fetch 기반)
@@ -167,7 +181,7 @@ export async function restUpdateIn<T = unknown>(
  * fetchWithTimeout(12s)은 fetch가 실제로 호출돼야 동작하지만, wedge는 fetch 호출 이전 단계라
  * 보호가 안 된다 → 이 래퍼로 호출부에서 강제 타임아웃을 보장해 loading이 영구히 멈추지 않게 한다.
  */
-export function withTimeout<T>(p: PromiseLike<T>, ms = 13_000, label = '데이터 조회'): Promise<T> {
+export function withTimeout<T>(p: PromiseLike<T>, ms = 6_000, label = '데이터 조회'): Promise<T> {
   return Promise.race([
     Promise.resolve(p),
     new Promise<T>((_, reject) =>

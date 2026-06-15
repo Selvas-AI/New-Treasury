@@ -11,7 +11,7 @@
  * 마이그레이션 완료 후: loginWithCode 제거, LoginPage 레거시 탭 제거
  */
 import { useState, useEffect, useMemo, useCallback, useRef, type ReactNode } from 'react'
-import { supabase, restUpdate } from '../lib/supabase'
+import { supabase, restUpdate, withTimeout, resetSupabaseClient } from '../lib/supabase'
 import { AuthContext, MENU_DEFAULTS } from './auth'
 import type { TreasuryUser, Company, UserRole } from '../types'
 
@@ -107,17 +107,18 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
       const localSession = readLocalSession()
       if (localSession) {
         // 저장된 세션 있음 → 프로필 로드 완료까지 loading 유지 (로그인창 깜빡임 방지)
-        loadProfile(localSession.email, localSession.sub)
+        // withTimeout(6s): wedge 상태에서도 최대 6초 후 로그인 화면으로 이동
+        withTimeout(loadProfile(localSession.email, localSession.sub), 6000, '세션 복원')
           .then(profile => { if (mounted) { setUser(profile); setLoading(false) } })
-          .catch(() => { if (mounted) setLoading(false) })  // 프로필 실패 → LoginPage
+          .catch(() => { if (mounted) setLoading(false) })  // 프로필 실패/타임아웃 → LoginPage
       } else {
         // 저장된 세션 없음 → 즉시 LoginPage 표시
         setLoading(false)
       }
     }
 
-    // ── 안전장치: 5초 내 loading 미해제 시 강제 해제 (네트워크 행 대비) ─
-    const hardTimeout = window.setTimeout(() => { if (mounted) setLoading(false) }, 5000)
+    // ── 안전장치: 8초 내 loading 미해제 시 강제 해제 ─
+    const hardTimeout = window.setTimeout(() => { if (mounted) setLoading(false) }, 8000)
 
     // ── 3. onAuthStateChange — 로그인/로그아웃/토큰갱신 후속처리 ──
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
@@ -127,7 +128,9 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
 
       if (session?.user && !legacyRef.current) {
         try {
-          const profile = await loadProfile(session.user.email!, session.user.id)
+          const profile = await withTimeout(
+            loadProfile(session.user.email!, session.user.id), 6000, '프로필 조회'
+          )
           if (mounted) { setUser(profile); setSelectedCompany(null) }
         } catch { if (mounted) setUser(null) }
       } else if (!session && !legacyRef.current) {
@@ -146,27 +149,48 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
   }, [user, selectedCompany])
 
   // ── 신규: 이메일 + 비밀번호 로그인 ──────────────────────
+  // - signInWithPassword: 5s 네트워크 타임아웃 (fetchWithTimeout)
+  // - loadProfile: withTimeout(6s) — wedge 상태에서도 최대 6초 후 에러 반환
+  // - 타임아웃/네트워크 오류 감지 시: resetSupabaseClient() 후 1회 재시도
   const login = useCallback(async (email: string, password: string): Promise<string | null> => {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: email.trim().toLowerCase(), password,
-    })
-    if (error) {
-      if (error.message.includes('Invalid login credentials')) return '이메일 또는 비밀번호가 올바르지 않습니다.'
-      if (error.message.includes('Email not confirmed'))       return '이메일 인증이 필요합니다. 받은 메일함을 확인하세요.'
-      if (error.message.includes('AbortError') || error.message.includes('aborted'))
-        return '네트워크 응답 시간 초과 (12초). 잠시 후 다시 시도하세요.'
-      return error.message
-    }
-    // signInWithPassword 성공 → 세션에서 직접 프로필 로드 (getUser() 추가 네트워크 호출 없음)
-    if (data.user) {
-      const profile = await loadProfile(data.user.email!, data.user.id)
-      if (!profile) {
-        await supabase.auth.signOut()
-        return '접근 권한이 없습니다. 관리자에게 문의하세요.'
+    async function attempt(): Promise<string | null> {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim().toLowerCase(), password,
+      })
+      if (error) {
+        if (error.message.includes('Invalid login credentials')) return '이메일 또는 비밀번호가 올바르지 않습니다.'
+        if (error.message.includes('Email not confirmed'))       return '이메일 인증이 필요합니다. 받은 메일함을 확인하세요.'
+        // 네트워크/타임아웃 오류 → throw로 상위 catch에 전달 (재시도 대상)
+        throw new Error(error.message)
       }
-      setUser(profile)
+      if (data.user) {
+        // loadProfile도 withTimeout으로 보호 — wedge 상태 시 무한 hang 차단
+        const profile = await withTimeout(
+          loadProfile(data.user.email!, data.user.id), 6000, '프로필 조회'
+        )
+        if (!profile) {
+          await supabase.auth.signOut()
+          return '접근 권한이 없습니다. 관리자에게 문의하세요.'
+        }
+        setUser(profile)
+      }
+      return null
     }
-    return null
+
+    try {
+      return await attempt()
+    } catch {
+      // 첫 번째 시도 실패(타임아웃·네트워크 오류) → 클라이언트 재생성 후 1회 재시도
+      resetSupabaseClient()
+      try {
+        return await attempt()
+      } catch (e2) {
+        const msg = e2 instanceof Error ? e2.message : '네트워크 오류'
+        if (msg.includes('AbortError') || msg.includes('aborted') || msg.includes('시간 초과'))
+          return '네트워크 응답 시간 초과. 잠시 후 다시 시도하거나 페이지를 새로고침하세요.'
+        return msg
+      }
+    }
   }, [])
 
   // ── 레거시: 접근 코드 로그인 (access_codes 테이블) ──────
