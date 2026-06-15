@@ -17,6 +17,22 @@ import type { TreasuryUser, Company, UserRole } from '../types'
 
 const LEGACY_SESSION_KEY  = 'treasury_user'
 const SB_AUTH_KEY = `sb-${import.meta.env.VITE_SUPABASE_URL?.match(/\/\/([^.]+)/)?.[1]}-auth-token`
+// 프로필 캐시 — 네트워크 없이 즉시 복원, 새로고침 시 로그아웃 방지
+const PROFILE_CACHE_KEY = 'treasury_profile_cache'
+
+function saveProfileCache(profile: TreasuryUser): void {
+  try { localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(profile)) } catch { /* 무시 */ }
+}
+function loadProfileCache(): TreasuryUser | null {
+  try {
+    const raw = localStorage.getItem(PROFILE_CACHE_KEY)
+    if (!raw) return null
+    return JSON.parse(raw) as TreasuryUser
+  } catch { return null }
+}
+function clearProfileCache(): void {
+  try { localStorage.removeItem(PROFILE_CACHE_KEY) } catch { /* 무시 */ }
+}
 
 // localStorage에서 Supabase 세션을 직접 읽어 반환 (네트워크 없음, 토큰 유효성만 확인)
 function readLocalSession(): { email: string; sub: string } | null {
@@ -106,13 +122,35 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
     if (!legacyRef.current) {
       const localSession = readLocalSession()
       if (localSession) {
-        // 저장된 세션 있음 → 프로필 로드 완료까지 loading 유지 (로그인창 깜빡임 방지)
-        // withTimeout(6s): wedge 상태에서도 최대 6초 후 로그인 화면으로 이동
-        withTimeout(loadProfile(localSession.email, localSession.sub), 6000, '세션 복원')
-          .then(profile => { if (mounted) { setUser(profile); setLoading(false) } })
-          .catch(() => { if (mounted) setLoading(false) })  // 프로필 실패/타임아웃 → LoginPage
+        // 캐시된 프로필이 있으면 즉시 복원 → 새로고침 시 로그아웃 방지
+        const cached = loadProfileCache()
+        if (cached && cached.sb_id === localSession.sub) {
+          setUser(cached)
+          setLoading(false)
+        }
+        // 백그라운드에서 최신 프로필 갱신 (캐시 없으면 loading 유지)
+        withTimeout(loadProfile(localSession.email, localSession.sub), 8000, '세션 복원')
+          .then(profile => {
+            if (!mounted) return
+            if (profile) {
+              saveProfileCache(profile)
+              setUser(profile)
+            } else if (!cached) {
+              // 캐시도 없고 프로필도 null → LoginPage
+              setUser(null)
+            }
+            // 캐시로 이미 복원된 경우 profile=null이어도 로그아웃 안 함 (네트워크 실패)
+            setLoading(false)
+          })
+          .catch(() => {
+            if (!mounted) return
+            // 타임아웃/오류: 캐시 있으면 유지, 없으면 LoginPage
+            if (!cached) setUser(null)
+            setLoading(false)
+          })
       } else {
         // 저장된 세션 없음 → 즉시 LoginPage 표시
+        clearProfileCache()
         setLoading(false)
       }
     }
@@ -144,6 +182,8 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
   const currentCompany = useMemo<Company | null>(() => {
     if (!user) return null
     if (selectedCompany && hasCompanyCheck(user, selectedCompany)) return selectedCompany
+    // companies 미지정 계정 또는 master/admin → 기본 첫 법인
+    if (user.companies.length === 0 && !user.company) return selectedCompany ?? '셀바스에이아이'
     if (user.role === 'master' || user.role === 'admin') return selectedCompany ?? '셀바스에이아이'
     return user.company ?? (user.companies[0] as Company | undefined) ?? null
   }, [user, selectedCompany])
@@ -172,6 +212,7 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
           await supabase.auth.signOut()
           return '접근 권한이 없습니다. 관리자에게 문의하세요.'
         }
+        saveProfileCache(profile)
         setUser(profile)
       }
       return null
@@ -234,6 +275,7 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
   // ── 로그아웃 (양쪽 세션 모두 클리어) ────────────────────
   const logout = useCallback(async () => {
     sessionStorage.removeItem(LEGACY_SESSION_KEY)
+    clearProfileCache()
     legacyRef.current = false
     setUser(null)
     setSelectedCompany(null)
@@ -270,6 +312,8 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
 }
 
 function hasCompanyCheck(user: TreasuryUser, c: Company): boolean {
+  // companies 배열이 비어있으면 역할에 관계없이 전체 법인 접근 허용
+  if (user.companies.length === 0 && !user.company) return true
   if (user.role === 'master' || user.role === 'admin') {
     return user.companies.length === 0 || user.companies.includes(c)
   }

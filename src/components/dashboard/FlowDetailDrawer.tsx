@@ -1,8 +1,9 @@
 ﻿import { useNavigate } from 'react-router-dom'
 import { fmtKRW, calcDday, calcBondValue } from '../../lib/format'
+import { useFx } from '../../hooks/useFx'
 import type { FlowItemKey } from './WaterfallCard'
 import type { KpiData } from '../../hooks/useDashboard'
-import type { DailyRecord, InvestmentRecord, LoanRecord } from '../../types'
+import type { DailyRecord, InvestmentRecord, LoanRecord, FxCode } from '../../types'
 
 interface EquityItem {
   name: string
@@ -37,6 +38,13 @@ const TITLES: Record<FlowItemKey, string> = {
 
 export default function FlowDetailDrawer({ itemKey, kpi, latestDaily, latestInvests, loans, equities, company, onClose }: Props) {
   const navigate = useNavigate()
+  const fx = useFx()
+
+  // 외화 → 원화 환산 (useDashboard.kpi 계산과 동일 로직)
+  const toKRWAmt = (amount: number, currency: string): number => {
+    if (!currency || currency === 'KRW') return amount
+    return fx.toKRW(amount, currency as FxCode)
+  }
 
   if (!itemKey) return null
 
@@ -71,7 +79,7 @@ export default function FlowDetailDrawer({ itemKey, kpi, latestDaily, latestInve
           {itemKey === 'fx'         && <FxDetail daily={latestDaily} />}
           {itemKey === 'net'        && <NetDetail kpi={kpi} />}
           {itemKey === 'unavailable' && <UnavailableDetail kpi={kpi} latestInvests={latestInvests} equities={equities} />}
-          {itemKey === 'available'  && <AvailableDetail kpi={kpi} daily={latestDaily} latestInvests={latestInvests} equities={equities} />}
+          {itemKey === 'available'  && <AvailableDetail kpi={kpi} daily={latestDaily} latestInvests={latestInvests} equities={equities} toKRWAmt={toKRWAmt} />}
           {itemKey === 'asset'      && <AssetDetail kpi={kpi} fxKrw={latestDaily?.fx_krw ?? 0} />}
           {itemKey === 'equity_avail' && <EquityAvailDetail equities={equities.filter(e => e.available === '가용')} total={kpi.equityAvail} />}
         </div>
@@ -250,11 +258,12 @@ function NetDetail({ kpi }: { kpi: KpiData }) {
 }
 
 // ── 가용자금 합계 상세 ───────────────────────────────────────
-function AvailableDetail({ kpi, daily, latestInvests, equities }: {
+function AvailableDetail({ kpi, daily, latestInvests, equities, toKRWAmt }: {
   kpi: KpiData
   daily: DailyRecord | null
   latestInvests: InvestmentRecord[]
   equities: EquityItem[]
+  toKRWAmt: (amount: number, currency: string) => number
 }) {
   const availInvest  = latestInvests.filter(i => i.product !== '국채' && i.available === '가용')
   const availBond    = latestInvests.filter(i => i.product === '국채'  && i.available === '가용')
@@ -287,11 +296,13 @@ function AvailableDetail({ kpi, daily, latestInvests, equities }: {
             {[...availInvest, ...availBond].map(i => {
               const displayVal = i.product === '국채' && i.bondQty && i.bondPrice
                 ? calcBondValue(i.bondQty, i.bondPrice)
-                : (i.amount || 0)
+                : toKRWAmt(i.amount || 0, i.currency || 'KRW')
+              const isFx = i.product !== '국채' && i.currency && i.currency !== 'KRW'
               return (
                 <div key={i.id} className="flex justify-between items-center py-1.5">
                   <span className="text-[11px] text-gray-400 truncate mr-2">
                     {i.product === '국채' ? (i.bondName ?? i.bank) : i.bank}
+                    {isFx && <span className="ml-1 text-[10px] text-amber-500">{i.currency}</span>}
                   </span>
                   <span className="text-xs tabular-nums font-semibold text-gray-700 dark:text-gray-200 shrink-0">{fmtKRW(displayVal)}</span>
                 </div>
