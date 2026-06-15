@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { supabase, restInsert, restUpdate, restDelete, restUpdateIn, withTimeout } from '../lib/supabase'
 import { useAuth } from './useAuth'
+import { useAuditLog } from './useAuditLog'
 import { generateUUID } from '../lib/format'
 import type { Company, InvestmentRecord, UseQueryResult } from '../types'
 
@@ -81,6 +82,7 @@ export function useInvestments(activeOnly = false): UseQueryResult<InvestmentRec
   updateAcquisitionCost: (ids: string[], cost: number) => Promise<string | null>
 } {
   const { user, currentCompany } = useAuth()
+  const { logAction } = useAuditLog()
   const [data, setData] = useState<InvestmentRecord[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -120,27 +122,40 @@ export function useInvestments(activeOnly = false): UseQueryResult<InvestmentRec
   const nonBonds = useMemo(() => data.filter(i => i.product !== '국채'), [data])
 
   async function save(record: Omit<InvestmentRecord, 'id'> & { id?: string }): Promise<string | null> {
-    // insert 시 id가 없으면 클라이언트에서 UUID 생성 (DB default 설정 유무 무관)
-    const recordWithId = record.id ? record : { ...record, id: generateUUID() }
+    const isNew = !record.id
+    const recordWithId = isNew ? { ...record, id: generateUUID() } : record
     const payload = toDb(recordWithId)
-    const { error: err } = record.id
-      ? await restUpdate('investments', payload, { id: record.id })
-      : await restInsert('investments', payload)
+    const { error: err } = isNew
+      ? await restInsert('investments', payload)
+      : await restUpdate('investments', payload, { id: record.id! })
     if (err) return err.message
+    const company = record.company || fetchCompany || ''
+    const label = `${record.product ?? ''} ${record.bank ?? ''} ${record.amount ? record.amount.toLocaleString() + '원' : ''}`.trim()
+    void logAction({ table: 'investments', action: isNew ? 'CREATE' : 'UPDATE', company, recordId: recordWithId.id as string, summary: isNew ? `${label} 신규 등록` : `${label} 수정`, after: record as unknown as Record<string, unknown> })
     await fetch()
     return null
   }
 
   async function remove(id: string): Promise<string | null> {
+    const target = data.find(r => r.id === id)
     const { error: err } = await restDelete('investments', { id })
     if (err) return err.message
+    if (target) {
+      const label = `${target.product ?? ''} ${target.bank ?? ''}`.trim()
+      void logAction({ table: 'investments', action: 'DELETE', company: target.company, recordId: id, summary: `${label} 삭제`, before: target as unknown as Record<string, unknown> })
+    }
     setData(prev => prev.filter(r => r.id !== id))
     return null
   }
 
   async function setActive(id: string, active: boolean): Promise<string | null> {
+    const target = data.find(r => r.id === id)
     const { error: err } = await restUpdate('investments', { active }, { id })
     if (err) return err.message
+    if (target) {
+      const label = `${target.product ?? ''} ${target.bank ?? ''}`.trim()
+      void logAction({ table: 'investments', action: 'SETACTIVE', company: target.company, recordId: id, summary: active ? `${label} 재활성화` : `${label} 만기처리` })
+    }
     setData(prev => prev.map(r => r.id === id ? { ...r, active } : r))
     return null
   }

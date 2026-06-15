@@ -44,9 +44,10 @@ const NAV_GROUPS: NavGroup[] = [
   {
     section: '이력관리',
     items: [
-      { to: '/history',       label: '자금 변동 이력', icon: '📂', slug: 'history' },
-      { to: '/issue-history', label: '이슈 이력',      icon: '🔔', slug: 'history' },
-      { to: '/fx',            label: '환율 이력',      icon: '💱', slug: 'fx'      },
+      { to: '/history',       label: '자금 변동 이력', icon: '📂', slug: 'history'   },
+      { to: '/issue-history', label: '이슈 이력',      icon: '🔔', slug: 'history'   },
+      { to: '/fx',            label: '환율 이력',      icon: '💱', slug: 'fx'        },
+      { to: '/audit-log',     label: '변경 이력 로그', icon: '🗒️', slug: 'audit-log' },
     ],
   },
 ]

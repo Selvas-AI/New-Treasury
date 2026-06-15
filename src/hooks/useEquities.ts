@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { supabase, restInsert, restUpdate, restDelete, withTimeout } from '../lib/supabase'
 import { useAuth } from './useAuth'
+import { useAuditLog } from './useAuditLog'
 import { generateUUID } from '../lib/format'
 import type { EquityRecord, UseQueryResult } from '../types'
 
@@ -24,6 +25,7 @@ export function useEquities(): UseQueryResult<EquityRecord> & {
   updateAcquisitionCost: (name: string, cost: number) => Promise<string | null>
 } {
   const { user, currentCompany } = useAuth()
+  const { logAction } = useAuditLog()
   const [data, setData] = useState<EquityRecord[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -67,19 +69,23 @@ export function useEquities(): UseQueryResult<EquityRecord> & {
       )
       if (existing) record = { ...record, id: existing.id }
     }
-    // raw fetch 기반 — 오류 시에도 supabase-js 클라이언트 wedge 방지
-    // 신규 insert 시 id 클라이언트 생성 (equities.id not-null, DB default 없음)
+    const isNew = !record.id
+    const newId = generateUUID()
     const { error: err } = record.id
       ? await restUpdate('equities', record, { id: record.id })
-      : await restInsert('equities', { ...record, id: generateUUID() })
+      : await restInsert('equities', { ...record, id: newId })
     if (err) return err.message
+    const company = record.company || fetchCompany || ''
+    void logAction({ table: 'equities', action: isNew ? 'CREATE' : 'UPDATE', company, recordId: record.id ?? newId, summary: `${record.name ?? ''} ${record.date ?? ''} ${isNew ? '등록' : '수정'}` })
     await fetch()
     return null
   }
 
   async function remove(id: string): Promise<string | null> {
+    const target = data.find(r => r.id === id)
     const { error: err } = await restDelete('equities', { id })
     if (err) return err.message
+    if (target) void logAction({ table: 'equities', action: 'DELETE', company: target.company, recordId: id, summary: `${target.name ?? ''} ${target.date ?? ''} 삭제`, before: target as unknown as Record<string, unknown> })
     setData(prev => prev.filter(r => r.id !== id))
     return null
   }
