@@ -97,11 +97,14 @@ function eqQuery(match: Record<string, string | number | boolean>): string {
 async function restSend<T>(
   method: 'POST' | 'PATCH' | 'DELETE',
   table: string,
-  opts: { body?: unknown; match?: Record<string, string | number | boolean>; returning?: boolean; upsert?: boolean } = {},
+  opts: { body?: unknown; match?: Record<string, string | number | boolean>; returning?: boolean; upsert?: boolean; onConflict?: string } = {},
 ): Promise<RestResult<T>> {
-  const { body, match, returning = false, upsert = false } = opts
+  const { body, match, returning = false, upsert = false, onConflict } = opts
   let url = `${REST_URL}/${table}`
-  if (match && Object.keys(match).length) url += `?${eqQuery(match)}`
+  const queryParts: string[] = []
+  if (match && Object.keys(match).length) queryParts.push(eqQuery(match))
+  if (upsert && onConflict) queryParts.push(`on_conflict=${encodeURIComponent(onConflict)}`)
+  if (queryParts.length) url += `?${queryParts.join('&')}`
   const prefer = [
     returning ? 'return=representation' : 'return=minimal',
     upsert ? 'resolution=merge-duplicates' : '',
@@ -136,9 +139,10 @@ export function restInsert<T = unknown>(table: string, rows: unknown, returning 
   return restSend<T>('POST', table, { body: rows, returning })
 }
 
-/** UPSERT — unique 제약 충돌 시 merge (PostgREST resolution=merge-duplicates) */
-export function restUpsert<T = unknown>(table: string, rows: unknown, returning = false): Promise<RestResult<T>> {
-  return restSend<T>('POST', table, { body: rows, returning, upsert: true })
+/** UPSERT — unique 제약 충돌 시 merge (PostgREST resolution=merge-duplicates)
+ *  onConflict: 충돌 기준 컬럼(들), 예) 'company,report_date' */
+export function restUpsert<T = unknown>(table: string, rows: unknown, returning = false, onConflict?: string): Promise<RestResult<T>> {
+  return restSend<T>('POST', table, { body: rows, returning, upsert: true, onConflict })
 }
 
 /** UPDATE — match 조건에 values 적용 */

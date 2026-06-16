@@ -107,8 +107,8 @@ export function useDailyReport() {
         if (updated) setReport(updated)
         return updated
       } else {
-        // 신규 생성 (REST, 반환행 요청)
-        const { data, error: err } = await restInsert<DailyReport>('daily_reports', {
+        // 신규 생성 또는 이미 존재하면 merge (company+report_date unique 충돌 방지)
+        const { data, error: err } = await restUpsert<DailyReport>('daily_reports', {
           id:          generateUUID(),
           company,
           report_date: date,
@@ -116,7 +116,7 @@ export function useDailyReport() {
           ...patch,
           created_at:  now,
           updated_at:  now,
-        }, true)
+        }, true, 'company,report_date')
         if (err) throw new Error(err.message)
         const created = (data?.[0] ?? null) as DailyReport | null
         if (created) setReport(created)
