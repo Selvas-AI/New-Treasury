@@ -101,25 +101,54 @@ export default function FxPolicyTab({ company }: { company: Company }) {
   const aWins           = limitA > 0 && limitB > 0 ? limitA <= limitB : limitA > 0
   const optimalFxRatio  = totalFund > 0 ? (effectiveLimit / totalFund) * 100 : 0
 
-  // ── 현재 외화 보유
-  const currentFxKrw   = latestDaily?.fx_krw ?? 0
-  const currentFxRatio = totalFund > 0 ? (currentFxKrw / totalFund) * 100 : 0
-  const fxGap          = currentFxKrw - effectiveLimit  // 양수 = 초과, 음수 = 여유
-  const isOverLimit    = fxGap > 0
-
-  // ── 통화별 외화 잔액 (운전자금 입력값 — 해당 통화 원화 환산)
-  const fxBalances: Record<FxCode, number> = {
+  // ── 통화별 외화 잔액 분리 계산
+  // 운전자금 외화 (daily 테이블, 통화별 원화환산)
+  const operatingFxNative: Record<FxCode, number> = {
     USD: latestDaily?.fx_usd ?? 0,
     EUR: latestDaily?.fx_eur ?? 0,
     JPY: latestDaily?.fx_jpy ?? 0,
     GBP: latestDaily?.fx_gbp ?? 0,
     CNY: latestDaily?.fx_cny ?? 0,
   }
-  // 항상 환산 (rates 로드 이전에는 0, 로드 후 자동 업데이트)
-  const fxKrwByCode = Object.fromEntries(
-    FX_CURRENCIES.map(c => [c.code, fx.toKRW(fxBalances[c.code] ?? 0, c.code)])
-  ) as Record<FxCode, number>
+  // 운용자금 외화 (investments 테이블, currency != KRW, 가용만)
+  const investFxNative = useMemo(() => {
+    const result: Partial<Record<FxCode, number>> = {}
+    const latest = getLatestInvestments(invest.data)
+    latest
+      .filter(i => i.product !== '국채' && i.available === '가용' && i.currency && i.currency !== 'KRW')
+      .forEach(i => {
+        const code = i.currency as FxCode
+        result[code] = (result[code] ?? 0) + (i.amount || 0)
+      })
+    return result
+  }, [invest.data])
+
+  // 통화별 합계 (운전 + 운용) — KRW 환산
+  const operatingFxKrwByCode = useMemo(() =>
+    Object.fromEntries(FX_CURRENCIES.map(c => [c.code, fx.toKRW(operatingFxNative[c.code] ?? 0, c.code)]))
+  , [operatingFxNative, fx]) // eslint-disable-line react-hooks/exhaustive-deps
+  const investFxKrwByCode = useMemo(() =>
+    Object.fromEntries(FX_CURRENCIES.map(c => [c.code, fx.toKRW(investFxNative[c.code] ?? 0, c.code)]))
+  , [investFxNative, fx]) // eslint-disable-line react-hooks/exhaustive-deps
+  const fxKrwByCode = useMemo(() =>
+    Object.fromEntries(FX_CURRENCIES.map(c => [c.code,
+      (operatingFxKrwByCode[c.code] ?? 0) + (investFxKrwByCode[c.code] ?? 0)
+    ])) as Record<FxCode, number>
+  , [operatingFxKrwByCode, investFxKrwByCode])
+
+  // 하위 호환: 통화별 native 합계 (운전+운용) — 테이블 표시용
+  const fxBalances = useMemo(() =>
+    Object.fromEntries(FX_CURRENCIES.map(c => [c.code,
+      (operatingFxNative[c.code] ?? 0) + (investFxNative[c.code] ?? 0)
+    ])) as Record<FxCode, number>
+  , [operatingFxNative, investFxNative])
+
+  // 현재 외화 보유 총액 = 통화별 KRW 합산 (운전 + 운용)
   const totalIndividualFxKrw = Object.values(fxKrwByCode).reduce((s, v) => s + v, 0)
+  const currentFxKrw   = totalIndividualFxKrw
+  const currentFxRatio = totalFund > 0 ? (currentFxKrw / totalFund) * 100 : 0
+  const fxGap          = currentFxKrw - effectiveLimit  // 양수 = 초과, 음수 = 여유
+  const isOverLimit    = fxGap > 0
 
   // ── Target Band
   const bandInRange = targetMin <= 100 && targetMax <= 100
@@ -690,43 +719,80 @@ export default function FxPolicyTab({ company }: { company: Company }) {
         <div className={card}>
           <div className="flex items-center justify-between mb-3">
             <div>
-              <p className="text-xs text-gray-400">실시간 연동 — 운전자금 통화별 잔액</p>
+              <p className="text-xs text-gray-400">실시간 연동 — 운전자금 + 운용자금 통화별 잔액</p>
               <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">현재 통화별 보유 현황</h3>
             </div>
           </div>
 
           <div className="space-y-3">
             {FX_CURRENCIES.map(c => {
-              const krwVal   = fxKrwByCode[c.code] ?? 0
-              const nativeAmt = fxBalances[c.code] ?? 0
-              const pct      = totalIndividualFxKrw > 0 ? (krwVal / totalIndividualFxKrw) * 100 : 0
+              const krwVal    = fxKrwByCode[c.code] ?? 0
+              const opNative  = operatingFxNative[c.code] ?? 0
+              const invNative = investFxNative[c.code] ?? 0
+              const opKrw     = operatingFxKrwByCode[c.code] ?? 0
+              const invKrw    = investFxKrwByCode[c.code] ?? 0
+              const hasInv    = invNative > 0
+              const pct       = totalIndividualFxKrw > 0 ? (krwVal / totalIndividualFxKrw) * 100 : 0
+              const opPct     = krwVal > 0 ? (opKrw / krwVal) * 100 : 0
               return (
                 <div key={c.code} className="space-y-1">
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-bold text-gray-500 dark:text-slate-400 w-8 shrink-0">{c.code}</span>
-                    <div className="flex-1 h-2 bg-gray-100 dark:bg-slate-700 rounded-full overflow-hidden">
-                      <div className="h-2 rounded-full transition-all" style={{ width: `${pct}%`, background: c.color }} />
+                    {/* 분할 바: 운전(진한색) + 운용(연한색) */}
+                    <div className="flex-1 h-2 bg-gray-100 dark:bg-slate-700 rounded-full overflow-hidden flex">
+                      <div className="h-2 transition-all" style={{ width: `${(pct * opPct / 100).toFixed(1)}%`, background: c.color }} />
+                      {hasInv && (
+                        <div className="h-2 transition-all opacity-40" style={{ width: `${(pct * (100 - opPct) / 100).toFixed(1)}%`, background: c.color }} />
+                      )}
                     </div>
                     <span className="text-xs font-medium text-gray-600 dark:text-slate-300 w-10 text-right tabular-nums">{pct.toFixed(1)}%</span>
                     <div className="w-28 text-right">
-                      {nativeAmt > 0 ? (
+                      {krwVal > 0 ? (
                         <>
                           <p className="text-xs font-medium text-gray-700 dark:text-gray-200 tabular-nums">{fmtKRW(krwVal)}</p>
-                          <p className="text-[10px] text-gray-400 tabular-nums">{fmtAmt(nativeAmt, c.code)}</p>
+                          <p className="text-[10px] text-gray-400 tabular-nums">{fmtAmt(opNative + invNative, c.code)}</p>
                         </>
                       ) : (
                         <p className="text-xs text-gray-300 dark:text-slate-600">미입력</p>
                       )}
                     </div>
                   </div>
+                  {/* 운전/운용 구분 표시 (운용 외화가 있을 때만) */}
+                  {hasInv && (
+                    <div className="flex gap-3 pl-10 text-[10px]">
+                      <span className="flex items-center gap-1 text-gray-400">
+                        <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ background: c.color }} />
+                        운전 {fmtKRW(opKrw)}
+                        {opNative > 0 && <span className="text-gray-300">({fmtAmt(opNative, c.code)})</span>}
+                      </span>
+                      <span className="flex items-center gap-1 text-gray-400">
+                        <span className="inline-block w-1.5 h-1.5 rounded-full opacity-40" style={{ background: c.color }} />
+                        운용 {fmtKRW(invKrw)}
+                        {invNative > 0 && <span className="text-gray-300">({fmtAmt(invNative, c.code)})</span>}
+                      </span>
+                    </div>
+                  )}
                 </div>
               )
             })}
-            <div className="pt-2 border-t border-gray-100 dark:border-slate-700 flex justify-between text-xs">
-              <span className="text-gray-400">합계 (원화환산)</span>
-              <span className="font-bold text-gray-700 dark:text-gray-200 tabular-nums">
-                {totalIndividualFxKrw > 0 ? fmtKRW(totalIndividualFxKrw) : fx.loading ? '환율 조회 중…' : '잔액 미입력'}
-              </span>
+            <div className="pt-2 border-t border-gray-100 dark:border-slate-700">
+              <div className="flex justify-between text-xs mb-1">
+                <span className="text-gray-400">합계 (원화환산)</span>
+                <span className="font-bold text-gray-700 dark:text-gray-200 tabular-nums">
+                  {totalIndividualFxKrw > 0 ? fmtKRW(totalIndividualFxKrw) : fx.loading ? '환율 조회 중…' : '잔액 미입력'}
+                </span>
+              </div>
+              {totalIndividualFxKrw > 0 && (() => {
+                const totalOpKrw  = Object.values(operatingFxKrwByCode).reduce((s, v) => s + v, 0)
+                const totalInvKrw = Object.values(investFxKrwByCode).reduce((s, v) => s + v, 0)
+                return totalInvKrw > 0 ? (
+                  <div className="flex gap-3 text-[10px] text-gray-400">
+                    <span>운전 {fmtKRW(totalOpKrw)}</span>
+                    <span className="opacity-50">+</span>
+                    <span>운용 {fmtKRW(totalInvKrw)}</span>
+                  </div>
+                ) : null
+              })()}
             </div>
           </div>
 
