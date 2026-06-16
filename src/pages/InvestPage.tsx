@@ -26,7 +26,7 @@ type FormState = typeof EMPTY_FORM
 
 export default function InvestPage() {
   const { company: paramCompany, id: paramId } = useParams<{ company?: string; id?: string }>()
-  const { user, currentCompany, setCurrentCompany, canEdit } = useAuth()
+  const { user, currentCompany, setCurrentCompany, canEdit, canAction } = useAuth()
   const invest = useInvestments()
   const bankMaster = usePolicyBankLimits(currentCompany)
 
@@ -121,7 +121,7 @@ export default function InvestPage() {
     await invest.remove(id)
   }
 
-  const isEditable = canEdit()
+  const isEditable = canEdit() && canAction('invest', 'write')
 
   return (
     <div className="space-y-5 max-w-5xl mx-auto">

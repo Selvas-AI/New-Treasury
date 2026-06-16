@@ -12,6 +12,7 @@ import InvestReturnPopup from './InvestReturnPopup'
 import LoanDrawdownPopup from './LoanDrawdownPopup'
 import InvestExecutePopup from './InvestExecutePopup'
 import LoanRepaymentPopup from './LoanRepaymentPopup'
+import { useAuth } from '../../hooks/useAuth'
 import type { ReportItem, ThreadEntry } from '../../hooks/useDailyReportItems'
 import type { Company, FxCode } from '../../types'
 
@@ -127,6 +128,13 @@ export default function ItemsSection({
   toKRW,
   onEnsureReport, onAdd, onUpdate, onRemove, onFetchThreads, onAddThread,
 }: Props) {
+  const { hasCategory } = useAuth()
+
+  // 사용자 카테고리 권한에 따라 표시할 항목 필터링 (null=모두 허용)
+  const visibleCategories = direction === 'in'
+    ? IN_CATEGORIES.filter(c => hasCategory('in', c.code))
+    : OUT_CATEGORIES.filter(c => hasCategory('out', c.code))
+
   const [draft, setDraft]           = useState<DraftState | null>(null)
   const [threadItem, setThreadItem] = useState<ReportItem | null>(null)
   const [editId, setEditId]         = useState<string | null>(null)
@@ -166,8 +174,8 @@ export default function ItemsSection({
     if (cat === 'loan_repayment') { setLinkedPopup('loan_repayment'); return }
   }
 
-  const categories = direction === 'in' ? IN_CATEGORIES : OUT_CATEGORIES
-  const defaultCat = categories[0].code
+  const categories = visibleCategories
+  const defaultCat = (categories[0] ?? (direction === 'in' ? IN_CATEGORIES[0] : OUT_CATEGORIES[0])).code
   const myItems    = items.filter(i => i.direction === direction)
   const total      = myItems.reduce((s, i) => s + (i.amount_krw ?? toKRW(i.amount, i.currency)), 0)
 

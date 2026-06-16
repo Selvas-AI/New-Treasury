@@ -12,8 +12,8 @@
  */
 import { useState, useEffect, useMemo, useCallback, useRef, type ReactNode } from 'react'
 import { supabase, restUpdate, withTimeout, resetSupabaseClient } from '../lib/supabase'
-import { AuthContext, MENU_DEFAULTS } from './auth'
-import type { TreasuryUser, Company, UserRole } from '../types'
+import { AuthContext, MENU_DEFAULTS, ACTION_DEFAULTS } from './auth'
+import type { TreasuryUser, Company, UserRole, SectionKey } from '../types'
 
 const LEGACY_SESSION_KEY  = 'treasury_user'
 const SB_AUTH_KEY = `sb-${import.meta.env.VITE_SUPABASE_URL?.match(/\/\/([^.]+)/)?.[1]}-auth-token`
@@ -54,6 +54,7 @@ interface TreasuryUserRow {
   id: string; email: string; name: string; user_code: string
   role: string; companies: string[]; menus: string[] | null
   can_delete: boolean; can_approve: boolean; is_active: boolean
+  allowed_categories: unknown; action_permissions: unknown
 }
 
 async function loadProfile(email: string, authId: string): Promise<TreasuryUser | null> {
@@ -71,6 +72,8 @@ async function loadProfile(email: string, authId: string): Promise<TreasuryUser 
     sb_id: authId, email: row.email, code: row.user_code, label: row.name,
     role: row.role as UserRole, company: companies[0] ?? null, companies,
     menus: row.menus ?? null, can_delete: row.can_delete, can_approve: row.can_approve,
+    allowed_categories: (row.allowed_categories as TreasuryUser['allowed_categories']) ?? null,
+    action_permissions: (row.action_permissions as TreasuryUser['action_permissions']) ?? null,
   }
 }
 
@@ -90,9 +93,11 @@ function mapLegacy(row: AccessCodeRow): TreasuryUser {
     role:  row.role as UserRole,
     company,
     companies: company ? [company] : [],
-    menus:       null,             // 역할 기본값 사용
-    can_delete:  row.role === 'master',
-    can_approve: row.role === 'master',
+    menus:              null,             // 역할 기본값 사용
+    can_delete:         row.role === 'master',
+    can_approve:        row.role === 'master',
+    allowed_categories: null,
+    action_permissions: null,
   }
 }
 
@@ -333,12 +338,35 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
     return hasCompanyCheck(user, c)
   }, [user])
 
+  // 자금일보 카테고리 접근 여부 (null=모두 허용 → 기존 동작 유지)
+  const hasCategory = useCallback((direction: 'in' | 'out', code: string): boolean => {
+    if (!user) return false
+    if (user.role === 'master') return true
+    const ac = user.allowed_categories
+    if (ac === null) return true
+    const list = ac[direction]
+    if (list === null) return true
+    return list.includes(code)
+  }, [user])
+
+  // 섹션별 작업 권한 (null=역할 기본값 → 기존 동작 유지)
+  const canAction = useCallback((section: SectionKey, action: 'view' | 'write' | 'delete'): boolean => {
+    if (!user) return false
+    if (user.role === 'master') return true
+    const roleDefaults = ACTION_DEFAULTS[user.role] ?? ACTION_DEFAULTS.viewer
+    const custom = user.action_permissions
+    const perms = custom !== null
+      ? (custom[section] ?? roleDefaults[section])   // custom 우선, 섹션 미정의 시 role default
+      : roleDefaults[section]
+    return perms?.[action] ?? false
+  }, [user])
+
   return (
     <AuthContext.Provider value={{
       user, currentCompany, loading,
       login, loginWithCode, register, resetPassword, logout,
       setCurrentCompany: (c) => setSelectedCompany(c),
-      canEdit, canDelete, canApprove, hasMenu, hasCompany,
+      canEdit, canDelete, canApprove, hasMenu, hasCompany, hasCategory, canAction,
     }}>
       {children}
     </AuthContext.Provider>

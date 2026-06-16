@@ -3,6 +3,21 @@
 // 'ceo' | 'company' 는 레거시 — 기존 코드 호환 유지, 신규 사용 금지
 export type UserRole = 'master' | 'admin' | 'editor' | 'viewer' | 'ceo' | 'company'
 
+// 섹션별 작업 권한 (action_permissions 키)
+export type SectionKey =
+  'operating' | 'invest' | 'loans' | 'equity' |
+  'daily_write' | 'daily_submit' | 'history' | 'issue_history'
+
+export type ActionKey = 'view' | 'write' | 'delete'
+
+export interface SectionPermission { view: boolean; write: boolean; delete: boolean }
+
+// 자금일보 카테고리 권한 (allowed_categories)
+export interface CategoryPermissions {
+  in:  string[] | null   // null = 전체 허용
+  out: string[] | null
+}
+
 export interface TreasuryUser {
   // ── Supabase Auth 연동 ──
   sb_id:   string           // auth.users.id (uuid)
@@ -18,9 +33,12 @@ export interface TreasuryUser {
   companies: string[]       // 접근 허용 법인 목록 (빈 배열=역할 기본값)
 
   // 권한 플래그
-  menus:       string[] | null  // null=역할 기본값
-  can_delete:  boolean
-  can_approve: boolean
+  menus:              string[] | null                              // null=역할 기본값
+  can_delete:         boolean
+  can_approve:        boolean
+  // 세분화 권한 (null=역할 기본값 적용 → 기존 동작 그대로 유지)
+  allowed_categories: CategoryPermissions | null
+  action_permissions: Partial<Record<SectionKey, SectionPermission>> | null
 }
 
 export type Company = string  // DB-driven (companies 테이블); 기존 하드코딩 레거시 제거

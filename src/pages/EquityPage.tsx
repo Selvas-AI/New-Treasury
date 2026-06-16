@@ -16,7 +16,7 @@ type TabKey = 'stock' | 'bond' | 'unlisted'
 
 export default function EquityPage() {
   const { company: paramCompany, name: paramName } = useParams<{ company?: string; name?: string }>()
-  const { user, currentCompany, setCurrentCompany, canEdit } = useAuth()
+  const { user, currentCompany, setCurrentCompany, canEdit, canAction } = useAuth()
   const eq   = useEquities()
   const inv  = useInvestments()
 
@@ -42,7 +42,7 @@ export default function EquityPage() {
     if (paramName) setOpenPanel(decodeURIComponent(paramName))
   }, [paramName])
 
-  const isEditable = canEdit()
+  const isEditable = canEdit() && canAction('equity', 'write')
 
   // ─── 지분(주식) ──────────────────────────────────────────
   const stocks    = useMemo(() => getLatestEquities(eq.data.filter(e => e.market !== '비상장')), [eq.data])
