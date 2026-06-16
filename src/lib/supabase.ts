@@ -3,9 +3,13 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
 
-// Supabase 네트워크 요청 타임아웃 5초
-// → 네트워크 hang 시 빠른 감지 + withTimeout(6s)과 조합해 완전 보호
+// Supabase 네트워크 요청 타임아웃
+// - 인증(auth) 요청: 타임아웃 미적용 — 토큰 갱신이 abort되면 SIGNED_OUT 발생 → 강제 로그아웃
+// - 데이터 API 요청: 5초 — hang 감지 + withTimeout(6s) 조합으로 완전 보호
 function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+  const isAuthRequest = url.includes('/auth/v1/')
+  if (isAuthRequest) return fetch(input as RequestInfo, init ?? {})
   const controller = new AbortController()
   const tid = window.setTimeout(() => controller.abort(), 5_000)
   return fetch(input as RequestInfo, { ...init, signal: controller.signal })

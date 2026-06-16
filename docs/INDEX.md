@@ -70,6 +70,14 @@
 
 ---
 
+## Pending 기능 설계 문서
+
+| 문서 | 상태 | 설명 |
+|------|------|------|
+| [pending/DashboardTabNav.md](./pending/DashboardTabNav.md) | ⏸ Pending | Dashboard 카테고리 탭 네비게이션 (TopBar 하단 전체 너비 탭 바) |
+
+---
+
 ## GAS 스크립트
 
 | 문서 | 설명 |

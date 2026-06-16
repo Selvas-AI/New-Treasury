@@ -1,6 +1,6 @@
 # CLAUDE.md — Selvas Treasury (New-Treasury)
 > 신규 세션 시작 시 이 파일을 먼저 읽어 컨텍스트를 복원하세요.
-> 최종 업데이트: 2026-06-15 (세션11차 — 모바일 최적화 + 팝업 금액 대사 수정)
+> 최종 업데이트: 2026-06-16 (세션12차 — FX 정책 UX 개선 + 운용 외화 합산 + Dashboard 탭 Pending)
 
 ---
 
@@ -652,6 +652,37 @@ VITE_GAS_API_URL=https://script.google.com/macros/s/AKfycbwZ.../exec
 - **전 페이지 하드코딩 제거**: Dashboard/Input/Invest/Loans/Equity/History/DailyReport(List)/DataPage/OrgChart 의 `VALID_COMPANIES`/`COMPANIES` → `getCompanyNames()`·`useCompanies().names`
   - master/admin은 `hasCompanyCheck`(빈 companies=전체)로 신규 법인 자동 접근, editor/viewer는 사용자 관리에서 법인 지정
 - **[CRITICAL] hang 수정**: `fetchWithTimeout` 12s abort 시 supabase 호출이 reject → `load()`/회사추가 핸들러에 **try/catch/finally** 필수 (없으면 `setLoading(false)` 미실행 → 무한 로딩/"추가 중" 멈춤). companies 테이블 미생성이 직접 원인이었음
+
+---
+
+### 2026-06-16 세션 12차 (FX 정책 UX 개선 + 운용 외화 합산 + Dashboard 탭 Pending)
+
+#### FxPolicyTab 인터랙티브 UX 개선 ⭐
+- **한도 A 산출 근거 항상 표시**: 실효한도 카드 내 2단계 공식 인라인 노출
+  - `허용손실 = (영업이익+이자수익) × 위험포션`
+  - `한도A = 허용손실 ÷ 최대변동폭`
+  - 슬라이더 움직임 시 실시간 업데이트
+- **신뢰도 버튼 즉각 반응 (`localConfLevel`)**: 클릭 즉시 z값·maxRateChange·한도A·실효한도 전체 재계산. Supabase 저장은 비동기 후행. 90/95/99% 비교 미니바 추가
+- **Target Band 편집 폼에서 제거**: `fx_target_min`/`fx_target_max` 수동 입력 제거 → `🎯 자동설정` 버튼 전용 (거버넌스 유지). bandWidth 클램프 `(2,10)%p → (1,5)%p`
+- **통화 비중 입력 즉시 반응 (`localWeights`)**: controlled input에서 async save 후 값 리셋 버그 수정. `onChange` 로컬, `onBlur` Supabase 저장 패턴
+
+#### totalFund 가용 자금 합계로 재정의
+- **기존**: `operatingCash + investCash` (운용자금 전체 포함 = 과대 산정)
+- **변경**: `operatingCash + investAvailCash + bondAvailCash + equityAvailCash` (가용 항목만 합산)
+- `useEquities` 훅 추가 연동, `equities.latest.filter(e => e.available === '가용').reduce(...)` 패턴
+- 카드 라벨: "전체 자금 총액" → "가용 자금 합계"
+
+#### 운용자금 외화 합산 (`investFxNative`) ⭐
+- **기존**: FX 외화 = 운전자금 `daily.fx_*` 만 집계 (운용자금 외화 누락)
+- **변경**: `getLatestInvestments(invest.data)` 에서 `currency != 'KRW'` + `available = '가용'` + `product != '국채'` 필터 → 통화별 합산 `investFxNative: Partial<Record<FxCode, number>>`
+- 운전·운용 FX KRW 각각 계산 (`operatingFxKrwByCode`, `investFxKrwByCode`) → 합산 `fxKrwByCode`
+- `currentFxKrw`: `latestDaily?.fx_krw` → `totalIndividualFxKrw` (통화별 합산)
+- 바 차트: split bar (진한색=운전, 연한색 opacity-40=운용), 통화별 운전/운용 금액 분리 표시
+
+#### Dashboard 탭 네비게이션 (Pending)
+- **설계**: TopBar 하단 전체 너비 탭 바 — DASHBOARD 카테고리(통합 상황판·자금일보·자금정책) 페이지에만 표시
+- **보류 사유**: 사용자 "일단 Pending"
+- **설계 문서**: `docs/pending/DashboardTabNav.md` 작성 완료
 
 ---
 

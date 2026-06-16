@@ -153,3 +153,18 @@
 - [x] **Watchdog 오탐 수정**: 8s 무상호작용→무조건 발동 → 15s + DOM 콘텐츠 체크(main 100자+ & 스피너 없음일 때 발동 안 함) → **완료**
 - [x] **ESLint CI 에러 10건 수정**: DataPage/UsersPage conditional hooks, PolicyCTab no-unused-expressions, exhaustive-deps 누락 × 4건, eslint.config.js React Compiler 규칙 off → **완료**
 - [x] **가용자금 합계 범위 확장**: `availableCash = 운전 + 가용운용 + 가용국채 + 가용지분` (기존 지분 가용분 미합산 수정). KpiCard 부제목·FlowDetailDrawer 팝업 업데이트 → **완료**
+
+---
+
+## 📐 FX 정책 탭 UX 개선 (2026-06-16)
+
+- [x] **한도 A 산출 근거 인라인 표시**: 실효한도 카드 내에 `허용손실 = (영업이익+이자수익) × 위험포션` → `한도A = 허용손실 ÷ 최대변동폭` 2단계 공식 항상 노출. 슬라이더 변경 시 실시간 업데이트 → **2026-06-16 완료**
+- [x] **신뢰도 버튼 인터랙티브**: `localConfLevel` 상태 추가 — 클릭 즉시 z값·maxRateChange·한도A·실효한도 재계산(Supabase 저장은 비동기 후행). 3수준(90/95/99%) 비교 미니바 표시 → **2026-06-16 완료**
+- [x] **Target Band 입력 제거 (자동계산 전용)**: 파라미터 편집 폼에서 `fx_target_min`/`fx_target_max` 입력 필드 제거. 값은 `🎯 자동설정` 버튼으로만 설정 가능 (거버넌스 유지). bandWidth 클램프 `(2,10)→(1,5)%p → **2026-06-16 완료**
+- [x] **통화 비중 입력 즉시 반응**: `localWeights` 상태 추가 — `onChange` 로컬 업데이트, `onBlur` 시 Supabase 저장. 기존 controlled input이 async save 후 값 리셋되는 버그 수정 → **2026-06-16 완료**
+- [x] **가용 자금 합계로 totalFund 재정의**: `운전자금 + 가용 운용자금 + 가용 국채 + 가용 지분` (기존 "전체 자금 총액" → 전액 포함이라 과대 산정). `useEquities` 추가 연동. 카드 라벨 변경 → **2026-06-16 완료**
+- [x] **운용자금 외화 합산**: FX 외화 계산이 운전자금 외화만 포함하던 문제 → 가용 운용자금 중 외화(`currency != 'KRW'`, `available='가용'`) 도 합산. `investFxNative` 계산 추가. 바 차트 split(운전=진한/운용=연한), 통화별 운전+운용 분리 표시 → **2026-06-16 완료**
+
+### Pending 기능
+
+- [ ] **Dashboard 탭 네비게이션**: TopBar 하단 전체 너비 탭 바 (통합 상황판/자금일보/자금정책). DASHBOARD 카테고리 페이지에만 표시. 상세 설계: `docs/pending/DashboardTabNav.md`

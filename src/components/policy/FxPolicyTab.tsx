@@ -9,6 +9,7 @@ import { fetchFxStdDev } from '../../hooks/useGas'
 import { fmtKRW, fmtNumber } from '../../lib/format'
 import { restInsert } from '../../lib/supabase'
 import { generateUUID } from '../../lib/format'
+import { useFxTradeHistory } from '../../hooks/useFxTradeHistory'
 import type { Company, FxCode } from '../../types'
 
 // 4개 통화 (ECOS 지원 통화만 — CNY 제외)
@@ -192,10 +193,13 @@ export default function FxPolicyTab({ company }: { company: Company }) {
   const [bandError,   setBandError]       = useState<string | null>(null)
 
   // ── 환전 발의 모달 상태
+  const tradeHist = useFxTradeHistory()
   const [tradeModal,   setTradeModal]   = useState<TradeModal | null>(null)
   const [tradeAmt,     setTradeAmt]     = useState('')   // 외화 금액 (문자열)
   const [tradeDate,    setTradeDate]    = useState('')
   const [tradeMemo,    setTradeMemo]    = useState('')
+  const [tradeAcqRate, setTradeAcqRate] = useState('')   // 취득 환율
+  const [tradeSellRate, setTradeSellRate] = useState('') // 매도(예정) 환율
   const [tradeSaving,  setTradeSaving]  = useState(false)
 
   useEffect(() => {
@@ -276,6 +280,15 @@ export default function FxPolicyTab({ company }: { company: Company }) {
     setBandPreview(null)
   }
 
+  // 환차손익 계산 (모달 내 실시간)
+  const tradeFxPnl = useMemo(() => {
+    const amt  = Number(tradeAmt)
+    const acq  = Number(tradeAcqRate)
+    const sell = Number(tradeSellRate)
+    if (!amt || !acq || !sell) return null
+    return (sell - acq) * amt
+  }, [tradeAmt, tradeAcqRate, tradeSellRate])
+
   // ── 환전 발의 제출
   function openTradeModal(code: FxCode | 'total', excessKrw: number) {
     const rate = code !== 'total' ? fx.toKRW(1, code) : 0
@@ -286,9 +299,12 @@ export default function FxPolicyTab({ company }: { company: Company }) {
     const yyyy = today.getFullYear()
     const mm   = String(today.getMonth() + 1).padStart(2, '0')
     const dd   = String(today.getDate()).padStart(2, '0')
+    const currentRate = code !== 'total' ? fx.toKRW(1, code) : 0
     setTradeModal({ code, excessKrw })
     setTradeAmt(defaultAmt)
     setTradeDate(`${yyyy}-${mm}-${dd}`)
+    setTradeAcqRate('')
+    setTradeSellRate(currentRate > 0 ? fmtNumber(currentRate, 2) : '')
     setTradeMemo(
       code === 'total'
         ? `FX 정책 상한(${fmtKRW(effectiveLimit)}) 초과 발생. 초과분 ${fmtKRW(excessKrw)} 원화 전환 발의.`
@@ -299,12 +315,21 @@ export default function FxPolicyTab({ company }: { company: Company }) {
   async function submitTradeProposal() {
     if (!tradeModal) return
     setTradeSaving(true)
+    const amtFx    = Number(tradeAmt) || 0
+    const acqRate  = Number(tradeAcqRate) || null
+    const sellRate = Number(tradeSellRate) || null
+    const pnl      = tradeFxPnl
+    const krw      = sellRate && amtFx ? sellRate * amtFx : null
+    const currency = tradeModal.code !== 'total' ? tradeModal.code : 'USD'
     try {
       const body = [
         `💱 외화 매도 발의 (${user?.label ?? ''})`,
         `법인: ${company}`,
         `통화: ${tradeModal.code === 'total' ? '복합' : tradeModal.code}`,
         tradeModal.code !== 'total' ? `외화 금액: ${tradeAmt} ${tradeModal.code}` : '',
+        acqRate  ? `취득 환율: ${fmtNumber(acqRate, 2)}원` : '',
+        sellRate ? `매도(예정) 환율: ${fmtNumber(sellRate, 2)}원` : '',
+        pnl != null ? `예상 환차${pnl >= 0 ? '익' : '손'}: ${fmtKRW(Math.abs(pnl))}` : '',
         `원화 환산 초과분: ${fmtKRW(tradeModal.excessKrw)}`,
         `희망 집행일: ${tradeDate}`,
         `사유: ${tradeMemo}`,
@@ -313,6 +338,20 @@ export default function FxPolicyTab({ company }: { company: Company }) {
         id: generateUUID(),
         issue_key: `policy_fx_trade_${company}`,
         body,
+        created_by: user?.label ?? '',
+      })
+      // 외화매매거래 이력 기록
+      await tradeHist.propose({
+        company,
+        trade_date: tradeDate,
+        currency,
+        direction: 'sell',
+        amount_fx: amtFx,
+        acq_rate: acqRate,
+        trade_rate: sellRate,
+        fx_pnl: pnl,
+        amount_krw: krw,
+        memo: tradeMemo,
         created_by: user?.label ?? '',
       })
       setTradeModal(null)
@@ -1173,6 +1212,51 @@ export default function FxPolicyTab({ company }: { company: Company }) {
                 </div>
               )}
 
+              {/* 취득환율 / 매도(예정)환율 */}
+              {tradeModal.code !== 'total' && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-medium text-gray-600 dark:text-slate-300 block mb-1">
+                      취득 환율 <span className="text-gray-400">(원/{tradeModal.code})</span>
+                    </label>
+                    <input type="number" step="0.01" value={tradeAcqRate}
+                      onChange={e => setTradeAcqRate(e.target.value)}
+                      className="w-full text-sm border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2
+                                 bg-white dark:bg-slate-700 text-gray-900 dark:text-white tabular-nums"
+                      placeholder="예: 1320.00" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-gray-600 dark:text-slate-300 block mb-1">
+                      매도(예정) 환율 <span className="text-gray-400">(원/{tradeModal.code})</span>
+                    </label>
+                    <input type="number" step="0.01" value={tradeSellRate}
+                      onChange={e => setTradeSellRate(e.target.value)}
+                      className="w-full text-sm border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2
+                                 bg-white dark:bg-slate-700 text-gray-900 dark:text-white tabular-nums"
+                      placeholder="현재 시장 환율" />
+                  </div>
+                </div>
+              )}
+
+              {/* 환차손익 자동계산 */}
+              {tradeModal.code !== 'total' && tradeFxPnl != null && (
+                <div className={`px-3 py-2.5 rounded-xl border text-xs ${
+                  tradeFxPnl >= 0
+                    ? 'bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800'
+                    : 'bg-red-50   dark:bg-red-950/30   border-red-200   dark:border-red-800'
+                }`}>
+                  <p className={`font-medium mb-0.5 ${tradeFxPnl >= 0 ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}`}>
+                    📐 예상 환차{tradeFxPnl >= 0 ? '익' : '손'}
+                  </p>
+                  <p className={`tabular-nums font-bold text-sm ${tradeFxPnl >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                    {tradeFxPnl >= 0 ? '▲' : '▼'} {fmtKRW(Math.abs(tradeFxPnl))}
+                  </p>
+                  <p className="text-gray-400 dark:text-slate-500 mt-0.5">
+                    ({fmtNumber(Number(tradeSellRate) - Number(tradeAcqRate), 2)}원/{tradeModal.code}) × {fmtNumber(Number(tradeAmt), 0)} {tradeModal.code}
+                  </p>
+                </div>
+              )}
+
               {/* 희망 집행일 */}
               <div>
                 <label className="text-xs font-medium text-gray-600 dark:text-slate-300 block mb-1">희망 집행 시기</label>
@@ -1191,7 +1275,8 @@ export default function FxPolicyTab({ company }: { company: Company }) {
 
               {/* 저장 방식 안내 */}
               <div className="px-3 py-2 border-l-2 border-blue-400 rounded-r-lg bg-blue-50 dark:bg-blue-950/30 text-xs text-blue-700 dark:text-blue-300">
-                제출 시 자금정책 → 회의·의결 탭 후속조치 스레드에 기록됩니다.
+                제출 시 후속조치 스레드 기록 + <b>외화매매거래 이력</b>에 자동 등록됩니다.<br/>
+                관리자 승인 후 실제 체결 환율로 완료 처리합니다.
               </div>
             </div>
 

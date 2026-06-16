@@ -20,6 +20,7 @@ import DataPage from './pages/admin/DataPage'
 import OrgChartPage from './pages/admin/OrgChartPage'
 import DailyReportListPage from './pages/DailyReportListPage'
 import AuditLogPage from './pages/AuditLogPage'
+import FxTradeHistoryPage from './pages/FxTradeHistoryPage'
 import { useHolidays } from './hooks/useHolidays'
 
 /**
@@ -99,6 +100,10 @@ export default function App() {
             {/* 자금일보 목록 */}
             <Route path="/daily-report-list"           element={<DailyReportListPage />} />
             <Route path="/daily-report-list/:company"  element={<DailyReportListPage />} />
+
+            {/* 외화매매거래 이력 */}
+            <Route path="/fx-trade-history"           element={<FxTradeHistoryPage />} />
+            <Route path="/fx-trade-history/:company"  element={<FxTradeHistoryPage />} />
 
             {/* 변경 이력 로그 */}
             <Route path="/audit-log"           element={<AuditLogPage />} />
