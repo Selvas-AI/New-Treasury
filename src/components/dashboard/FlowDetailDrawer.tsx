@@ -17,6 +17,7 @@ interface EquityItem {
 interface Props {
   itemKey:       FlowItemKey | null
   kpi:           KpiData
+  fxKrw?:        number  // 운전+운용 외화 KRW 합계 (대시보드에서 합산해서 전달)
   latestDaily:   DailyRecord | null
   latestInvests: InvestmentRecord[]
   loans:         LoanRecord[]
@@ -37,7 +38,7 @@ const TITLES: Record<FlowItemKey, string> = {
   equity_avail: '지분(가용) 상세',
 }
 
-export default function FlowDetailDrawer({ itemKey, kpi, latestDaily, latestInvests, loans, equities, company, onClose }: Props) {
+export default function FlowDetailDrawer({ itemKey, kpi, fxKrw: fxKrwProp, latestDaily, latestInvests, loans, equities, company, onClose }: Props) {
   const navigate = useNavigate()
   const fx = useFx()
 
@@ -84,7 +85,7 @@ export default function FlowDetailDrawer({ itemKey, kpi, latestDaily, latestInve
           {itemKey === 'net'        && <NetDetail kpi={kpi} />}
           {itemKey === 'unavailable' && <UnavailableDetail kpi={kpi} latestInvests={latestInvests} equities={equities} />}
           {itemKey === 'available'  && <AvailableDetail kpi={kpi} daily={latestDaily} latestInvests={latestInvests} equities={equities} toKRWAmt={toKRWAmt} />}
-          {itemKey === 'asset'      && <AssetDetail kpi={kpi} fxKrw={latestDaily?.fx_krw ?? 0} />}
+          {itemKey === 'asset'      && <AssetDetail kpi={kpi} fxKrw={fxKrwProp ?? (latestDaily?.fx_krw ?? 0)} />}
           {itemKey === 'equity_avail' && <EquityAvailDetail equities={equities.filter(e => e.available === '가용')} total={kpi.equityAvail} />}
         </div>
 

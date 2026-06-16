@@ -148,14 +148,14 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 sm:grid-cols-[3fr_1fr] gap-4">
           <WaterfallCard
             kpi={db.kpi}
-            fxKrw={db.latestDaily?.fx_krw ?? 0}
+            fxKrw={(db.latestDaily?.fx_krw ?? 0) + db.kpi.investFxKrw}
             prevOperatingCash={db.prevOperatingCash ?? null}
             onItemClick={handleFlowClick}
             activeItem={flowDetail}
           />
           <AssetCompositionCard
             kpi={db.kpi}
-            fxKrw={db.latestDaily?.fx_krw ?? 0}
+            fxKrw={(db.latestDaily?.fx_krw ?? 0) + db.kpi.investFxKrw}
             onItemClick={key => setFlowDetail(prev => prev === key ? null : key)}
           />
         </div>
@@ -180,6 +180,7 @@ export default function DashboardPage() {
       <FlowDetailDrawer
         itemKey={flowDetail}
         kpi={db.kpi}
+        fxKrw={(db.latestDaily?.fx_krw ?? 0) + db.kpi.investFxKrw}
         latestDaily={db.latestDaily}
         latestInvests={db.latestInvests}
         loans={db.loans}

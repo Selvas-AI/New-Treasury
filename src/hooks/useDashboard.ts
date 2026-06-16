@@ -35,6 +35,7 @@ export interface KpiData {
   bondCash: number            // 국채 가용
   totalLoan: number           // 차입금 합계
   equityAvail: number         // 지분(상장·가용) 평가액 — 가용자금/순현금엔 미포함, 별도 표시용
+  investFxKrw: number         // 가용 운용자금 중 외화 KRW 환산 합계 (대시보드 외화비율 표시용)
 }
 
 export interface IssueItem {
@@ -130,6 +131,11 @@ export function useDashboard() {
     const netCashPosition = availableCash - totalLoan
     const unavailableAssets = investUnavail + bondUnavail + equityUnavail
 
+    // 가용 운용자금 중 외화 KRW 환산 합계 (대시보드 외화비율 표시용)
+    const investFxKrw = latestInvests
+      .filter(i => i.product !== '국채' && i.available === '가용' && i.currency && i.currency !== 'KRW')
+      .reduce((s, i) => s + toKRWAmt(i.amount || 0, i.currency || 'KRW'), 0)
+
     return {
       availableCash,
       netCashPosition,
@@ -139,6 +145,7 @@ export function useDashboard() {
       totalLoan,
       unavailableAssets,
       equityAvail,
+      investFxKrw,
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [latestDaily, latestInvests, loans.data, equities.latest, fx.rates])

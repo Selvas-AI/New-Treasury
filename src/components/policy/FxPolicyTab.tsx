@@ -76,8 +76,11 @@ export default function FxPolicyTab({ company }: { company: Company }) {
     const latest = getLatestInvestments(invest.data)
     return latest
       .filter(i => i.product !== '국채' && i.available === '가용')
-      .reduce((s, i) => s + (i.amount || 0), 0)
-  }, [invest.data])
+      .reduce((s, i) => {
+        if (!i.currency || i.currency === 'KRW') return s + (i.amount || 0)
+        return s + fx.toKRW(i.amount || 0, i.currency as FxCode)
+      }, 0)
+  }, [invest.data, fx.rates]) // eslint-disable-line react-hooks/exhaustive-deps
   const bondAvailCash = useMemo(() => {
     const latestBonds = getLatestBonds(invest.data)
     return latestBonds
