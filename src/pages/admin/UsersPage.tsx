@@ -6,7 +6,7 @@
  *   2. 해당 이메일 소유자가 LoginPage "최초 계정 설정" 탭에서 비밀번호 설정
  *   3. 이후 일반 로그인
  */
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { supabase, restInsert, restUpdate, restDelete } from '../../lib/supabase'
@@ -113,6 +113,41 @@ export default function UsersPage() {
   const [saving,    setSaving]    = useState(false)
   const [error,     setError]     = useState<string | null>(null)
   const [success,   setSuccess]   = useState(false)
+
+  // ── 필터 상태 ─────────────────────────────────────────────
+  const [filterCompany, setFilterCompany] = useState<string>('전체')
+  const [filterRole,    setFilterRole]    = useState<string>('전체')
+  const [filterStatus,  setFilterStatus]  = useState<string>('전체')
+  const [searchText,    setSearchText]    = useState('')
+
+  // 법인 칩 카운트 (전체 접근=빈 companies 포함)
+  const companyCounts = useMemo(() => {
+    const counts: Record<string, number> = { '전체': rows.length }
+    companyNames.forEach(c => {
+      counts[c] = rows.filter(r => r.companies.length === 0 || r.companies.includes(c)).length
+    })
+    return counts
+  }, [rows, companyNames])
+
+  // 필터 적용된 목록
+  const filteredRows = useMemo(() => {
+    let r = rows
+    if (filterCompany !== '전체')
+      r = r.filter(row => row.companies.length === 0 || row.companies.includes(filterCompany))
+    if (filterRole !== '전체')
+      r = r.filter(row => row.role === filterRole)
+    if (filterStatus === '활성만')   r = r.filter(row =>  row.is_active)
+    if (filterStatus === '비활성만') r = r.filter(row => !row.is_active)
+    if (searchText.trim()) {
+      const q = searchText.trim().toLowerCase()
+      r = r.filter(row =>
+        row.name.toLowerCase().includes(q) ||
+        row.email.toLowerCase().includes(q) ||
+        row.user_code.toLowerCase().includes(q),
+      )
+    }
+    return r
+  }, [rows, filterCompany, filterRole, filterStatus, searchText])
 
   useEffect(() => { void load() }, [])
 
@@ -422,12 +457,72 @@ export default function UsersPage() {
         </form>
       )}
 
+      {/* ── 법인 필터 칩 ────────────────────────────────────── */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs text-gray-400 dark:text-gray-500 shrink-0">법인 필터</span>
+        {(['전체', ...companyNames] as string[]).map(c => (
+          <button
+            key={c}
+            onClick={() => setFilterCompany(c)}
+            className={`inline-flex items-center gap-1 text-xs px-3 py-1.5 rounded-full border transition-colors ${
+              filterCompany === c
+                ? 'bg-blue-600 border-blue-600 text-white'
+                : 'border-gray-200 dark:border-slate-600 text-gray-500 dark:text-slate-300 hover:border-blue-300 dark:hover:border-blue-600'
+            }`}
+          >
+            {c}
+            <span className={`text-[10px] ${filterCompany === c ? 'opacity-80' : 'opacity-60'}`}>
+              {companyCounts[c] ?? 0}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      {/* ── 검색 + 역할/상태 드롭다운 ──────────────────────── */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-2 flex-1 min-w-[180px] border border-gray-200 dark:border-slate-600 rounded-lg px-3 py-1.5 bg-white dark:bg-slate-700">
+          <span className="text-gray-400 text-sm">🔍</span>
+          <input
+            type="text"
+            value={searchText}
+            onChange={e => setSearchText(e.target.value)}
+            placeholder="이름, 이메일, 코드 검색"
+            className="flex-1 text-sm bg-transparent outline-none text-gray-700 dark:text-slate-100 placeholder-gray-400"
+          />
+          {searchText && (
+            <button onClick={() => setSearchText('')} className="text-gray-300 hover:text-gray-500 text-xs">✕</button>
+          )}
+        </div>
+        <select
+          value={filterRole}
+          onChange={e => setFilterRole(e.target.value)}
+          className="text-xs border border-gray-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-700 text-gray-600 dark:text-slate-200"
+        >
+          <option value="전체">역할: 전체</option>
+          {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+        </select>
+        <select
+          value={filterStatus}
+          onChange={e => setFilterStatus(e.target.value)}
+          className="text-xs border border-gray-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-700 text-gray-600 dark:text-slate-200"
+        >
+          <option value="전체">상태: 전체</option>
+          <option value="활성만">활성만</option>
+          <option value="비활성만">비활성만</option>
+        </select>
+        <span className="text-xs text-gray-400 dark:text-gray-500 ml-auto">
+          {filteredRows.length}명 {filteredRows.length !== rows.length && `/ 전체 ${rows.length}명`}
+        </span>
+      </div>
+
       {/* 사용자 목록 */}
       <div className="bg-white dark:bg-slate-800 rounded-xl shadow border border-gray-100 dark:border-slate-700 overflow-hidden">
         {loading ? (
           <p className="text-sm text-gray-400 text-center py-10 animate-pulse">로딩 중…</p>
-        ) : rows.length === 0 ? (
-          <p className="text-sm text-gray-400 text-center py-10">등록된 사용자가 없습니다.</p>
+        ) : filteredRows.length === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-10">
+            {rows.length === 0 ? '등록된 사용자가 없습니다.' : '조건에 맞는 사용자가 없습니다.'}
+          </p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -439,7 +534,7 @@ export default function UsersPage() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map(row => (
+                {filteredRows.map(row => (
                   <tr key={row.id}
                     className={`border-b border-gray-50 dark:border-slate-700 hover:bg-gray-50/50 dark:hover:bg-slate-700/30 transition-colors ${!row.is_active ? 'opacity-50' : ''}`}>
                     <td className="px-4 py-3 font-medium text-gray-800 dark:text-gray-100 whitespace-nowrap">
