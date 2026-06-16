@@ -196,6 +196,41 @@ body.is-printing .print-only { display: block !important; }
   .print-summary-table tr.print-total td   { background: #dbeafe !important; }
 }
 
+/* ── FX 정책 슬라이더 fill (--fill CSS 변수로 채움 막대 동기화) ────────── */
+.range-fill {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 5px;
+  border-radius: 9999px;
+  background: linear-gradient(to right, #2563EB var(--fill, 0%), #e2e8f0 var(--fill, 0%));
+  outline: none;
+  cursor: pointer;
+  width: 100%;
+}
+.dark .range-fill {
+  background: linear-gradient(to right, #3b82f6 var(--fill, 0%), #334155 var(--fill, 0%));
+}
+.range-fill::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #2563EB;
+  cursor: pointer;
+  border: 2px solid white;
+  box-shadow: 0 1px 3px rgba(0,0,0,.25);
+}
+.range-fill::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #2563EB;
+  cursor: pointer;
+  border: 2px solid white;
+}
+
+
 /* ?? 而ㅼ뒪? ???ㅽ겕濡ㅻ컮 ???????????????????????????????? */
 .custom-scrollbar {
   scrollbar-width: thin;                          /* Firefox */
