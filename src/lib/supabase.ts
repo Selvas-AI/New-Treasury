@@ -16,9 +16,43 @@ function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit): Promise
     .finally(() => window.clearTimeout(tid))
 }
 
-// ⚠️ [CRITICAL] Web Locks 데드락 우회
-async function noopLock<R>(_name: string, _acquireTimeout: number, fn: () => Promise<R>): Promise<R> {
-  return fn()
+// ⚠️ [CRITICAL] Web Locks 전략 — 데드락 차단 + 멀티탭 토큰 회전 경쟁 차단
+// 배경:
+//   supabase-js 기본 navigatorLock 은 acquireTimeout=-1(무한 대기) → 락 보유자가
+//   wedge되면 이후 모든 auth 호출이 영구 대기(로그인 '처리 중…' 무한 행).
+//   과거: lock 을 no-op 으로 완전 우회 → 데드락은 막았으나, 멀티탭에서 각 탭이
+//   독립적으로 토큰을 갱신 → refresh token 회전(rotation) 경쟁 → invalid_grant →
+//   전 탭 SIGNED_OUT(동시 로그아웃) 발생.
+// 현재 전략:
+//   navigator.locks 로 크로스탭 토큰 갱신을 직렬화하되, 획득 대기에 타임아웃을 걸어
+//   절대 무한 대기하지 않는다.
+//   - 정상: 락 즉시 획득 → 탭 간 갱신 직렬화 → 회전 경쟁 차단
+//   - 경합/지연/wedge: timeout 후 degrade(직접 실행) → 데드락 원천 차단
+//   - fn 자체 에러는 재실행하지 않음(중복 실행 방지)
+const LOCK_ACQUIRE_TIMEOUT_MS = 4_000
+
+async function safeLock<R>(name: string, acquireTimeout: number, fn: () => Promise<R>): Promise<R> {
+  // Web Locks 미지원 환경 → 직접 실행
+  if (typeof navigator === 'undefined' || !navigator.locks) return fn()
+  const key = `lock:${name}`
+  const ac = new AbortController()
+  const timeoutMs = acquireTimeout > 0 ? acquireTimeout : LOCK_ACQUIRE_TIMEOUT_MS
+  const tid = window.setTimeout(() => ac.abort(), timeoutMs)
+  let acquired = false
+  try {
+    return await navigator.locks.request(
+      key,
+      // acquireTimeout===0: 즉시 가능할 때만(대기 없음). 그 외: 타임아웃부 대기.
+      acquireTimeout === 0 ? { mode: 'exclusive', ifAvailable: true } : { mode: 'exclusive', signal: ac.signal },
+      async () => { acquired = true; return await fn() },
+    )
+  } catch (e) {
+    // 락 획득 실패(AbortError/미가용)일 때만 degrade. fn 내부 에러면 재실행 금지.
+    if (acquired) throw e
+    return await fn()
+  } finally {
+    window.clearTimeout(tid)
+  }
 }
 
 // ── Supabase 클라이언트 팩토리 ─────────────────────────────────
@@ -27,7 +61,7 @@ async function noopLock<R>(_name: string, _acquireTimeout: number, fn: () => Pro
 function makeClient() {
   return createClient(supabaseUrl, supabaseKey, {
     auth: {
-      lock: noopLock,
+      lock: safeLock,
       persistSession: true,
       autoRefreshToken: true,
       detectSessionInUrl: true,

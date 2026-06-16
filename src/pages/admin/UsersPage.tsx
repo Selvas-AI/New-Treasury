@@ -241,6 +241,8 @@ export default function UsersPage() {
       can_delete:  row.can_delete,
       can_approve: row.can_approve,
       is_active:   row.is_active,
+      allowed_categories: row.allowed_categories,
+      action_permissions: row.action_permissions,
     })
     setCustomMenu(row.menus !== null)
     // 세분화 권한 복원

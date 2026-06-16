@@ -108,6 +108,8 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
   const [loading,         setLoading]         = useState(true)
   // Ref: onAuthStateChange 클로저 안에서 최신값 읽기 위해 ref 사용
   const legacyRef = useRef(false)
+  const userRef   = useRef<TreasuryUser | null>(null)
+  useEffect(() => { userRef.current = user }, [user])
 
   useEffect(() => {
     let mounted = true
@@ -197,21 +199,38 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
     // ── 안전장치: 8초 내 loading 미해제 시 강제 해제 ─
     const hardTimeout = window.setTimeout(() => { if (mounted) setLoading(false) }, 8000)
 
-    // ── 3. onAuthStateChange — 로그인/로그아웃/토큰갱신 후속처리 ──
+    // ── 3. onAuthStateChange — 이벤트별 분기 ──────────────────
+    // ⭐ 핵심: 세션이 유효한 한 절대 로그아웃하지 않는다.
+    //   과거 버그: TOKEN_REFRESHED(1시간마다·탭 복귀 시) 마다 loadProfile 재조회 →
+    //   순간 네트워크 지연/실패 시 setUser(null) → "튕기듯 로그아웃" 반복.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!mounted) return
+      if (!mounted || legacyRef.current) return
       // INITIAL_SESSION 은 위 readLocalSession() 으로 이미 처리 → 건너뜀
       if (event === 'INITIAL_SESSION') return
 
-      if (session?.user && !legacyRef.current) {
+      // 진짜 로그아웃(refresh token 만료·취소·명시적 signOut)일 때만 클리어
+      if (event === 'SIGNED_OUT') {
+        clearProfileCache()
+        setUser(null)
+        setSelectedCompany(null)
+        return
+      }
+
+      // 토큰 자동 갱신: 세션 유효 → 아무 것도 하지 않음
+      // (user 유지, 새 access_token 은 SDK가 localStorage에 자동 반영. 재조회·법인초기화 금지)
+      if (event === 'TOKEN_REFRESHED') return
+
+      // SIGNED_IN / USER_UPDATED 등:
+      //  - 이미 로그인 상태면 재조회·법인초기화 안 함 (깜빡임·튕김 방지)
+      //  - user가 없을 때(예: 비밀번호 재설정 리다이렉트)만 백그라운드 프로필 로드
+      //  - 로드 실패/null 이어도 절대 setUser(null) 하지 않음 (세션은 유효 → 다음 새로고침에 반영)
+      if (session?.user && !userRef.current) {
         try {
           const profile = await withTimeout(
-            loadProfile(session.user.email!, session.user.id), 6000, '프로필 조회'
+            loadProfile(session.user.email!, session.user.id), 6000, '프로필 조회',
           )
-          if (mounted) { setUser(profile); setSelectedCompany(null) }
-        } catch { if (mounted) setUser(null) }
-      } else if (!session && !legacyRef.current) {
-        if (mounted) { setUser(null); setSelectedCompany(null) }
+          if (mounted && profile) { saveProfileCache(profile); setUser(profile) }
+        } catch { /* 무시 — 세션 유효, 강제 로그아웃 금지 */ }
       }
     })
 
