@@ -5,7 +5,7 @@
  * 관련 훅: useDailyReportItems (라인 아이템), useApprovalConfig (결재선 설정)
  */
 import { useState, useCallback } from 'react'
-import { supabase, restInsert, restUpdate, restUpsert, withTimeout } from '../lib/supabase'
+import { supabase, restInsert, restUpdate, restDelete, restUpsert, withTimeout } from '../lib/supabase'
 import { generateUUID } from '../lib/format'
 import type { Company } from '../types'
 
@@ -297,7 +297,7 @@ export function useApprovalConfig(company: Company | null) {
     if (!company) return false
     setError(null)
     try {
-      const { error: err } = await restUpdate('daily_report_approval_config', { is_active: false }, { company, step })
+      const { error: err } = await restDelete('daily_report_approval_config', { company, step })
       if (err) throw new Error(err.message)
       setConfig(prev => prev.filter(c => c.step !== step))
       return true
