@@ -4,10 +4,11 @@
  * 라우트: /admin/org-chart (master 전용)
  * 법인별 자금일보 결재선(approval config) 관리
  */
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuth } from '../../hooks/useAuth'
 import { useApprovalConfig } from '../../hooks/useDailyReport'
 import { useCompanies } from '../../hooks/useCompanies'
+import { supabase } from '../../lib/supabase'
 import UserPicker from '../../components/common/UserPicker'
 import type { Company } from '../../types'
 
@@ -71,6 +72,20 @@ function ApprovalConfigPanel({ company }: { company: Company }) {
   const [form, setForm] = useState({ step: '', role_label: '', approver_code: '' })
   const [busy, setBusy] = useState(false)
   const [editTarget, setEditTarget] = useState<number | null>(null)
+  const [nameByCode, setNameByCode] = useState<Record<string, string>>({})
+
+  // 결재자 코드 → 이름 매핑 (테이블 '이름' 컬럼 표시용)
+  useEffect(() => {
+    supabase
+      .from('treasury_users')
+      .select('user_code, name')
+      .then(({ data }) => {
+        if (!data) return
+        const map: Record<string, string> = {}
+        for (const u of data as { user_code: string; name: string }[]) map[u.user_code] = u.name
+        setNameByCode(map)
+      })
+  }, [])
 
   async function handleSave() {
     const step = Number(form.step)
@@ -110,6 +125,7 @@ function ApprovalConfigPanel({ company }: { company: Company }) {
           <thead>
             <tr className="bg-gray-50 dark:bg-slate-700/50 border-b border-gray-100 dark:border-slate-700">
               <th className="px-4 py-2.5 text-left font-medium text-gray-500 w-16">단계</th>
+              <th className="px-4 py-2.5 text-left font-medium text-gray-500">이름</th>
               <th className="px-4 py-2.5 text-left font-medium text-gray-500">직책</th>
               <th className="px-4 py-2.5 text-left font-medium text-gray-500">결재자 코드</th>
               <th className="px-4 py-2.5 text-right font-medium text-gray-500 w-24">관리</th>
@@ -119,6 +135,7 @@ function ApprovalConfigPanel({ company }: { company: Company }) {
             {sorted.map(cfg => (
               <tr key={cfg.step} className="hover:bg-gray-50 dark:hover:bg-slate-700/30">
                 <td className="px-4 py-3 font-semibold text-blue-600 dark:text-blue-400">{cfg.step}단계</td>
+                <td className="px-4 py-3 text-gray-700 dark:text-gray-200">{nameByCode[cfg.approver_code] ?? '—'}</td>
                 <td className="px-4 py-3 text-gray-700 dark:text-gray-200">{cfg.role_label}</td>
                 <td className="px-4 py-3 font-mono text-gray-500 dark:text-slate-300">{cfg.approver_code}</td>
                 <td className="px-4 py-3 text-right space-x-2">
