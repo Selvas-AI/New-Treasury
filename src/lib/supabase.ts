@@ -168,6 +168,30 @@ async function restSend<T>(
   }
 }
 
+/** GET — match 조건으로 행 조회 (supabase-js 클라이언트 우회, PostgREST 직접 호출) */
+export async function restGet<T = unknown>(
+  table: string,
+  match: Record<string, string | number | boolean>,
+): Promise<RestResult<T>> {
+  const url = `${REST_URL}/${table}?${eqQuery(match)}`
+  try {
+    const resp = await fetchWithTimeout(url, {
+      method: 'GET',
+      headers: { ...restHeaders(), Accept: 'application/json' },
+    })
+    if (!resp.ok) {
+      let message = `${resp.status} ${resp.statusText}`
+      try { const j = await resp.json() as { message?: string }; if (j.message) message = j.message } catch { /* */ }
+      return { data: null, error: { message, status: resp.status } }
+    }
+    const data = await resp.json() as T[]
+    return { data, error: null }
+  } catch (e) {
+    const message = e instanceof Error ? e.message : '네트워크 오류'
+    return { data: null, error: { message, status: 0 } }
+  }
+}
+
 /** INSERT — rows 단건/배열 */
 export function restInsert<T = unknown>(table: string, rows: unknown, returning = false): Promise<RestResult<T>> {
   return restSend<T>('POST', table, { body: rows, returning })
