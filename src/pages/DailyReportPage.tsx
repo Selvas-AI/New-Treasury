@@ -8,7 +8,7 @@
  *   draft/submitted → daily.confirmed=false (임시 반영, 대시보드 표시)
  *   approved        → daily.confirmed=true  (공식 확정)
  */
-import { useEffect, useState, useMemo, useRef } from 'react'
+import { useEffect, useState, useMemo, useRef, Fragment } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { supabase } from '../lib/supabase'
@@ -563,9 +563,11 @@ export default function DailyReportPage() {
   const badge  = STATUS_LABEL[status] ?? STATUS_LABEL.draft
   const isReadOnly = status === 'approved'
   const canSubmit  = status === 'draft' || status === 'rejected'
-  const myApproveStep = ac.config.find(c => c.approver_code === user?.code)?.step ?? 1
-  const canApprove = status === 'submitted' &&
-    (user?.role === 'master' || ac.config.some(c => c.approver_code === user?.code))
+  const myApproveStep = ac.config.find(c => c.approver_code === user?.code)?.step
+  const canApprove = status === 'submitted' && (
+    (user?.role === 'master') ||
+    (myApproveStep !== undefined && (user?.can_approve !== false))
+  )
 
   // ── 모달 상태 ────────────────────────────────────────────────
   const [approveModal, setApproveModal] = useState<{ comment: string } | null>(null)
@@ -653,7 +655,8 @@ export default function DailyReportPage() {
   async function handleApprove() {
     if (!user) return
     setActionBusy(true)
-    const step = user.role === 'master' ? (myApproveStep) : myApproveStep
+    // master는 결재선에 없으면 step 1로 처리
+    const step = myApproveStep ?? 1
     await dr.approveReport(step, user.code, user.label ?? user.code, approveModal?.comment || undefined)
     setApproveModal(null)
     setActionBusy(false)
@@ -662,7 +665,8 @@ export default function DailyReportPage() {
   async function handleReject() {
     if (!user || !rejectModal?.comment.trim()) return
     setActionBusy(true)
-    await dr.rejectReport(myApproveStep, user.code, user.label ?? user.code, rejectModal.comment)
+    const step = myApproveStep ?? 1
+    await dr.rejectReport(step, user.code, user.label ?? user.code, rejectModal.comment)
     setRejectModal(null)
     setActionBusy(false)
   }
@@ -1019,63 +1023,102 @@ export default function DailyReportPage() {
                       </button>
                     )}
                   </div>
-                  <div className="flex items-center gap-3 flex-wrap">
-                    {/* 작성자 */}
-                    <div className="flex items-center gap-2 text-xs">
-                      <span className="text-gray-500 dark:text-slate-300">작성</span>
-                      <span className="font-medium text-gray-700 dark:text-gray-200">{user?.label ?? '—'}</span>
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
-                        dr.report ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                                  : 'bg-gray-100 text-gray-400 dark:bg-slate-700'
-                      }`}>
-                        {dr.report ? '✓' : '미작성'}
-                      </span>
-                      {/* 상신 로그 시각 */}
-                      {dr.approvals.find(a => a.action === 'submit') && (
-                        <span className="text-[10px] text-gray-400">
-                          {new Date(dr.approvals.find(a => a.action === 'submit')!.created_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
-                        </span>
+                  {/* ── 결재라인 시각화 (Case A/B/C) ── */}
+                  {ac.config.length === 0 ? (
+                    /* Case B: 결재선 미설정 */
+                    <div className="mt-2">
+                      <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 text-xs text-amber-800 dark:text-amber-300 mb-2">
+                        <span className="mt-0.5">⚠</span>
+                        <div>
+                          <div className="font-medium">결재선이 설정되지 않았습니다</div>
+                          <div className="text-amber-600 dark:text-amber-400 mt-0.5">
+                            상신 전에 결재선을 먼저 설정해 주세요.
+                            {user?.role === 'master' && <span className="ml-1 font-medium">→ 우측 상단 "⚙ 결재선 설정" 버튼을 눌러 추가하세요.</span>}
+                          </div>
+                        </div>
+                      </div>
+                      {/* 빈 슬롯 미리보기 */}
+                      <div className="flex items-center gap-1 opacity-50 px-1">
+                        <div className="flex flex-col items-center gap-1">
+                          <div className="w-9 h-9 rounded-full border border-gray-300 dark:border-slate-600 bg-gray-50 dark:bg-slate-700 flex items-center justify-center text-base text-gray-400">✏</div>
+                          <span className="text-[10px] text-gray-400">작성</span>
+                        </div>
+                        <span className="text-gray-300 dark:text-gray-600 pb-3 mx-1">→</span>
+                        <div className="flex flex-col items-center gap-1">
+                          <div className="w-9 h-9 rounded-full border-2 border-dashed border-gray-300 dark:border-slate-600 flex items-center justify-center text-base text-gray-300 dark:text-slate-500">+</div>
+                          <span className="text-[10px] text-gray-400">step 1</span>
+                        </div>
+                        <span className="text-gray-300 dark:text-gray-600 pb-3 mx-1">→</span>
+                        <div className="flex flex-col items-center gap-1">
+                          <div className="w-9 h-9 rounded-full border-2 border-dashed border-gray-300 dark:border-slate-600 flex items-center justify-center text-base text-gray-300 dark:text-slate-500">+</div>
+                          <span className="text-[10px] text-gray-400">step 2</span>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    /* Case A/C: 결재선 있음 */
+                    <div className="mt-2">
+                      <div className="flex items-center gap-1 flex-wrap">
+                        {/* 작성 노드 */}
+                        {(() => {
+                          const submitLog = dr.approvals.find(a => a.action === 'submit')
+                          const authorLabel = submitLog?.actor_label ?? (status !== 'draft' ? '—' : user?.label ?? '—')
+                          return (
+                            <div className="flex flex-col items-center gap-1">
+                              <div className={`w-9 h-9 rounded-full border flex items-center justify-center text-base ${
+                                submitLog
+                                  ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-600 text-blue-600 dark:text-blue-300'
+                                  : 'bg-gray-50 dark:bg-slate-700 border-gray-300 dark:border-slate-600 text-gray-400'
+                              }`}>✏</div>
+                              <span className="text-[10px] text-gray-500 dark:text-slate-400 max-w-[56px] text-center truncate">{authorLabel}</span>
+                              <span className="text-[9px] text-gray-400 dark:text-slate-500">
+                                {submitLog
+                                  ? new Date(submitLog.created_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+                                  : '작성 중'}
+                              </span>
+                            </div>
+                          )
+                        })()}
+
+                        {/* 결재 단계 노드들 */}
+                        {ac.config.map((cfg) => {
+                          const approvedLog = dr.approvals.find(a => a.step === cfg.step && a.action === 'approve')
+                          const rejectedLog = dr.approvals.find(a => a.step === cfg.step && a.action === 'reject')
+                          return (
+                            <Fragment key={cfg.step}>
+                              <span className="text-gray-300 dark:text-gray-600 pb-4 mx-0.5">→</span>
+                              <div className="flex flex-col items-center gap-1">
+                                <div className={`w-9 h-9 rounded-full border flex items-center justify-center text-base font-medium ${
+                                  approvedLog
+                                    ? 'bg-green-50 dark:bg-green-900/30 border-green-400 dark:border-green-600 text-green-600 dark:text-green-300'
+                                    : rejectedLog
+                                    ? 'bg-red-50 dark:bg-red-900/30 border-red-400 dark:border-red-600 text-red-500 dark:text-red-300'
+                                    : 'bg-gray-50 dark:bg-slate-700 border-dashed border-gray-300 dark:border-slate-500 text-gray-400'
+                                }`}>
+                                  {approvedLog ? '✓' : rejectedLog ? '✗' : '?'}
+                                </div>
+                                <span className="text-[10px] text-gray-500 dark:text-slate-400 max-w-[56px] text-center truncate">{cfg.role_label}</span>
+                                <span className="text-[9px] text-gray-400 dark:text-slate-500">
+                                  {approvedLog
+                                    ? new Date(approvedLog.created_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+                                    : rejectedLog
+                                    ? new Date(rejectedLog.created_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+                                    : cfg.approver_code}
+                                </span>
+                              </div>
+                            </Fragment>
+                          )
+                        })}
+                      </div>
+
+                      {/* 반려 사유 */}
+                      {dr.approvals.some(a => a.action === 'reject' && a.comment) && (
+                        <div className="mt-2 text-[11px] text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded px-3 py-1.5">
+                          ✗ 반려 사유: {dr.approvals.find(a => a.action === 'reject')?.comment}
+                        </div>
                       )}
                     </div>
-
-                    {/* 결재 단계 */}
-                    {ac.config.map((cfg) => {
-                      const approved = dr.approvals.some(a => a.step === cfg.step && a.action === 'approve')
-                      const rejected = dr.approvals.some(a => a.step === cfg.step && a.action === 'reject')
-                      const approvalLog = dr.approvals.find(a => a.step === cfg.step && (a.action === 'approve' || a.action === 'reject'))
-                      return (
-                        <div key={cfg.step} className="flex items-center gap-2 text-xs">
-                          <span className="text-gray-300 dark:text-gray-600">→</span>
-                          <span className="font-medium text-gray-700 dark:text-gray-200">{cfg.role_label}</span>
-                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
-                            approved ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                            : rejected ? 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400'
-                                       : 'bg-gray-100 text-gray-400 dark:bg-slate-700'
-                          }`}>
-                            {approved ? '✓ 승인' : rejected ? '✗ 반려' : '미결재'}
-                          </span>
-                          {approvalLog && (
-                            <span className="text-[10px] text-gray-400">
-                              {new Date(approvalLog.created_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
-                            </span>
-                          )}
-                        </div>
-                      )
-                    })}
-
-                    {/* 반려 사유 */}
-                    {dr.approvals.some(a => a.action === 'reject' && a.comment) && (
-                      <div className="w-full mt-1 text-[11px] text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded px-3 py-1.5">
-                        ✗ 반려 사유: {dr.approvals.find(a => a.action === 'reject')?.comment}
-                      </div>
-                    )}
-
-                    {ac.config.length === 0 && (
-                      <span className="text-xs text-amber-500 dark:text-amber-400">
-                        ⚠ 결재선이 설정되지 않았습니다{user?.role === 'master' && ' — 결재선 설정을 눌러 추가하세요'}
-                      </span>
-                    )}
-                  </div>
+                  )}
                 </div>
               </div>
             </section>
@@ -1129,7 +1172,7 @@ export default function DailyReportPage() {
                 }}>
                   <div>
                     <span style={{ color: '#888', display: 'inline-block', minWidth: 44 }}>작성자</span>
-                    {user?.label ?? '—'}
+                    {submitLog?.actor_label ?? '—'}
                   </div>
                   <div>
                     <span style={{ color: '#888', display: 'inline-block', minWidth: 44 }}>상신일시</span>
@@ -1149,7 +1192,7 @@ export default function DailyReportPage() {
                   {/* 작성 칸 */}
                   <div style={{ ...apvCellStyle }}>
                     <div style={apvLabelStyle}>작 성</div>
-                    <div style={apvBodyStyle}>{user?.label ?? '—'}</div>
+                    <div style={apvBodyStyle}>{submitLog?.actor_label ?? '—'}</div>
                   </div>
                   {/* ac.config 기반 동적 결재 칸 */}
                   {ac.config.map((cfg, idx) => {
