@@ -402,16 +402,19 @@ export default function DailyReportPage() {
     const candidates = groups.filter(g =>
       g.currShares === g.prevShares && Math.abs(g.totalValue - g.prevValue) >= 1
     )
-    if (!candidates.length) return
+    // 후보도 없고 기존 일보도 없으면 정리 대상 자체가 없음 → skip
+    // (후보가 없어도 일보가 있으면 stale 자동항목 정리를 위해 진행)
+    if (!candidates.length && !dr.report?.id) return
     if (autoRunningRef.current) return  // 이미 실행 중 → skip
 
     autoRunningRef.current = true
 
     void (async () => {
       try {
-        // report가 없으면 자동 생성
+        // report가 없으면 자동 생성 (후보가 있을 때만 — 정리만 필요하면 일보 없음=대상 없음)
         let reportId = dr.report?.id
         if (!reportId) {
+          if (!candidates.length) return
           const created = await dr.saveReport(resolvedCompany, selectedDate, {})
           reportId = created?.id ?? undefined
           if (!reportId) return
@@ -447,6 +450,18 @@ export default function DailyReportPage() {
         if (dupIds.length > 0) {
           // removeItem(REST) 가 DB 삭제 + 로컬 state 제거를 함께 처리 (중복 supabase 삭제 제거)
           for (const id of dupIds) await itemHook.removeItem(id)
+        }
+
+        // 🆕 현재 유효 후보가 아닌 지분 자동항목 제거 — 평가변동이 0으로 돌아갔거나
+        //    수량이 변동된 종목의 과거 @auto 항목이 유령으로 남는 것을 차단.
+        //    (국채 @auto:bond:%는 별도 effect가 관리하므로 건드리지 않음)
+        const validKeys = new Set(candidates.map(g => `@auto:${g.name}`))
+        for (const [memo, row] of Array.from(cleanMap)) {
+          if (memo.startsWith('@auto:bond:')) continue
+          if (!validKeys.has(memo)) {
+            await itemHook.removeItem(row.id)
+            cleanMap.delete(memo)
+          }
         }
 
         // insert / update
@@ -503,7 +518,8 @@ export default function DailyReportPage() {
       g.bondQtyMatch === true &&
       Math.abs(g.totalKrw - (g.prevKrw ?? g.totalKrw)) >= 1
     )
-    if (!bondCandidates.length) return
+    // 후보도 없고 기존 일보도 없으면 정리 대상 자체가 없음 → skip
+    if (!bondCandidates.length && !dr.report?.id) return
     if (autoRunningBondRef.current) return
 
     autoRunningBondRef.current = true
@@ -512,6 +528,7 @@ export default function DailyReportPage() {
       try {
         let reportId = dr.report?.id
         if (!reportId) {
+          if (!bondCandidates.length) return
           const created = await dr.saveReport(resolvedCompany, selectedDate, {})
           reportId = created?.id ?? undefined
           if (!reportId) return
@@ -533,6 +550,15 @@ export default function DailyReportPage() {
         for (const row of dbItems ?? []) {
           if (!existing.has(row.memo as string))
             existing.set(row.memo as string, { id: row.id as string, amount: row.amount as number })
+        }
+
+        // 🆕 현재 유효 후보가 아닌 국채 자동항목 제거 (평가변동 0 복귀·수량변동 등)
+        const validBondKeys = new Set(bondCandidates.map(g => `@auto:bond:${g.label}`))
+        for (const [memo, ex] of Array.from(existing)) {
+          if (!validBondKeys.has(memo)) {
+            await itemHook.removeItem(ex.id)
+            existing.delete(memo)
+          }
         }
 
         for (const g of bondCandidates) {
