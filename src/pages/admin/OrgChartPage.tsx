@@ -49,7 +49,7 @@ export default function OrgChartPage() {
           ))}
         </div>
 
-        <ApprovalConfigPanel company={activeCompany} />
+        <ApprovalConfigPanel key={activeCompany} company={activeCompany} />
 
         {/* 향후 확장 안내 */}
         <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-xl p-5 text-sm text-blue-700 dark:text-blue-300">

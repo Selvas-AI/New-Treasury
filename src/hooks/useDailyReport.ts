@@ -257,6 +257,7 @@ export function useApprovalConfig(company: Company | null) {
   const fetch = useCallback(async () => {
     if (!company) return
     setLoading(true)
+    setConfig([])
     setError(null)
     try {
       const { data, error: err } = await withTimeout(
