@@ -8,6 +8,7 @@ import { useState } from 'react'
 import { useAuth } from '../../hooks/useAuth'
 import { useApprovalConfig } from '../../hooks/useDailyReport'
 import { useCompanies } from '../../hooks/useCompanies'
+import UserPicker from '../../components/common/UserPicker'
 import type { Company } from '../../types'
 
 export default function OrgChartPage() {
@@ -155,11 +156,15 @@ function ApprovalConfigPanel({ company }: { company: Company }) {
             onChange={e => setForm(f => ({ ...f, role_label: e.target.value }))}
             className="w-32 text-xs border border-gray-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-200 placeholder-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-400"
           />
-          <input
-            type="text" placeholder="결재자 접근코드"
+          <UserPicker
+            company={company}
             value={form.approver_code}
-            onChange={e => setForm(f => ({ ...f, approver_code: e.target.value }))}
-            className="w-40 text-xs border border-gray-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-200 placeholder-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-400"
+            onChange={(code, label) => setForm(f => ({
+              ...f,
+              approver_code: code,
+              role_label: f.role_label || label,
+            }))}
+            className="flex-1 min-w-[160px]"
           />
           <button
             onClick={handleSave}
@@ -174,7 +179,7 @@ function ApprovalConfigPanel({ company }: { company: Company }) {
           )}
         </div>
         <p className="text-[10px] text-gray-400 dark:text-gray-600 mt-2">
-          결재자 코드: 해당 사용자의 접근코드 또는 이메일 주소를 입력하세요.
+          {company} 소속 활성 사용자 목록에서 선택하세요. 이름·코드·이메일로 검색 가능합니다.
         </p>
       </div>
     </div>

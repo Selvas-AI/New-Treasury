@@ -20,6 +20,7 @@ import ReportSummaryTable from '../components/daily-report/ReportSummaryTable'
 import ItemsSection, { type PrefillPayload } from '../components/daily-report/ItemsSection'
 import { ACCOUNT_LABELS } from '../lib/accountLabels'
 import CmsVerificationModal from '../components/daily-report/CmsVerificationModal'
+import UserPicker from '../components/common/UserPicker'
 import { useDailyReportAttachments } from '../hooks/useDailyReportAttachments'
 import { useCompanies, getCompanyNames } from '../hooks/useCompanies'
 import type { Company, DailyRecord } from '../types'
@@ -1470,9 +1471,9 @@ export default function DailyReportPage() {
             {/* 신규 추가 폼 */}
             <div className="border-t border-gray-100 dark:border-slate-700 pt-4">
               <p className="text-[11px] text-gray-500 dark:text-slate-300 font-medium mb-2">결재 단계 추가</p>
-              <div className="grid grid-cols-3 gap-2 mb-2">
-                <div>
-                  <label className="block text-[10px] text-gray-400 mb-1">Step 번호</label>
+              <div className="flex gap-2 mb-2">
+                <div className="w-16">
+                  <label className="block text-[10px] text-gray-400 mb-1">Step</label>
                   <input
                     type="number" min="1" max="9"
                     value={cfgForm.step}
@@ -1481,8 +1482,8 @@ export default function DailyReportPage() {
                     className="w-full text-xs border border-gray-200 dark:border-slate-600 rounded-lg px-2 py-1.5 bg-gray-50 dark:bg-slate-700 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-400"
                   />
                 </div>
-                <div>
-                  <label className="block text-[10px] text-gray-400 mb-1">역할명 표시</label>
+                <div className="w-24">
+                  <label className="block text-[10px] text-gray-400 mb-1">역할명</label>
                   <input
                     value={cfgForm.role_label}
                     onChange={e => setCfgForm(f => ({ ...f, role_label: e.target.value }))}
@@ -1490,15 +1491,21 @@ export default function DailyReportPage() {
                     className="w-full text-xs border border-gray-200 dark:border-slate-600 rounded-lg px-2 py-1.5 bg-gray-50 dark:bg-slate-700 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-400"
                   />
                 </div>
-                <div>
-                  <label className="block text-[10px] text-gray-400 mb-1">사용자 코드</label>
-                  <input
-                    value={cfgForm.approver_code}
-                    onChange={e => setCfgForm(f => ({ ...f, approver_code: e.target.value.toUpperCase() }))}
-                    placeholder="KIM01"
-                    className="w-full text-xs border border-gray-200 dark:border-slate-600 rounded-lg px-2 py-1.5 bg-gray-50 dark:bg-slate-700 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-400 font-mono"
-                  />
-                </div>
+              </div>
+              <div className="mb-2">
+                <label className="block text-[10px] text-gray-400 mb-1">
+                  결재자 선택
+                  <span className="text-gray-300 dark:text-slate-500 ml-1">— {resolvedCompany} 소속</span>
+                </label>
+                <UserPicker
+                  company={resolvedCompany}
+                  value={cfgForm.approver_code}
+                  onChange={(code, label) => setCfgForm(f => ({
+                    ...f,
+                    approver_code: code,
+                    role_label: f.role_label || label,
+                  }))}
+                />
               </div>
               <button
                 onClick={() => void handleCfgSave()}
