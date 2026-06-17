@@ -280,7 +280,9 @@ export function useApprovalConfig(company: Company | null) {
     if (!company) return false
     setError(null)
     try {
-      const { error: err } = await restUpsert('daily_report_approval_config', {
+      // 동일 (company, step) 기존 행 제거 (is_active 무관) → UNIQUE VIOLATION 방지
+      await restDelete('daily_report_approval_config', { company, step })
+      const { error: err } = await restInsert('daily_report_approval_config', {
         id: generateUUID(), company, step,
         role_label: roleLabel, approver_code: approverCode, is_active: true,
       })

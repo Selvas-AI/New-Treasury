@@ -142,6 +142,9 @@ function ApprovalConfigPanel({ company }: { company: Company }) {
         <p className="text-xs font-semibold text-gray-500 dark:text-slate-300 mb-3">
           {editTarget ? `${editTarget}단계 수정` : '새 결재단계 추가'}
         </p>
+        {ac.error && (
+          <p className="text-xs text-red-500 dark:text-red-400 mb-2 px-1">⚠ {ac.error}</p>
+        )}
         <div className="flex gap-2 flex-wrap">
           <input
             type="number" min="1" max="9" placeholder="단계(1,2…)"
