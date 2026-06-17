@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useInvestments } from '../hooks/useInvestments'
 import { usePolicyBankLimits } from '../hooks/usePolicyBankLimits'
+import { useFx } from '../hooks/useFx'
 import { fmtKRW, calcDday, fmtReturn, returnBadgeClass, calcReturn } from '../lib/format'
 import { NumInput } from '../components/common/NumInput'
 import { getCompanyNames } from '../hooks/useCompanies'
@@ -29,6 +30,7 @@ export default function InvestPage() {
   const { company: paramCompany, id: paramId } = useParams<{ company?: string; id?: string }>()
   const { user, currentCompany, setCurrentCompany, canEdit, canAction } = useAuth()
   const invest = useInvestments()
+  const fx = useFx()
   const bankMaster = usePolicyBankLimits(currentCompany)
 
   const [tab, setTab]           = useState<'active' | 'inactive'>('active')
@@ -54,8 +56,10 @@ export default function InvestPage() {
   const inactiveList = useMemo(() => invest.nonBonds.filter(r => !r.active), [invest.nonBonds])
   const displayList  = tab === 'active' ? activeList : inactiveList
 
-  const totalAvail   = useMemo(() => activeList.filter(r => r.available === '가용')  .reduce((s, r) => s + r.amount, 0), [activeList])
-  const totalUnavail = useMemo(() => activeList.filter(r => r.available === '불가용').reduce((s, r) => s + r.amount, 0), [activeList])
+  const toKRWAmt = (amount: number, currency: string) =>
+    (!currency || currency === 'KRW') ? amount : fx.toKRW(amount, currency as Parameters<typeof fx.toKRW>[1])
+  const totalAvail   = useMemo(() => activeList.filter(r => r.available === '가용')  .reduce((s, r) => s + toKRWAmt(r.amount, r.currency), 0), [activeList, fx.toKRW])  // eslint-disable-line react-hooks/exhaustive-deps
+  const totalUnavail = useMemo(() => activeList.filter(r => r.available === '불가용').reduce((s, r) => s + toKRWAmt(r.amount, r.currency), 0), [activeList, fx.toKRW])  // eslint-disable-line react-hooks/exhaustive-deps
 
   function setField<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm(f => ({ ...f, [key]: value }))
