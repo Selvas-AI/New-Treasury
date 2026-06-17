@@ -1,6 +1,6 @@
 # CLAUDE.md — Selvas Treasury (New-Treasury)
 > 신규 세션 시작 시 이 파일을 먼저 읽어 컨텍스트를 복원하세요.
-> 최종 업데이트: 2026-06-16 (세션12차 — FX 정책 UX 개선 + 운용 외화 합산 + Dashboard 탭 Pending)
+> 최종 업데이트: 2026-06-16 (세션13차 — 세분화 권한(메뉴·카테고리·작업) + 자동 로그아웃 원천 차단)
 
 ---
 
@@ -67,9 +67,12 @@ zustand               (설치됨, 아직 미사용)
 - `canApprove()` — 결재 가능 여부
 - `hasMenu(slug)` — 메뉴 접근 가능 여부
 - `hasCompany(c)` — 법인 접근 가능 여부
+- `hasCategory(dir, code)` — 자금일보 입금/출금 카테고리 접근 여부 (세션13차, `allowed_categories=null`=전체 허용)
+- `canAction(section, action)` — 섹션별 조회/입력·수정/삭제 권한 (세션13차, `action_permissions=null`=역할 기본값)
 
 ### 사전 등록 DDL
 `docs/db/treasury_users.sql` — Supabase SQL Editor에서 실행 필요
+`docs/db/user_permissions_migration.sql` — 세분화 권한 컬럼(`allowed_categories`/`action_permissions`) 추가 (세션13차, **실행 필요**)
 
 ### SSO 추후 계획
 - 셀바스에이아이: Azure AD (별도 테넌트)
@@ -706,6 +709,63 @@ VITE_GAS_API_URL=https://script.google.com/macros/s/AKfycbwZ.../exec
 
 ---
 
+### 2026-06-16 세션 13차 (자금일보 항목 추가 + 세분화 권한 + 자동 로그아웃 원천 차단)
+
+#### 자금일보 입출금 항목 추가
+- 입금: `interest_income`(이자수익) 추가
+- 출금: `trade_ap_payment`(외상매입금 지급), `interest_expense`(이자비용), `enote_payment`(전자어음결제) 추가
+- `ItemsSection.tsx` IN/OUT_CATEGORIES — **UsersPage 카테고리 권한 탭의 IN/OUT_CAT_LABELS와 반드시 동기화** 유지
+
+#### 사용자 관리 — 법인 필터 칩 + 검색/역할/상태 콤보
+- `UsersPage.tsx` — 법인 필터 칩(각 칩에 인원 카운트), 이름·이메일·코드 검색, 역할/상태 드롭다운, `filteredRows` useMemo
+
+#### 사용자별 세분화 권한 (메뉴·카테고리·작업) ⭐
+- **DB**: `treasury_users` 에 `allowed_categories jsonb` / `action_permissions jsonb` 추가 (`docs/db/user_permissions_migration.sql` — **Supabase SQL Editor 실행 필요**). 둘 다 `NULL`=역할 기본값 → 기존 동작 100% 유지
+- **types**: `SectionKey`/`ActionKey`/`SectionPermission`/`CategoryPermissions`, `TreasuryUser`에 두 필드 추가
+- **auth.ts**: `ACTION_DEFAULTS`(역할별 섹션 기본 작업권한), `AuthContextValue`에 `hasCategory(dir, code)`/`canAction(section, action)` 추가
+- **AuthContext**: 두 헬퍼 구현 — `null`이면 역할 기본값 fallback, master는 항상 true
+- **UsersPage 폼**: 3탭 권한 편집 UI
+  - 탭1 메뉴 접근 (기존 `menus` 재배치)
+  - 탭2 카테고리 권한 (입금/출금 항목별 허용, 미설정 시 전체 허용)
+  - 탭3 작업 권한 매트릭스 (섹션 × 조회/입력·수정/삭제 체크박스, `disabled` 셀=해당없음)
+  - 목록에 `메뉴↑`/`카테고리↑`/`작업권한↑` 배지 추가
+- **소비처**: `ItemsSection`(드롭다운 `hasCategory` 필터), `Input/Invest/Loans/EquityPage`(`canAction('섹션','write')` 2차 게이트)
+- **접근 제어**: UsersPage 자체는 여전히 master 전용 (`Navigate` 가드 + `hasMenu('admin')`), TopBar '코드 관리'도 master 전용
+
+#### [CRITICAL] 자동 로그아웃 원천 차단 (멀티탭·다중사용자 환경) ⭐
+```
+증상: 로그인 후 일정 시간(주로 1시간)·탭 복귀 시 "튕기듯" 로그아웃 반복.
+       퍼블리싱 사이트에서 여러 탭/동시접속 시 빈발.
+
+[원인 1] onAuthStateChange 가 TOKEN_REFRESHED(access token 1시간 TTL 자동갱신,
+  탭 복귀 시에도 발생) 마다 loadProfile() 재조회 → fetchWithTimeout 5s/withTimeout 6s
+  내 순간 네트워크 지연·실패 시 catch → setUser(null) → Layout 의 !user 가드가
+  즉시 /login 으로 보냄. 세션(refresh token)은 멀쩡한데 코드가 자발적 로그아웃.
+  해결: onAuthStateChange 이벤트별 분기 + 세션 유효 시 절대 setUser(null) 금지.
+    - SIGNED_OUT: clearProfileCache + setUser(null) (진짜 로그아웃만)
+    - TOKEN_REFRESHED: no-op (user 유지, 새 토큰은 SDK가 localStorage 자동반영)
+    - SIGNED_IN/USER_UPDATED: userRef.current 있으면 skip(깜빡임·법인초기화 방지),
+      없을 때만 백그라운드 프로필 로드 — 실패/null 이어도 setUser(null) 안 함
+    - userRef(useRef) + useEffect 로 최신 user 동기화
+
+[원인 2] lock: noopLock(Web Locks 완전 우회, 세션12차 로그인 데드락 대응) →
+  멀티탭에서 각 탭이 독립적으로 토큰 갱신 → refresh token 회전(rotation) 경쟁 →
+  invalid_grant → 전 탭 동시 SIGNED_OUT.
+  해결: safeLock 도입 (src/lib/supabase.ts).
+    - navigator.locks.request 로 크로스탭 토큰 갱신 직렬화 → 회전 경쟁 차단
+    - 획득 대기 AbortController 4s 타임아웃 → 경합/wedge 시 degrade(직접 실행)
+      → 과거 로그인 데드락 재발 방지
+    - acquireTimeout===0 은 ifAvailable, 그 외 signal 대기
+    - fn 내부 에러는 재실행 안 함(acquired 플래그로 중복 실행 방지)
+
+금지: onAuthStateChange 에서 프로필 재조회 실패를 이유로 setUser(null) 호출 금지.
+       lock 을 다시 no-op 으로 되돌리지 말 것(멀티탭 동시 로그아웃 재발).
+검증: preview_eval 로 navigator.locks.query() → held/pending 비어있고,
+       새로고침 후 로그인 유지 + 대시보드 정상 렌더 확인.
+```
+
+---
+
 ### 2026-06-15 세션 10차 (다크모드 B안 팔레트 + 로그인 hang 근본 해결)
 
 #### 다크모드 B안 (블루-다크 재무 팔레트) 전면 적용 ⭐
@@ -791,6 +851,10 @@ VITE_GAS_API_URL=https://script.google.com/macros/s/AKfycbwZ.../exec
 **국채 기준가 계산 공식**: `bondQty × (bondPrice ÷ 10)` = `calcBondValue()` 함수
 - `bondPrice`는 액면 10,000원 기준 가격 (예: 7514 = 75.14%)
 - 1좌 = 1,000원 면액 기준 → `7514 ÷ 10 = 751.4원/좌`
+
+### DB 마이그레이션 미적용 (실행 필요)
+- **`docs/db/user_permissions_migration.sql`** — `treasury_users.allowed_categories` / `action_permissions` 컬럼 (세션13차 세분화 권한). 미실행 시 카테고리/작업 권한 탭 저장이 컬럼 부재로 실패. 읽기는 `null` fallback이라 앱은 정상.
+- **`docs/db/fx_trade_history.sql`** — 외화매매거래 이력 (이전 세션)
 
 ### 미구현 기능
 - `useDashboardLayout.ts` — 생성됐으나 현재 미사용 (DnD 롤백)
@@ -1021,7 +1085,8 @@ useEffect(() => {
 | `loans` | 차입금 (active로 상환 처리) |
 | `equities` | 지분투자 날짜별 시세 (같은 종목 날짜별 row 누적) |
 | `issue_comments` | 이슈 스레드 (issue_key: `loan_{uuid}` / `equity_{종목명}` / `input_daily`) |
-| `access_codes` | 사용자 인증 코드 |
+| `treasury_users` | 사용자 프로필·권한 (email/role/companies/menus/can_delete/can_approve + `allowed_categories`/`action_permissions` jsonb — 세션13차 세분화 권한, null=역할 기본값) |
+| `access_codes` | 사용자 인증 코드 (레거시) |
 | `policy_meetings` | 자금운용위원회 회의 (정책회의/운영회의) |
 | `policy_decisions` | 의결사항 (법인별, CASCADE DELETE from meetings) |
 | `policy_params` | 정책 파라미터 Key-Value (company+param_key unique) |
