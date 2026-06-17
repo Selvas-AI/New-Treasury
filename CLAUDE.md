@@ -789,6 +789,18 @@ VITE_GAS_API_URL=https://script.google.com/macros/s/AKfycbwZ.../exec
   - 디버그 `console.log` 제거
 - **결재선 테이블에 '이름' 컬럼 추가**: 단계/직책/결재자코드/관리 → **단계/이름/직책/결재자코드/관리**. `treasury_users` 에서 `user_code→name` 매핑 조회해 표시 (미매핑 시 `—`)
 
+#### 자금현황 소계 입출금 표시 정합성 수정 (ReportSummaryTable)
+- **평가손익 evalIn/evalOut 혼용 → 중복 표시 해소**: `invest_eval_*` 는 국채·지분
+  공용 카테고리라 `itemSums.evalIn/evalOut`(전체 합산)을 비예금성 소계·지분 소계에
+  그대로 쓰면 같은 평가손익이 양쪽에 중복 노출됨(예: 지분 평가손실 44,492,890이
+  비예금성 소계 출금액에도 표시). → `byBondLabel`(국채별)/`byEquityName`(지분별)에서
+  섹션 전용 합계(`bondEvalIn/Out`, `equityEvalIn/Out`)를 따로 산출해 분리.
+  ※ 표시 전용 — 마감잔액·Δ·총합계는 섹션별 잔액에서 독립 산출되어 금액 오염 없음.
+- **운용자금 입/출금 방향 정정**: 운용자금 '잔액 관점'으로 통일 —
+  신규집행(`invest_execute`=investIn)=입금↑, 회수/해지(`invest_return`=investOut)=출금↓.
+  기존 예금성 행·운용자금 소계가 반대로 매핑돼 있던 것 수정.
+  (재예치=출금+입금 병기 / 만기해지=운용 출금+대체계좌 입금 / 신규=보통예금 출금+운용 입금)
+
 #### [CRITICAL] 평가변동 0 복귀 종목의 유령 평가손익 항목 제거 ⭐
 ```
 증상: UltraSight Inc. 등 평가액 변동이 없는 종목이 전액(취득가)을

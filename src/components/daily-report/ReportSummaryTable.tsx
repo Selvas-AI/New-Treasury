@@ -358,6 +358,14 @@ export default function ReportSummaryTable({
   const depositGroups    = investGroups.filter(g => g.category === 'deposit')
   const nonDepositGroups = investGroups.filter(g => g.category === 'non-deposit')
 
+  // 평가손익 분리 합계 — invest_eval_* 는 국채/지분 공용 카테고리라
+  // evalIn/evalOut(전체 합산)을 쓰면 비예금성·지분 소계에 서로의 값이 중복 표시됨.
+  // byBondLabel(국채별) / byEquityName(지분별) 로 각 섹션 전용 합계를 따로 산출.
+  const bondEvalIn    = Object.values(itemSums.byBondLabel ).reduce((s, v) => s + v.inKrw,  0)
+  const bondEvalOut   = Object.values(itemSums.byBondLabel ).reduce((s, v) => s + v.outKrw, 0)
+  const equityEvalIn  = Object.values(itemSums.byEquityName).reduce((s, v) => s + v.inKrw,  0)
+  const equityEvalOut = Object.values(itemSums.byEquityName).reduce((s, v) => s + v.outKrw, 0)
+
   if (loading) {
     return (
       <div className="overflow-x-auto p-4 space-y-2">
@@ -462,8 +470,9 @@ export default function ReportSummaryTable({
                   <SubSectionHeader label="① 예금성" />
                   {depositGroups.map((g, i) => (
                     <InvestRow key={`dep-${i}`} group={g}
-                      inKrw={g.product === '정기예금' ? itemSums.investOut : 0}
-                      outKrw={g.product === '정기예금' ? itemSums.investIn  : 0}
+                      // 운용자금 잔액 관점: 신규집행(investIn)=입금↑, 회수/해지(investOut)=출금↓
+                      inKrw={g.product === '정기예금' ? itemSums.investIn  : 0}
+                      outKrw={g.product === '정기예금' ? itemSums.investOut : 0}
                     />
                   ))}
                   <SubtotalRow label="예금성 소계" indent note="(원화 환산)"
@@ -490,7 +499,7 @@ export default function ReportSummaryTable({
                   <SubtotalRow label="비예금성 소계" indent note="(원화 환산)"
                     prevKrw={nonDepositGroups.reduce((s, g) =>
                       s + (g.isBondGroup ? (g.prevKrw ?? g.totalKrw) : g.totalKrw), 0)}
-                    inKrw={itemSums.evalIn} outKrw={itemSums.evalOut}
+                    inKrw={bondEvalIn} outKrw={bondEvalOut}
                     currKrw={nonDepositSubtotal}
                   />
                 </>
@@ -502,7 +511,7 @@ export default function ReportSummaryTable({
                   nonDepositGroups.reduce((s, g) =>
                     s + (g.isBondGroup ? (g.prevKrw ?? g.totalKrw) : g.totalKrw), 0)
                 }
-                inKrw={itemSums.investOut} outKrw={itemSums.investIn}
+                inKrw={itemSums.investIn} outKrw={itemSums.investOut}
                 currKrw={totalInvKRW}
               />
             </>
@@ -559,8 +568,8 @@ export default function ReportSummaryTable({
                 label="지분·장기투자 소계"
                 note="(평가금액 기준)"
                 prevKrw={equityGroups.reduce((s, g) => s + g.prevValue, 0)}
-                inKrw={itemSums.evalIn}
-                outKrw={itemSums.evalOut}
+                inKrw={equityEvalIn}
+                outKrw={equityEvalOut}
                 currKrw={equityGroups.reduce((s, g) => s + g.totalValue, 0)}
               />
             </>
