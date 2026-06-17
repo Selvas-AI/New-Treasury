@@ -13,6 +13,7 @@ import BankLimitsTab from '../components/policy/BankLimitsTab'
 import CashflowForecastTab from '../components/policy/CashflowForecastTab'
 import PolicyCTab from '../components/policy/PolicyCTab'
 import { fmtKRW } from '../lib/format'
+import { NumInput } from '../components/common/NumInput'
 import type { Company, DecisionStatus, PolicyDecision } from '../types'
 
 type PolicyTab = 'decisions' | 'fx' | 'fvpl' | 'banks' | 'forecast' | 'plan_c'
@@ -187,8 +188,8 @@ function LiquidityCard({
             <div className="space-y-3">
               <div>
                 <label className="text-xs font-medium text-gray-500">월 고정비 (억원)</label>
-                <input type="number" value={form.fixedCost}
-                  onChange={e => setForm(p => ({ ...p, fixedCost: e.target.value }))}
+                <NumInput value={form.fixedCost}
+                  onChange={raw => setForm(p => ({ ...p, fixedCost: raw }))}
                   placeholder="예: 15 (= 15억)"
                   className="mt-1 w-full text-sm border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2
                              bg-white dark:bg-slate-700 text-gray-900 dark:text-white" />
@@ -203,8 +204,8 @@ function LiquidityCard({
               </div>
               <div>
                 <label className="text-xs font-medium text-gray-500">비상 차입 라인 (억원, 선택)</label>
-                <input type="number" value={form.creditLine}
-                  onChange={e => setForm(p => ({ ...p, creditLine: e.target.value }))}
+                <NumInput value={form.creditLine}
+                  onChange={raw => setForm(p => ({ ...p, creditLine: raw }))}
                   placeholder="예: 50 (= 50억)"
                   className="mt-1 w-full text-sm border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2
                              bg-white dark:bg-slate-700 text-gray-900 dark:text-white" />

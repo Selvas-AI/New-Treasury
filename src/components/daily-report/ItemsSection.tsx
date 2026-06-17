@@ -436,11 +436,24 @@ export default function ItemsSection({
                       inputMode={isFxCurrency(draft.currency) ? 'decimal' : 'numeric'}
                       value={draft.amtStr}
                       onChange={e => {
-                        const raw = e.target.value
-                        const cleaned = isFxCurrency(draft.currency)
-                          ? raw.replace(/[^\d.,]/g, '')   // 외화: 소수점 허용
-                          : raw.replace(/[^\d,]/g, '')    // KRW: 정수만
-                        setDraft(d => d ? { ...d, amtStr: cleaned } : d)
+                        const raw = e.target.value.replace(/,/g, '')
+                        if (isFxCurrency(draft.currency)) {
+                          if (raw !== '' && !/^\d*\.?\d*$/.test(raw)) return
+                          const dotIdx = raw.indexOf('.')
+                          let formatted: string
+                          if (dotIdx === -1) {
+                            const n = parseInt(raw, 10)
+                            formatted = isNaN(n) ? '' : n.toLocaleString('ko-KR')
+                          } else {
+                            const n = parseInt(raw.slice(0, dotIdx), 10)
+                            formatted = (isNaN(n) ? '0' : n.toLocaleString('ko-KR')) + '.' + raw.slice(dotIdx + 1)
+                          }
+                          setDraft(d => d ? { ...d, amtStr: raw === '' ? '' : formatted } : d)
+                        } else {
+                          if (raw !== '' && !/^\d*$/.test(raw)) return
+                          const n = parseInt(raw, 10)
+                          setDraft(d => d ? { ...d, amtStr: raw === '' ? '' : n.toLocaleString('ko-KR') } : d)
+                        }
                       }}
                       onKeyDown={e => {
                         if (e.key === 'Enter') void handleAddSave()

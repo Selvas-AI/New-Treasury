@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useLoans } from '../hooks/useLoans'
 import { fmtKRW, calcDday } from '../lib/format'
+import { NumInput } from '../components/common/NumInput'
 import { getCompanyNames } from '../hooks/useCompanies'
 import type { LoanRecord, Company } from '../types'
 
@@ -202,7 +203,7 @@ export default function LoansPage() {
             </div>
             <div>
               <label className="block text-xs text-gray-500 mb-1 dark:text-slate-300">차입금액 *</label>
-              <input type="number" min="0" value={form.amount} onChange={e => setField('amount', e.target.value)}
+              <NumInput value={form.amount} onChange={raw => setField('amount', raw)}
                 required placeholder="0"
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:border-slate-600 dark:text-gray-100" />
             </div>

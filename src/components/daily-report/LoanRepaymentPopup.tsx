@@ -113,7 +113,11 @@ export default function LoanRepaymentPopup({ company, onSaved, onClose }: Props)
             <div className="flex gap-2 items-center">
               <label className="text-xs text-gray-500 w-16 shrink-0">상환금액</label>
               <input type="text" inputMode="numeric" value={amtStr}
-                onChange={e => setAmtStr(e.target.value.replace(/[^\d,]/g, ''))}
+                onChange={e => {
+                  const raw = e.target.value.replace(/,/g, '').replace(/[^\d]/g, '')
+                  const n = parseInt(raw, 10)
+                  setAmtStr(raw === '' ? '' : n.toLocaleString('ko-KR'))
+                }}
                 className="flex-1 text-xs px-3 py-2 rounded-lg border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-right tabular-nums focus:outline-none focus:ring-1 focus:ring-red-400" />
             </div>
             <div className="flex gap-2 items-center">

@@ -1,5 +1,6 @@
 ﻿import { useState } from 'react'
 import { fmtKRW, fmtReturn, returnBadgeClass, calcReturn } from '../../lib/format'
+import { NumInput } from '../common/NumInput'
 import { fetchStockByName, fetchStockPrice } from '../../hooks/useGas'
 import type { EquityRecord } from '../../types'
 
@@ -294,20 +295,18 @@ export default function NewEquityForm({ company, fixedMarket, onSave, isEditable
                   <span className="ml-1 text-emerald-500 text-[10px]">↑ 자동입력</span>
                 )}
               </label>
-              <input
-                type="number" min="0"
+              <NumInput
                 value={form.shares}
-                onChange={e => setForm(f => ({ ...f, shares: e.target.value }))}
+                onChange={raw => setForm(f => ({ ...f, shares: raw }))}
                 placeholder="0"
                 className="w-full border border-gray-200 rounded px-2 py-1.5 text-xs text-right focus:outline-none focus:ring-1 focus:ring-blue-400" />
             </div>
             <div>
               <label className="block text-xs text-gray-500 mb-1">주가 (자동입력 · 수정가능)</label>
               <div className="flex gap-1">
-                <input
-                  type="number" min="0"
+                <NumInput
                   value={form.price}
-                  onChange={e => setForm(f => ({ ...f, price: e.target.value }))}
+                  onChange={raw => setForm(f => ({ ...f, price: raw }))}
                   placeholder="0"
                   className="flex-1 min-w-0 border border-gray-200 rounded px-2 py-1.5 text-xs text-right focus:outline-none focus:ring-1 focus:ring-blue-400" />
                 {market !== '비상장' && form.ticker && (
@@ -327,10 +326,9 @@ export default function NewEquityForm({ company, fixedMarket, onSave, isEditable
                   <span className="ml-1 text-emerald-500 text-[10px]">↑ 자동입력</span>
                 )}
               </label>
-              <input
-                type="number" min="0"
+              <NumInput
                 value={form.acquisition_cost}
-                onChange={e => setForm(f => ({ ...f, acquisition_cost: e.target.value }))}
+                onChange={raw => setForm(f => ({ ...f, acquisition_cost: raw }))}
                 placeholder="0"
                 className="w-full border border-gray-200 rounded px-2 py-1.5 text-xs text-right focus:outline-none focus:ring-1 focus:ring-blue-400" />
             </div>

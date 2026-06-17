@@ -1,5 +1,6 @@
 ﻿import { useState } from 'react'
 import { fmtKRW, fmtReturn, returnBadgeClass, calcReturn, calcBondValue, normDate } from '../../lib/format'
+import { NumInput } from '../common/NumInput'
 import { fetchBondByName, fetchBondPrice } from '../../hooks/useGas'
 import type { InvestmentRecord } from '../../types'
 
@@ -259,10 +260,9 @@ export default function NewBondForm({ company, onSave, isEditable, existingBonds
                   <span className="ml-1 text-emerald-500 text-[10px]">↑ 자동입력</span>
                 )}
               </label>
-              <input
-                type="number" min="0"
+              <NumInput
                 value={form.bondQty}
-                onChange={e => setForm(f => ({ ...f, bondQty: e.target.value }))}
+                onChange={raw => setForm(f => ({ ...f, bondQty: raw }))}
                 placeholder="0"
                 className="w-full border border-gray-200 rounded px-2 py-1.5 text-xs text-right focus:outline-none focus:ring-1 focus:ring-blue-400" />
             </div>
@@ -292,10 +292,9 @@ export default function NewBondForm({ company, onSave, isEditable, existingBonds
                   <span className="ml-1 text-emerald-500 text-[10px]">↑ 자동입력</span>
                 )}
               </label>
-              <input
-                type="number" min="0"
+              <NumInput
                 value={form.acquisition_cost}
-                onChange={e => setForm(f => ({ ...f, acquisition_cost: e.target.value }))}
+                onChange={raw => setForm(f => ({ ...f, acquisition_cost: raw }))}
                 placeholder="0"
                 className="w-full border border-gray-200 rounded px-2 py-1.5 text-xs text-right focus:outline-none focus:ring-1 focus:ring-blue-400" />
             </div>

@@ -4,6 +4,7 @@ import { useAuth } from '../hooks/useAuth'
 import { useDaily } from '../hooks/useDaily'
 import { useFx } from '../hooks/useFx'
 import { fmtKRW, normDate } from '../lib/format'
+import { NumInput } from '../components/common/NumInput'
 import { isTodayBusinessDay } from '../lib/bizDay'
 import { getCompanyNames } from '../hooks/useCompanies'
 import type { DailyRecord, Company, FxCode } from '../types'
@@ -217,9 +218,9 @@ export default function InputPage() {
               ].map(f => (
                 <div key={f.key}>
                   <label className="block text-xs text-gray-400 dark:text-gray-500 mb-1">{f.label}</label>
-                  <input
-                    type="number" min="0" value={form[f.key]}
-                    onChange={e => setField(f.key, e.target.value)}
+                  <NumInput
+                    value={form[f.key]}
+                    onChange={raw => setField(f.key, raw)}
                     placeholder="0"
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:border-slate-600 dark:text-gray-100"
                   />
@@ -235,10 +236,10 @@ export default function InputPage() {
               {FX_FIELDS.map(f => (
                 <div key={f.key}>
                   <label className="block text-xs text-gray-400 dark:text-gray-500 mb-1">{f.label}</label>
-                  <input
-                    type="number" min="0" step="0.01"
+                  <NumInput
+                    decimal
                     value={form[`fx_${f.key.toLowerCase()}` as keyof FormState]}
-                    onChange={e => setField(`fx_${f.key.toLowerCase()}` as keyof FormState, e.target.value)}
+                    onChange={raw => setField(`fx_${f.key.toLowerCase()}` as keyof FormState, raw)}
                     placeholder="0"
                     className="w-full border border-gray-200 rounded-lg px-2 py-2 text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:border-slate-600 dark:text-gray-100"
                   />

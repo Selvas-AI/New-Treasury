@@ -4,6 +4,7 @@ import { useAuth } from '../hooks/useAuth'
 import { useInvestments } from '../hooks/useInvestments'
 import { usePolicyBankLimits } from '../hooks/usePolicyBankLimits'
 import { fmtKRW, calcDday, fmtReturn, returnBadgeClass, calcReturn } from '../lib/format'
+import { NumInput } from '../components/common/NumInput'
 import { getCompanyNames } from '../hooks/useCompanies'
 import type { InvestmentRecord, Company } from '../types'
 
@@ -204,7 +205,7 @@ export default function InvestPage() {
             </div>
             <div>
               <label className="block text-xs text-gray-500 mb-1 dark:text-slate-300">금액 *</label>
-              <input type="number" min="0" value={form.amount} onChange={e => setField('amount', e.target.value)}
+              <NumInput value={form.amount} onChange={raw => setField('amount', raw)}
                 required placeholder="0"
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:border-slate-600 dark:text-gray-100" />
             </div>
@@ -235,8 +236,7 @@ export default function InvestPage() {
             </div>
             <div>
               <label className="block text-xs text-gray-500 mb-1 dark:text-slate-300">취득가액</label>
-              <input type="number" min="0" value={form.acquisition_cost}
-                onChange={e => setField('acquisition_cost', e.target.value)}
+              <NumInput value={form.acquisition_cost} onChange={raw => setField('acquisition_cost', raw)}
                 placeholder="0"
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:border-slate-600 dark:text-gray-100" />
             </div>

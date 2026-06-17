@@ -97,7 +97,11 @@ export default function InvestExecutePopup({ company, onSaved, onClose }: Props)
           <div className="flex items-center gap-3">
             <span className={labelCls}>금액 <span className="text-red-400">*</span></span>
             <input type="text" inputMode="numeric" value={form.amtStr}
-              onChange={e => set('amtStr', e.target.value.replace(/[^\d,]/g, ''))}
+              onChange={e => {
+                const raw = e.target.value.replace(/,/g, '').replace(/[^\d]/g, '')
+                const n = parseInt(raw, 10)
+                set('amtStr', raw === '' ? '' : n.toLocaleString('ko-KR'))
+              }}
               placeholder="투자금액" className={inputCls + ' text-right tabular-nums'} />
           </div>
           <div className="flex items-center gap-3">

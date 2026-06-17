@@ -26,6 +26,35 @@ export function fmtNumber(n: number, digits = 0): string {
   return n.toLocaleString('ko-KR', { maximumFractionDigits: digits })
 }
 
+/** 입력 필드 천단위 콤마 포맷 (정수) — 0이면 빈 문자열 */
+export function fmtInt(val: string | number | null | undefined): string {
+  if (val === null || val === undefined || val === '' || val === 0 || val === '0') return ''
+  const n = typeof val === 'number' ? val : parseInt(String(val).replace(/,/g, ''), 10)
+  if (isNaN(n)) return ''
+  return n.toLocaleString('ko-KR')
+}
+
+/** 입력 필드 천단위 콤마 포맷 (소수점 허용) */
+export function fmtDecimal(val: string | number | null | undefined): string {
+  if (val === null || val === undefined || val === '') return ''
+  const s = String(val).replace(/,/g, '')
+  const dotIdx = s.indexOf('.')
+  if (dotIdx === -1) {
+    const n = parseInt(s, 10)
+    return isNaN(n) || n === 0 ? '' : n.toLocaleString('ko-KR')
+  }
+  const intPart = parseInt(s.slice(0, dotIdx), 10)
+  const decPart = s.slice(dotIdx + 1)
+  return `${isNaN(intPart) ? '0' : intPart.toLocaleString('ko-KR')}.${decPart}`
+}
+
+/** 쉼표 포함 문자열 → 숫자 */
+export function parseNum(s: string | number | null | undefined): number {
+  if (s === null || s === undefined || s === '') return 0
+  if (typeof s === 'number') return s
+  return Number(String(s).replace(/,/g, '')) || 0
+}
+
 /** YYYYMMDD → YYYY-MM-DD 정규화 */
 export function normDate(d: string | null | undefined): string {
   if (!d) return ''
