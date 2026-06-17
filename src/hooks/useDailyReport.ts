@@ -4,7 +4,7 @@
  * 담당: daily_reports 테이블 (1건/법인/날짜)
  * 관련 훅: useDailyReportItems (라인 아이템), useApprovalConfig (결재선 설정)
  */
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { supabase, restInsert, restUpdate, restDelete, restUpsert, withTimeout } from '../lib/supabase'
 import { generateUUID } from '../lib/format'
 import type { Company } from '../types'
@@ -271,6 +271,10 @@ export function useApprovalConfig(company: Company | null) {
       setLoading(false)
     }
   }, [company])
+
+  // company 변경(또는 마운트) 시 자동 조회 — key 재마운트 모델에서 필수.
+  // 이게 없으면 탭 전환 후 config=[] 인 채로 fetch가 호출되지 않아 빈 화면이 됨.
+  useEffect(() => { void fetch() }, [fetch])
 
   const upsert = useCallback(async (
     step: number,
