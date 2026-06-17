@@ -853,6 +853,8 @@ VITE_GAS_API_URL=https://script.google.com/macros/s/AKfycbwZ.../exec
 - 1좌 = 1,000원 면액 기준 → `7514 ÷ 10 = 751.4원/좌`
 
 ### DB 마이그레이션 미적용 (실행 필요)
+- **`docs/db/rls_enable_all.sql`** ⭐ — Supabase Security Advisor `rls_disabled_in_public` 경고 해소. 전 public 테이블 RLS 활성화 + anon/authenticated permissive 정책. **반드시 SQL Editor 실행**. ⚠ permissive라 anon 키 노출 시 데이터 접근은 여전히 가능 → 완전 차단은 authenticated 전용 전환(로드맵) 필요.
+- **`docs/db/daily_report_tables.sql` §8-1** — category CHECK 제약에 신규 항목(`interest_income`/`trade_ap_payment`/`interest_expense`/`enote_payment`) 추가. **미실행 시 해당 입출금 항목 저장이 제약 위반으로 실패**.
 - **`docs/db/user_permissions_migration.sql`** — `treasury_users.allowed_categories` / `action_permissions` 컬럼 (세션13차 세분화 권한). 미실행 시 카테고리/작업 권한 탭 저장이 컬럼 부재로 실패. 읽기는 `null` fallback이라 앱은 정상.
 - **`docs/db/fx_trade_history.sql`** — 외화매매거래 이력 (이전 세션)
 
