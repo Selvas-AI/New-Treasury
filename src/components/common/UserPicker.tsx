@@ -1,7 +1,7 @@
 /**
  * UserPicker — 법인별 사용자 선택 드롭다운
- * 드롭다운을 position:fixed + getBoundingClientRect()로 렌더해
- * 부모 overflow:hidden 에 의한 클리핑을 방지한다.
+ * createPortal + position:fixed 로 어떤 overflow 조상에도 클리핑되지 않음.
+ * 리스트 컨테이너는 Tailwind 대신 인라인 스타일로 height/overflow 보장.
  */
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { createPortal } from 'react-dom'
@@ -54,60 +54,61 @@ export default function UserPicker({ company, value, onChange, placeholder = '�
       })
   }, [company])
 
-  const recalcPos = useCallback(() => {
+  const calcPos = useCallback(() => {
     if (!triggerRef.current) return
     const r = triggerRef.current.getBoundingClientRect()
     setPos({ top: r.bottom + 4, left: r.left, width: r.width })
   }, [])
 
-  function openDropdown() {
-    recalcPos()
-    setQuery('')
-    setOpen(true)
-  }
+  function openDropdown() { calcPos(); setQuery(''); setOpen(true) }
 
-  // 외부 클릭 & 스크롤 닫기
   useEffect(() => {
     if (!open) return
-    function close(e: MouseEvent) {
-      const target = e.target as Node
-      if (triggerRef.current?.contains(target)) return
-      const dropdown = document.getElementById('user-picker-dropdown')
-      if (dropdown?.contains(target)) return
+    function onDown(e: MouseEvent) {
+      const t = e.target as Node
+      if (triggerRef.current?.contains(t)) return
+      if (document.getElementById('userpicker-portal')?.contains(t)) return
       setOpen(false)
     }
-    function onScroll() { recalcPos() }
-    document.addEventListener('mousedown', close)
+    function onScroll() { calcPos() }
+    document.addEventListener('mousedown', onDown)
     window.addEventListener('scroll', onScroll, true)
-    window.addEventListener('resize', recalcPos)
+    window.addEventListener('resize', calcPos)
     return () => {
-      document.removeEventListener('mousedown', close)
+      document.removeEventListener('mousedown', onDown)
       window.removeEventListener('scroll', onScroll, true)
-      window.removeEventListener('resize', recalcPos)
+      window.removeEventListener('resize', calcPos)
     }
-  }, [open, recalcPos])
+  }, [open, calcPos])
 
   const selected = users.find(u => u.user_code === value)
-  const filtered = users.filter(u => {
-    if (!query.trim()) return true
+  const filtered = !query.trim() ? users : users.filter(u => {
     const q = query.toLowerCase()
     return u.name.toLowerCase().includes(q) || u.user_code.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)
   })
 
-  function initials(name: string) { return name.slice(0, 1) }
-
-  function roleCls(role: string) {
-    if (role === 'master') return 'bg-purple-50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300'
-    if (role === 'admin')  return 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
-    if (role === 'editor') return 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-300'
+  function initials(n: string) { return n.slice(0, 1) }
+  function roleCls(r: string) {
+    if (r === 'master') return 'bg-purple-50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300'
+    if (r === 'admin')  return 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+    if (r === 'editor') return 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-300'
     return 'bg-gray-100 text-gray-500 dark:bg-slate-700 dark:text-slate-300'
   }
 
-  const dropdown = open && pos ? createPortal(
+  const portal = open && pos ? createPortal(
     <div
-      id="user-picker-dropdown"
-      style={{ position: 'fixed', top: pos.top, left: pos.left, width: pos.width, zIndex: 9999 }}
-      className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-lg shadow-xl overflow-hidden"
+      id="userpicker-portal"
+      style={{
+        position: 'fixed',
+        top: pos.top,
+        left: pos.left,
+        width: pos.width,
+        zIndex: 99999,
+        boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+        borderRadius: 8,
+        overflow: 'hidden',
+      }}
+      className="bg-white dark:bg-slate-800 dark:border-slate-600"
     >
       {/* 검색 */}
       <div className="px-2.5 py-2 border-b border-gray-100 dark:border-slate-700">
@@ -120,8 +121,8 @@ export default function UserPicker({ company, value, onChange, placeholder = '�
           className="w-full text-xs bg-gray-50 dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded px-2 py-1 text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-400"
         />
       </div>
-      {/* 목록 */}
-      <div className="max-h-52 overflow-y-auto">
+      {/* 목록 — 인라인 스타일로 height/overflow 보장 */}
+      <div style={{ maxHeight: 220, overflowY: 'auto' }}>
         {filtered.length === 0 ? (
           <p className="text-xs text-gray-400 dark:text-slate-500 text-center py-4">
             {query ? '검색 결과가 없습니다' : '해당 법인 사용자가 없습니다'}
@@ -132,14 +133,13 @@ export default function UserPicker({ company, value, onChange, placeholder = '�
             type="button"
             onMouseDown={e => e.preventDefault()}
             onClick={() => { onChange(u.user_code, u.name); setOpen(false); setQuery('') }}
-            className={`w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors ${
-              u.user_code === value ? 'bg-blue-50 dark:bg-blue-900/20' : ''
-            }`}
+            style={{ display: 'flex', width: '100%', alignItems: 'center', gap: 10, padding: '8px 12px', textAlign: 'left', cursor: 'pointer', background: u.user_code === value ? '#eff6ff' : 'transparent' }}
+            className="hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
           >
             <span className="w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 flex items-center justify-center text-xs font-medium shrink-0">
               {initials(u.name)}
             </span>
-            <div className="flex-1 min-w-0">
+            <div style={{ flex: 1, minWidth: 0 }}>
               <div className="text-xs font-medium text-gray-700 dark:text-gray-200 truncate">{u.name}</div>
               <div className="text-[10px] text-gray-400 dark:text-slate-400 truncate font-mono">{u.user_code} · {u.email}</div>
             </div>
@@ -155,7 +155,6 @@ export default function UserPicker({ company, value, onChange, placeholder = '�
 
   return (
     <div className={className}>
-      {/* 트리거 */}
       <button
         ref={triggerRef}
         type="button"
@@ -179,8 +178,7 @@ export default function UserPicker({ company, value, onChange, placeholder = '�
         )}
         <span className="text-gray-400 shrink-0">{open ? '▴' : '▾'}</span>
       </button>
-
-      {dropdown}
+      {portal}
     </div>
   )
 }
