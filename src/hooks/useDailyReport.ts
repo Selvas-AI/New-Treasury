@@ -5,7 +5,7 @@
  * 관련 훅: useDailyReportItems (라인 아이템), useApprovalConfig (결재선 설정)
  */
 import { useState, useCallback } from 'react'
-import { supabase, restGet, restInsert, restUpdate, restDelete, restUpsert, withTimeout } from '../lib/supabase'
+import { supabase, restInsert, restUpdate, restDelete, restUpsert, withTimeout } from '../lib/supabase'
 import { generateUUID } from '../lib/format'
 import type { Company } from '../types'
 
@@ -257,16 +257,14 @@ export function useApprovalConfig(company: Company | null) {
   const fetch = useCallback(async () => {
     if (!company) return
     setLoading(true)
-    setConfig([])
     setError(null)
     try {
       const { data, error: err } = await withTimeout(
-        restGet<ApprovalConfig>('daily_report_approval_config', { company, is_active: true }),
+        supabase.from('daily_report_approval_config').select('*')
+          .eq('company', company).eq('is_active', true).order('step', { ascending: true }),
       )
-      if (err) throw new Error(err.message)
-      const sorted = ((data ?? []) as ApprovalConfig[]).sort((a, b) => a.step - b.step)
-      console.log('[ApprovalConfig] company=', company, 'rows=', sorted)
-      setConfig(sorted)
+      if (err) throw err
+      setConfig((data ?? []) as ApprovalConfig[])
     } catch (e) {
       setError(String(e))
     } finally {
