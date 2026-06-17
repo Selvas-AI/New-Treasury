@@ -1,6 +1,6 @@
 # CLAUDE.md — Selvas Treasury (New-Treasury)
 > 신규 세션 시작 시 이 파일을 먼저 읽어 컨텍스트를 복원하세요.
-> 최종 업데이트: 2026-06-16 (세션13차 — 세분화 권한(메뉴·카테고리·작업) + 자동 로그아웃 원천 차단)
+> 최종 업데이트: 2026-06-17 (세션14차 — 결재선 자동 fetch 원천해결 + 평가손익 유령항목 제거 + 결재선 이름 컬럼)
 
 ---
 
@@ -762,6 +762,53 @@ VITE_GAS_API_URL=https://script.google.com/macros/s/AKfycbwZ.../exec
        lock 을 다시 no-op 으로 되돌리지 말 것(멀티탭 동시 로그아웃 재발).
 검증: preview_eval 로 navigator.locks.query() → held/pending 비어있고,
        새로고침 후 로그인 유지 + 대시보드 정상 렌더 확인.
+```
+
+---
+
+### 2026-06-17 세션 14차 (결재선 버그 원천해결 + 평가손익 유령항목 제거)
+
+#### UserPicker 포털 + InvestPage 외화 합산 (연속 작업)
+- **UserPicker 드롭다운 클리핑 해결**: `createPortal(document.body)` + `position:fixed` 로 overflow:hidden 조상 탈출. **리스트 컨테이너는 Tailwind 대신 인라인 스타일**(`style={{ maxHeight:220, overflowY:'auto' }}`)로 height/overflow 보장 (포털 렌더 시 Tailwind 클래스 불안정). 트리거 `getBoundingClientRect` 기준 위치 계산, 스크롤/리사이즈 재계산, 외부 클릭 감지(`userpicker-portal` 컨테이너 체크)
+- **InvestPage KPI 외화 원화환산**: `useFx().toKRW()` 도입, `toKRWAmt(amount, currency)` 헬퍼로 USD/EUR 정기예금을 `totalAvail`/`totalUnavail` 합계에 원화환산 반영 (기존 외화 누락 수정). `useDashboard.ts` 와 동일 패턴
+
+#### 결재선 설정(OrgChartPage) 안정화 ⭐
+- **[CRITICAL] 탭 전환 후 빈 화면 — 자동 fetch 누락 원천 해결**
+  ```
+  증상: 회사 탭 전환 후 돌아오면 결재선이 비어 보이고, '추가' 하면
+        기존 저장 데이터가 되살아남(유일 트리거가 upsert 내부 await fetch()).
+  원인: key={activeCompany} 재마운트 모델에서 ApprovalConfigPanel /
+        useApprovalConfig 어디에도 마운트 시 fetch() 호출이 없었음.
+        → 재마운트 시 config=[] 인 채로 조회가 일어나지 않아 빈 화면.
+  해결: useApprovalConfig 훅에 useEffect(() => void fetch(), [fetch]) 추가.
+        company 변경/마운트 시 항상 자동 조회.
+  ```
+- **직전 디버그 변경 정리(같은 버그 우회 시도였음)**:
+  - `setConfig([])` 제거 — 탭 전환마다 즉시 빈 배열 초기화가 "비어 보임"을 악화시킴
+  - 결재선 fetch `restGet`(5s abort) → `supabase.from().select()` 복원 (콜드 연결 abort로 빈 상태 고정되는 문제 차단)
+  - 디버그 `console.log` 제거
+- **결재선 테이블에 '이름' 컬럼 추가**: 단계/직책/결재자코드/관리 → **단계/이름/직책/결재자코드/관리**. `treasury_users` 에서 `user_code→name` 매핑 조회해 표시 (미매핑 시 `—`)
+
+#### [CRITICAL] 평가변동 0 복귀 종목의 유령 평가손익 항목 제거 ⭐
+```
+증상: UltraSight Inc. 등 평가액 변동이 없는 종목이 전액(취득가)을
+      '투자자산평가' 출금으로 계속 집계됨.
+원인: 지분/국채 평가손익 자동기재 effect(DailyReportPage)가 '현재 평가변동이
+      있는' 종목만 candidates로 필터 → 변동이 0으로 돌아간 종목은 candidates에서
+      빠짐. 그러나 정리 로직은 동일 memo 중복 제거만 할 뿐, 더 이상 후보가
+      아닌 과거 @auto 항목을 삭제하지 않음. 게다가 if(!candidates.length) return
+      조기 반환으로 변동이 모두 0이면 정리 자체가 미실행.
+      → 과거(prev 평가액=0/누락 시점)에 생성된 @auto:UltraSight Inc.
+        = 1,378,000,000 항목이 데이터 정상화 후에도 유령으로 잔존.
+해결(지분·국채 effect 양쪽):
+  - 조기 반환 조건을 (후보 없음 && 일보 없음) 으로 완화 — 일보가 있으면
+    후보가 없어도 stale 정리를 위해 진행. 신규 일보 생성은 후보 있을 때만.
+  - 현재 유효 후보(@auto 키 집합)에 없는 자동항목을 삭제하는 로직 추가.
+    지분 effect는 @auto:bond:% 를 건너뛰고(국채 전담), 국채 effect는
+    @auto:bond:{label} 자기 키만 정리.
+  - 정리는 해당 일보를 다시 열 때 자동 실행됨.
+금지: candidates 필터만 보고 insert/update만 하지 말 것 — 후보에서 빠진
+      과거 @auto 항목의 회수(삭제) 경로를 항상 함께 둘 것.
 ```
 
 ---
