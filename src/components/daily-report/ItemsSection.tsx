@@ -108,9 +108,9 @@ interface Props {
 
 function fmtAmt(n: number, isFx = false): string {
   if (n === 0) return ''
-  if (isFx && !Number.isInteger(n)) {
-    // 외화: 소수점 최대 4자리 표시, 불필요한 trailing zero 제거
-    return n.toLocaleString('ko-KR', { maximumFractionDigits: 4 })
+  if (isFx) {
+    // 외화: 소수점 최대 2자리 표시, trailing zero 제거
+    return n.toLocaleString('ko-KR', { maximumFractionDigits: 2 })
   }
   return Math.round(n).toLocaleString('ko-KR')
 }
@@ -316,11 +316,24 @@ export default function ItemsSection({
                     autoFocus
                     value={editAmt}
                     onChange={e => {
-                      const raw = e.target.value
-                      const cleaned = isFxCurrency(item.currency)
-                        ? raw.replace(/[^\d.,]/g, '')
-                        : raw.replace(/[^\d,]/g, '')
-                      setEditAmt(cleaned)
+                      const raw = e.target.value.replace(/,/g, '')
+                      if (isFxCurrency(item.currency)) {
+                        if (raw !== '' && !/^\d*\.?\d{0,2}$/.test(raw)) return
+                        const dotIdx = raw.indexOf('.')
+                        if (dotIdx === -1) {
+                          const n = parseInt(raw, 10)
+                          setEditAmt(raw === '' ? '' : n.toLocaleString('ko-KR'))
+                        } else {
+                          const intStr = raw.slice(0, dotIdx)
+                          const n = parseInt(intStr, 10)
+                          const intFmt = intStr === '' ? '0' : (isNaN(n) ? '0' : n.toLocaleString('ko-KR'))
+                          setEditAmt(intFmt + '.' + raw.slice(dotIdx + 1))
+                        }
+                      } else {
+                        if (raw !== '' && !/^\d*$/.test(raw)) return
+                        const n = parseInt(raw, 10)
+                        setEditAmt(raw === '' ? '' : n.toLocaleString('ko-KR'))
+                      }
                     }}
                     onBlur={() => void commitEdit(item)}
                     onKeyDown={e => {
@@ -438,15 +451,20 @@ export default function ItemsSection({
                       onChange={e => {
                         const raw = e.target.value.replace(/,/g, '')
                         if (isFxCurrency(draft.currency)) {
-                          if (raw !== '' && !/^\d*\.?\d*$/.test(raw)) return
+                          // 외화: 소수점 최대 2자리 허용
+                          if (raw !== '' && !/^\d*\.?\d{0,2}$/.test(raw)) return
                           const dotIdx = raw.indexOf('.')
                           let formatted: string
                           if (dotIdx === -1) {
                             const n = parseInt(raw, 10)
                             formatted = isNaN(n) ? '' : n.toLocaleString('ko-KR')
                           } else {
-                            const n = parseInt(raw.slice(0, dotIdx), 10)
-                            formatted = (isNaN(n) ? '0' : n.toLocaleString('ko-KR')) + '.' + raw.slice(dotIdx + 1)
+                            // 정수부: 천단위 콤마, 소수부: 그대로 보존
+                            const intStr = raw.slice(0, dotIdx)
+                            const decStr = raw.slice(dotIdx + 1)
+                            const n = parseInt(intStr, 10)
+                            const intFmt = intStr === '' ? '0' : (isNaN(n) ? '0' : n.toLocaleString('ko-KR'))
+                            formatted = intFmt + '.' + decStr
                           }
                           setDraft(d => d ? { ...d, amtStr: raw === '' ? '' : formatted } : d)
                         } else {
