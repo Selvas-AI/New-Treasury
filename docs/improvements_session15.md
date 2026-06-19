@@ -112,7 +112,7 @@
 | **TO-BE** | 공유 헬퍼 **`src/lib/issueLink.ts`**(`issueSourceUrl`/`issueSourceLabel`) 신설. IssueDrawer는 이를 사용(중복 제거), **IssueHistoryPage 스레드에 "원천 바로가기 ↗" 추가**. policy_ 매핑 포함. |
 | **변경된 동작** | 이슈 상세에서 운전자금/차입금/종목/자금정책 원천으로 이동 가능. |
 | **파일** | `src/lib/issueLink.ts`(신규), `IssueDrawer.tsx`, `IssueHistoryPage.tsx` |
-| **남은 부분** | 역방향(원천 레코드 → 이슈 스레드) 링크(Loans/Equity 상세 행)는 후속(표면적 넓음). |
+| **역방향 (추가됨)** | LoansPage 차입금 행에 **🔔 이슈** 링크(→ `/issue-history/loan_{id}`) 추가. 차입금이 만기 이슈의 주 발생원이라 우선 적용. EquityPage(행 클릭=패널 토글 충돌 우려)는 후속. |
 
 ---
 

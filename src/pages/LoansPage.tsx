@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect, useMemo } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, Link } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { usePageCompany } from '../hooks/usePageCompany'
 import { useLoans } from '../hooks/useLoans'
@@ -349,20 +349,26 @@ export default function LoansPage() {
                             {tab === 'active' && <DdayBadge dday={dday} />}
                           </td>
                           <td className="py-2.5 whitespace-nowrap">
-                            {isEditable && (
-                              <div className="flex gap-1.5">
-                                <button onClick={() => loadRecord(rec)}
-                                  className="text-xs text-blue-500 hover:text-blue-700">수정</button>
-                                {tab === 'active'
-                                  ? <button onClick={() => handleSetActive(rec.id, false)}
-                                      className="text-xs text-emerald-500 hover:text-emerald-700">상환</button>
-                                  : <button onClick={() => handleSetActive(rec.id, true)}
-                                      className="text-xs text-amber-500 hover:text-amber-700">복원</button>
-                                }
-                                <button onClick={() => handleDelete(rec.id)}
-                                  className="text-xs text-red-400 hover:text-red-600">삭제</button>
-                              </div>
-                            )}
+                            <div className="flex gap-1.5 items-center">
+                              {/* 역방향 링크(D4): 차입금 → 이슈 스레드 */}
+                              <Link to={`/issue-history/loan_${rec.id}`}
+                                title="이 차입금의 이슈 보기"
+                                className="text-xs text-gray-400 hover:text-blue-500">🔔 이슈</Link>
+                              {isEditable && (
+                                <>
+                                  <button onClick={() => loadRecord(rec)}
+                                    className="text-xs text-blue-500 hover:text-blue-700">수정</button>
+                                  {tab === 'active'
+                                    ? <button onClick={() => handleSetActive(rec.id, false)}
+                                        className="text-xs text-emerald-500 hover:text-emerald-700">상환</button>
+                                    : <button onClick={() => handleSetActive(rec.id, true)}
+                                        className="text-xs text-amber-500 hover:text-amber-700">복원</button>
+                                  }
+                                  <button onClick={() => handleDelete(rec.id)}
+                                    className="text-xs text-red-400 hover:text-red-600">삭제</button>
+                                </>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       )
