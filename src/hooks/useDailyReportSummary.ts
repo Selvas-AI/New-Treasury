@@ -10,6 +10,7 @@ import { supabase } from '../lib/supabase'
 import { useFx } from './useFx'
 import { prevBizDay } from '../lib/bizDay'
 import { calcBondValue } from '../lib/format'
+import { opCashKRW } from '../lib/treasuryCalc'
 import type { DailyRecord, InvestmentRecord, LoanRecord, EquityRecord, Company, FxCode } from '../types'
 
 export interface ReportItem {
@@ -311,10 +312,7 @@ export function useDailyReportSummary() {
   // ── 운전자금 KRW 소계 (안A: fx_krw 사전계산값 사용 — 대시보드와 동일 공식) ──
   // fx_krw = InputPage 저장 시 그날 환율로 계산된 외화 원화환산 합계 (고정값)
   // FX 행별 표시는 fx_usd 등 raw 값을 그대로 사용하므로 표시에는 영향 없음
-  const opTotal = useCallback((d: DailyRecord | null): number => {
-    if (!d) return 0
-    return (d.krw_demand ?? 0) + (d.krw_govt ?? 0) + (d.krw_mmda ?? 0) + (d.fx_krw ?? 0)
-  }, [])
+  const opTotal = useCallback((d: DailyRecord | null): number => opCashKRW(d), [])
 
   // ── 지분·장기투자 집계 (안B) ──────────────────────────────
   // 대시보드 불가용자산 = equityUnavail + investUnavail + bondUnavail

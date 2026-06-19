@@ -13,6 +13,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { supabase } from '../lib/supabase'
 import { prevBizDay, snapToBizDay, nextBizDay, todayStr, isBusinessDay } from '../lib/bizDay'
+import { opCashKRW } from '../lib/treasuryCalc'
 import { useDailyReport, useApprovalConfig } from '../hooks/useDailyReport'
 import { useDailyReportSummary, type ItemSums } from '../hooks/useDailyReportSummary'
 import { useDailyReportItems } from '../hooks/useDailyReportItems'
@@ -663,13 +664,9 @@ export default function DailyReportPage() {
     const krwAmt = (i: { amount: number; amount_krw: number | null }) => i.amount_krw ?? i.amount
     const inTotal  = itemHook.items.filter(i => i.direction === 'in'  && i.category !== 'invest_eval_in' ).reduce((s, i) => s + krwAmt(i), 0)
     const outTotal = itemHook.items.filter(i => i.direction === 'out' && i.category !== 'invest_eval_out').reduce((s, i) => s + krwAmt(i), 0)
-    const opKRW = (d: DailyRecord | null) => !d ? 0 :
-      (d.krw_demand ?? 0) + (d.krw_govt ?? 0) + (d.krw_mmda ?? 0)
-      + summary.toKRW(d.fx_usd ?? 0, 'USD') + summary.toKRW(d.fx_eur ?? 0, 'EUR')
-      + summary.toKRW(d.fx_jpy ?? 0, 'JPY') + summary.toKRW(d.fx_gbp ?? 0, 'GBP')
-      + summary.toKRW(d.fx_cny ?? 0, 'CNY')
-    const prevKRW = opKRW(summary.prevDaily)
-    const currKRW = opKRW(summary.currDaily)
+    // 운전자금 잔액 = SSOT opCashKRW(저장값 fx_krw) → 자금현황 테이블 Δ·대시보드와 동일 기준
+    const prevKRW = opCashKRW(summary.prevDaily)
+    const currKRW = opCashKRW(summary.currDaily)
     const delta   = currKRW - prevKRW
     const diff    = inTotal - outTotal - delta
     const hasData = inTotal > 0 || outTotal > 0

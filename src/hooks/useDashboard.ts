@@ -6,6 +6,7 @@ import { useEquities } from './useEquities'
 import { useIssues, makeIssueKey } from './useIssues'
 import { useFx } from './useFx'
 import { calcReturn, calcBondValue, calcDday } from '../lib/format'
+import { opCashKRW, toKRWAmount, bondValueOf } from '../lib/treasuryCalc'
 import { isTodayBusinessDay } from '../lib/bizDay'
 
 export interface BondSummary {
@@ -74,17 +75,12 @@ export function useDashboard() {
 
   // ─── 워터폴 + KPI ────────────────────────────────────────
   const kpi = useMemo<KpiData>(() => {
-    // 외화 운용자금 KRW 환산 (currency='USD' 등은 fx.toKRW로 변환)
-    const toKRWAmt = (amount: number, currency: string): number => {
-      if (!currency || currency === 'KRW') return amount
-      return fx.toKRW(amount, currency as Parameters<typeof fx.toKRW>[1])
-    }
+    // 외화 운용자금 KRW 환산 (SSOT) — currency='USD' 등은 fx.toKRW로 변환
+    const toKRWAmt = (amount: number, currency: string): number =>
+      toKRWAmount(amount, currency, fx.toKRW)
 
-    // 운전자금
-    const d = latestDaily
-    const operatingCash = d
-      ? (d.krw_demand || 0) + (d.krw_govt || 0) + (d.krw_mmda || 0) + (d.fx_krw || 0)
-      : 0
+    // 운전자금 (SSOT: 저장값 fx_krw 기준)
+    const operatingCash = opCashKRW(latestDaily)
 
     // 운용자금 (외화 포함 KRW 환산)
     const investAvail = latestInvests
@@ -95,24 +91,14 @@ export function useDashboard() {
       .filter(i => i.product !== '국채' && i.available === '불가용')
       .reduce((s, i) => s + toKRWAmt(i.amount || 0, i.currency || 'KRW'), 0)
 
-    // 국채
+    // 국채 (SSOT: bondValueOf)
     const bondAvail = latestInvests
       .filter(i => i.product === '국채' && i.available === '가용')
-      .reduce((s, i) => {
-        const v = i.bondQty && i.bondPrice
-          ? calcBondValue(i.bondQty, i.bondPrice)
-          : (i.amount || 0)
-        return s + v
-      }, 0)
+      .reduce((s, i) => s + bondValueOf(i), 0)
 
     const bondUnavail = latestInvests
       .filter(i => i.product === '국채' && i.available === '불가용')
-      .reduce((s, i) => {
-        const v = i.bondQty && i.bondPrice
-          ? calcBondValue(i.bondQty, i.bondPrice)
-          : (i.amount || 0)
-        return s + v
-      }, 0)
+      .reduce((s, i) => s + bondValueOf(i), 0)
 
     // 차입금
     const totalLoan = loans.data.reduce((s, l) => s + (l.amount || 0), 0)
@@ -232,8 +218,7 @@ export function useDashboard() {
   // ─── 전일 운전자금 (전일 대비 표시용) ────────────────────
   const prevOperatingCash = useMemo(() => {
     if (daily.data.length < 2) return null
-    const prev = daily.data[1]   // 날짜 내림차순 정렬 → [0]=오늘, [1]=전일
-    return (prev.krw_demand || 0) + (prev.krw_govt || 0) + (prev.krw_mmda || 0) + (prev.fx_krw || 0)
+    return opCashKRW(daily.data[1])   // 날짜 내림차순 정렬 → [0]=오늘, [1]=전일
   }, [daily.data])
 
   // ─── 지분 수익률 ─────────────────────────────────────────

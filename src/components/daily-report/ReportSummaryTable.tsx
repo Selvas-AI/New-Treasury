@@ -13,6 +13,7 @@
  */
 import { useCallback } from 'react'
 import { Link } from 'react-router-dom'
+import { opCashKRW } from '../../lib/treasuryCalc'
 import type { DailyRecord } from '../../types'
 import type { InvestGroup, LoanGroup, EquityGroup, ItemSums } from '../../hooks/useDailyReportSummary'
 import type { FxCode } from '../../types'
@@ -334,11 +335,9 @@ export default function ReportSummaryTable({
     return toKRW(raw, code)
   }, [toKRW])
 
-  const opKRW = useCallback((d: DailyRecord | null): number => {
-    if (!d) return 0
-    const fxSum = FX_CODES.reduce((s, code) => s + fxKRW(d, code), 0)
-    return (d.krw_demand ?? 0) + (d.krw_govt ?? 0) + (d.krw_mmda ?? 0) + fxSum
-  }, [fxKRW])
+  // 운전자금 원화합계 = SSOT opCashKRW(저장값 fx_krw 기준) → 대시보드 가용자금과 일치.
+  // (FX 행별 '원화환산' 열은 fxKRW로 현재환율 참고치를 별도 표시 — 합계의 권위값은 소계)
+  const opKRW = useCallback((d: DailyRecord | null): number => opCashKRW(d), [])
 
   const prevOpKRW    = opKRW(prevDaily)
   const currOpKRW    = opKRW(currDaily)

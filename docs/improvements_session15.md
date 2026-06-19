@@ -49,13 +49,25 @@
 
 ---
 
+### 6. [D1·P1] 집계 단일 진실원천(SSOT) 통합 ⭐
+| 구분 | 내용 |
+|------|------|
+| **AS-IS** | 운전자금 원화합계·외화환산·국채평가 계산이 `useDashboard`/`useDailyReportSummary`/`ReportSummaryTable`/`DailyReportPage`(검증)/`FlowDetailDrawer`/`InvestPage`에 **각자 복제**. 특히 운전자금 외화: 대시보드·`opTotal`은 **저장값 `fx_krw`**, 자금일보 표시·검증은 **현재환율 재계산** → 환율 변동 시 **"자금일보 총합계 ≠ 대시보드 가용자금"** (UI 푸터 "일치해야 합니다" 위반). |
+| **TO-BE** | 순수 계산 모듈 **`src/lib/treasuryCalc.ts`** 신설(`opCashKRW`/`toKRWAmount`/`bondValueOf`/`investValueKRW`). 모든 소비처를 이 함수로 통일. **운전자금 원화합계는 전부 저장값 `fx_krw` 기준**으로 일원화 → 대시보드 가용자금 = 자금일보 운전자금 소계/총합계 = 검증식 운전자금 Δ **동일 공식**. |
+| **변경된 동작** | 자금일보 **운전자금 소계·자금 총합계·검증식**이 현재환율 재계산 → **저장 `fx_krw` 기준**으로 변경. 과거 일보(입력일과 환율이 다른 경우)에서 기존 대비 외화 환산분이 입력시점 환율로 표시됨(더 정확). FX 행별 '원화환산' 열은 현재환율 참고치로 유지(권위값은 소계). |
+| **확인 방법** | 같은 날짜에 대시보드 가용자금 합계와 자금일보 '자금 총합계'가 일치하는지 비교. 환율 변동 후에도 두 화면이 동일. |
+| **파일** | `src/lib/treasuryCalc.ts`(신규), `useDashboard.ts`, `useDailyReportSummary.ts`, `ReportSummaryTable.tsx`, `DailyReportPage.tsx`, `FlowDetailDrawer.tsx`, `InvestPage.tsx` |
+| **남은 통합** | 운용자금 그룹핑(예금성/비예금성 vs 가용/불가용)은 화면별 표현 목적이 달라 미통합 — 값 프리미티브만 SSOT화. 국채 평가도 `bondValueOf`로 통일(자금일보 비예금성 그룹의 통화환산 폴백은 보수적으로 유지). |
+
+---
+
 ## 🔜 다음 단계 (대규모 — 별도 진행 권장)
 
 다음 항목은 영향 범위가 넓어(다수 파일·아키텍처 변경) 별도 설계·검증 단위로 분리합니다.
 
 | 항목 | 사유 | 제안 |
 |------|------|------|
-| **D1 집계 SSOT 통합** | `useDashboard` ↔ `useDailyReportSummary`가 가용자금·평가액을 각자 계산. 통합 시 광범위 회귀 테스트 필요 | 공통 계산 모듈(셀렉터) 설계 → 점진 이관 |
+| ~~D1 집계 SSOT 통합~~ | ✅ 완료 (위 6번 항목) | — |
 | **D2 회사 컨텍스트 일원화** | `currentCompany`(auth) + URL param 이중 관리가 전 페이지에 산재. zustand 전역화는 모든 페이지 영향 | zustand 스토어 도입 + 페이지별 순차 이관 |
 | **B2 GAS 헬스/폴백** | 시세·환율·공휴일·ECOS 단일 의존. 폴백/상태표시 추가 | 연결상태 인디케이터 + 캐시 폴백 |
 | **C1 아이콘 마이그레이션** | 이모지 → Tabler Icons. 45+ 파일 영향 | 컴포넌트 래퍼 도입 후 점진 치환 |

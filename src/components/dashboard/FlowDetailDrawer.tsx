@@ -1,10 +1,11 @@
 ﻿import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { fmtKRW, calcDday, calcBondValue } from '../../lib/format'
+import { toKRWAmount } from '../../lib/treasuryCalc'
 import { useFx } from '../../hooks/useFx'
 import type { FlowItemKey } from './WaterfallCard'
 import type { KpiData } from '../../hooks/useDashboard'
-import type { DailyRecord, InvestmentRecord, LoanRecord, FxCode } from '../../types'
+import type { DailyRecord, InvestmentRecord, LoanRecord } from '../../types'
 
 interface EquityItem {
   name: string
@@ -52,11 +53,9 @@ export default function FlowDetailDrawer({ itemKey, kpi, fxKrw: fxKrwProp, lates
     return () => document.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  // 외화 → 원화 환산 (useDashboard.kpi 계산과 동일 로직)
-  const toKRWAmt = (amount: number, currency: string): number => {
-    if (!currency || currency === 'KRW') return amount
-    return fx.toKRW(amount, currency as FxCode)
-  }
+  // 외화 → 원화 환산 (SSOT — useDashboard.kpi 계산과 동일 함수)
+  const toKRWAmt = (amount: number, currency: string): number =>
+    toKRWAmount(amount, currency, fx.toKRW)
 
   if (!itemKey) return null
 
