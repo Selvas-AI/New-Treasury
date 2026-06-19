@@ -1,7 +1,8 @@
 ﻿import { useState, useEffect, useMemo } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, Link } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useIssues } from '../hooks/useIssues'
+import { issueSourceUrl, issueSourceLabel } from '../lib/issueLink'
 import type { IssueComment, IssueStatus } from '../types'
 
 
@@ -215,6 +216,19 @@ export default function IssueHistoryPage() {
                 {/* 코멘트 스레드 */}
                 {isOpen && (
                   <div className="border-t border-gray-100 dark:border-slate-700 px-5 pb-5 space-y-4">
+
+                    {/* 원천 레코드 바로가기 (D4) */}
+                    {(() => {
+                      const url = issueSourceUrl(group.key, currentCompany)
+                      return url ? (
+                        <div className="pt-3">
+                          <Link to={url}
+                            className="inline-flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 hover:underline">
+                            {issueSourceLabel(group.key)} <span className="text-[10px]">↗</span>
+                          </Link>
+                        </div>
+                      ) : null
+                    })()}
 
                     {/* 상태 변경 버튼 */}
                     {isEditable && (

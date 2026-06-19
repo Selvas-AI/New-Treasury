@@ -105,6 +105,17 @@
 
 ---
 
+### 11. [D4·P3] 이슈 ↔ 원천 레코드 링크 표준화
+| 구분 | 내용 |
+|------|------|
+| **AS-IS** | 이슈→원천 링크 매핑이 `IssueDrawer`(대시보드 팝업)에만 `buildLinkUrl`로 존재. **IssueHistoryPage엔 원천 바로가기 없음**. policy_ 키 미지원. |
+| **TO-BE** | 공유 헬퍼 **`src/lib/issueLink.ts`**(`issueSourceUrl`/`issueSourceLabel`) 신설. IssueDrawer는 이를 사용(중복 제거), **IssueHistoryPage 스레드에 "원천 바로가기 ↗" 추가**. policy_ 매핑 포함. |
+| **변경된 동작** | 이슈 상세에서 운전자금/차입금/종목/자금정책 원천으로 이동 가능. |
+| **파일** | `src/lib/issueLink.ts`(신규), `IssueDrawer.tsx`, `IssueHistoryPage.tsx` |
+| **남은 부분** | 역방향(원천 레코드 → 이슈 스레드) 링크(Loans/Equity 상세 행)는 후속(표면적 넓음). |
+
+---
+
 ## 🔜 다음 단계 (대규모 — 별도 진행 권장)
 
 다음 항목은 영향 범위가 넓어(다수 파일·아키텍처 변경) 별도 설계·검증 단위로 분리합니다.

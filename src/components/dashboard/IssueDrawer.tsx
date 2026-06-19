@@ -1,6 +1,7 @@
 ﻿import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
+import { issueSourceUrl } from '../../lib/issueLink'
 import type { IssueItem } from '../../hooks/useDashboard'
 import type { IssueStatus } from '../../types'
 
@@ -23,12 +24,6 @@ const STATUS_LABEL: Record<IssueStatus, string> = {
   open: '미조치', review: '검토중', done: '완료',
 }
 
-function buildLinkUrl(key: string, company: string | null): string | null {
-  if (key === 'input_daily') return `/input/${company ?? ''}`
-  if (key.startsWith('loan_')) return `/loans/${company ?? ''}/${key.replace('loan_', '')}`
-  if (key.startsWith('equity_')) return `/equity/${company ?? ''}/${encodeURIComponent(key.replace('equity_', ''))}`
-  return null
-}
 
 export default function IssueDrawer({ open, issues, activeKey, onStatusChange, onHover, onFocus, onClose }: Props) {
   const navigate = useNavigate()
@@ -88,7 +83,7 @@ export default function IssueDrawer({ open, issues, activeKey, onStatusChange, o
           <div className="custom-scrollbar overflow-y-auto flex-1 min-h-0 px-3 py-2 space-y-1.5">
             {issues.map(issue => {
               const isActive = activeKey === issue.key
-              const linkUrl  = buildLinkUrl(issue.key, currentCompany)
+              const linkUrl  = issueSourceUrl(issue.key, currentCompany)
               return (
                 <div
                   key={issue.key}
