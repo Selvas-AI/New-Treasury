@@ -322,6 +322,11 @@ export default function Sidebar({ collapsed, onCollapse, onNavClick }: Props) {
               </div>
             ) : (
               <div className="space-y-1.5">
+                {/* B2: GAS 환율 연결 끊김 명시 (시세·환율 GAS 단일 의존) */}
+                <div className="flex items-center gap-1.5 mb-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shrink-0" />
+                  <span className="text-xs text-red-400">환율 연결 끊김</span>
+                </div>
                 {FX_CODES.map(code => (
                   <div key={code} className="flex justify-between items-center">
                     <span className="text-xs text-gray-600 dark:text-slate-300">{code}</span>
@@ -389,7 +394,10 @@ export default function Sidebar({ collapsed, onCollapse, onNavClick }: Props) {
                     })}
                   </div>
                 ) : (
-                  <p className="text-xs text-gray-600 text-center py-1">데이터 없음</p>
+                  <div className="flex items-center justify-center gap-1.5 py-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shrink-0" />
+                    <span className="text-xs text-red-400">환율 연결 끊김</span>
+                  </div>
                 )}
               </div>
             )}
