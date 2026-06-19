@@ -54,7 +54,7 @@ interface Props {
 
 export default function TopBar({ onMenuClick }: Props) {
   const { user, currentCompany, setCurrentCompany, logout } = useAuth()
-  const { tickers, loading, lastAt } = useStockTicker()
+  const { tickers, loading, lastAt, error } = useStockTicker()
   const { dark, toggle: toggleDark } = useDarkMode()
   const { names: companyNames } = useCompanies()
   const navigate = useNavigate()
@@ -135,6 +135,16 @@ export default function TopBar({ onMenuClick }: Props) {
           <div className="flex items-center gap-2 animate-pulse px-2 h-full">
             <div className="h-3 w-24 bg-gray-200 dark:bg-slate-700 rounded" />
             <div className="h-3 w-20 bg-gray-200 dark:bg-slate-700 rounded" />
+          </div>
+        )}
+        {/* GAS 시세 연결 끊김 표시 (B2) — 시세·환율이 GAS 단일 의존이라 끊김을 즉시 인지 */}
+        {!loading && !hasPrices && error && (
+          <div
+            className="flex items-center gap-1.5 px-2 h-full"
+            title={`실시간 시세 연결 실패: ${error}. 잠시 후 자동 재시도합니다.`}
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shrink-0" />
+            <span className="text-[11px] text-red-500 dark:text-red-400 whitespace-nowrap">시세 연결 끊김</span>
           </div>
         )}
       </div>
