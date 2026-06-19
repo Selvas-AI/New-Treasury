@@ -5,6 +5,7 @@ import { useInvestments } from '../hooks/useInvestments'
 import { usePolicyBankLimits } from '../hooks/usePolicyBankLimits'
 import { useFx } from '../hooks/useFx'
 import { usePageCompany } from '../hooks/usePageCompany'
+import { useToast } from '../contexts/ToastProvider'
 import { toKRWAmount } from '../lib/treasuryCalc'
 import { fmtKRW, calcDday, fmtReturn, returnBadgeClass, calcReturn } from '../lib/format'
 import { NumInput } from '../components/common/NumInput'
@@ -31,6 +32,7 @@ export default function InvestPage() {
   const { id: paramId } = useParams<{ id?: string }>()
   const { canEdit, canAction } = useAuth()
   const { company: currentCompany } = usePageCompany()
+  const toast = useToast()
   const invest = useInvestments()
   const fx = useFx()
   const bankMaster = usePolicyBankLimits(currentCompany)
@@ -106,9 +108,10 @@ export default function InvestPage() {
     }
     const err = await invest.save(record)
     setSaving(false)
-    if (err) { setError(err); return }
+    if (err) { setError(err); toast.error(`운용자금 저장 실패: ${err}`); return }
     setSuccess(true)
     setTimeout(() => setSuccess(false), 2000)
+    toast.success(editId ? '운용자금이 수정되었습니다' : '운용자금이 등록되었습니다')
     resetForm()
   }
 

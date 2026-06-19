@@ -2,6 +2,7 @@
 import { useParams, Link } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { usePageCompany } from '../hooks/usePageCompany'
+import { useToast } from '../contexts/ToastProvider'
 import { useLoans } from '../hooks/useLoans'
 import { fmtKRW, calcDday } from '../lib/format'
 import { NumInput } from '../components/common/NumInput'
@@ -36,6 +37,7 @@ export default function LoansPage() {
   const { id: paramId } = useParams<{ id?: string }>()
   const { canEdit, canAction } = useAuth()
   const { company: currentCompany } = usePageCompany()
+  const toast = useToast()
   const loans = useLoans()
 
   const [tab, setTab]         = useState<'active' | 'inactive'>('active')
@@ -109,9 +111,10 @@ export default function LoansPage() {
 
     const err = await loans.save(record)
     setSaving(false)
-    if (err) { setError(err); return }
+    if (err) { setError(err); toast.error(`차입금 저장 실패: ${err}`); return }
     setSuccess(true)
     setTimeout(() => setSuccess(false), 2000)
+    toast.success(editId ? '차입금이 수정되었습니다' : '차입금이 등록되었습니다')
     resetForm()
   }
 

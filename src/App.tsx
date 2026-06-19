@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import AuthProvider from './contexts/AuthContext'
 import IssueCountProvider from './contexts/IssueCountProvider'
+import { ToastProvider } from './contexts/ToastProvider'
 import Layout from './components/Layout'
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
@@ -39,6 +40,7 @@ export default function App() {
   useHolidays()
   return (
     <AuthProvider>
+      <ToastProvider>
       <IssueCountProvider>
       <BrowserRouter basename="/New-Treasury">
         <Routes>
@@ -121,6 +123,7 @@ export default function App() {
         </Routes>
       </BrowserRouter>
       </IssueCountProvider>
+      </ToastProvider>
     </AuthProvider>
   )
 }
