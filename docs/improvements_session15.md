@@ -132,10 +132,11 @@
 |------|------|
 | **AS-IS** | 페이지마다 `setError`/`setSuccess` 후 표시 방식이 제각각(인라인 배너 등), 일관된 알림 부재. |
 | **TO-BE** | 전역 **`ToastProvider`**(`src/contexts/ToastProvider.tsx`) + `useToast()` 신설 — 우상단 스택, 성공/실패/안내 타입, 자동 소멸(3.5s)·클릭 닫기·다크모드. App 최상위 마운트. **Invest/Loans 저장 성공·실패**에 우선 적용. |
-| **변경된 동작** | 운용자금/차입금 저장 시 토스트 알림. 기존 인라인 표시는 유지(비파괴적). |
-| **확인 방법** | 운용자금/차입금 등록·수정 시 우상단 토스트, 실패 시 빨간 토스트. |
-| **파일** | `src/contexts/ToastProvider.tsx`(신규), `App.tsx`, `InvestPage.tsx`, `LoansPage.tsx` |
-| **남은 부분** | 나머지 페이지(Input/Equity/admin 등) `setError`→토스트 점진 적용은 후속(인프라는 완비). 앱 부팅 정상 확인(미리보기). |
+| **변경된 동작** | 운전자금/운용자금/차입금 저장·삭제 시 토스트 알림. 기존 인라인 표시는 유지(비파괴적). |
+| **확인 방법** | 운전/운용/차입 등록·수정·삭제 시 우상단 토스트, 실패 시 빨간 토스트. |
+| **파일** | `src/contexts/ToastProvider.tsx`(신규), `App.tsx`, `InputPage.tsx`, `InvestPage.tsx`, `LoansPage.tsx` |
+| **남은 부분** | Equity(자식 폼)·admin 등 `setError`→토스트 점진 적용은 후속(인프라 완비). 앱 부팅 정상 확인(미리보기). |
+| **부수 발견** | InputPage 는 D2 회사 컨텍스트 일원화(`usePageCompany`) 미적용 상태 — 후속 정리 대상(`remaining_work_plan.md` 기록). |
 
 ---
 

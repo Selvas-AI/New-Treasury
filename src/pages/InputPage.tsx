@@ -1,6 +1,7 @@
 ﻿import { useState, useEffect, useMemo } from 'react'
 import { useParams } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
+import { useToast } from '../contexts/ToastProvider'
 import { useDaily } from '../hooks/useDaily'
 import { useFx } from '../hooks/useFx'
 import { fmtKRW, normDate } from '../lib/format'
@@ -38,6 +39,7 @@ export default function InputPage() {
   const { user, currentCompany, setCurrentCompany, canEdit, canAction } = useAuth()
   const { data, loading, upsert, remove } = useDaily()
   const fx = useFx()
+  const toast = useToast()
 
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [editId, setEditId] = useState<string | null>(null)
@@ -145,12 +147,15 @@ export default function InputPage() {
 
     try {
       const err = await upsert(record)
-      if (err) { setError(err); return }
+      if (err) { setError(err); toast.error(`운전자금 저장 실패: ${err}`); return }
       setSuccess(true)
       setTimeout(() => setSuccess(false), 2000)
+      toast.success('운전자금이 저장되었습니다')
       resetForm()
     } catch (ex) {
-      setError(ex instanceof Error ? ex.message : '저장 중 오류가 발생했습니다.')
+      const msg = ex instanceof Error ? ex.message : '저장 중 오류가 발생했습니다.'
+      setError(msg)
+      toast.error(msg)
     } finally {
       setSaving(false)
     }
@@ -159,7 +164,8 @@ export default function InputPage() {
   async function handleDelete(id: string) {
     if (!confirm('삭제하시겠습니까?')) return
     const err = await remove(id)
-    if (err) setError(err)
+    if (err) { setError(err); toast.error(`삭제 실패: ${err}`) }
+    else toast.success('삭제되었습니다')
   }
 
   const today = new Date().toISOString().slice(0, 10)
