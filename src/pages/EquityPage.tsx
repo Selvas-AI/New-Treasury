@@ -9,14 +9,14 @@ import EquityHistoryPanel from '../components/equity/EquityHistoryPanel'
 import BondHistoryPanel from '../components/equity/BondHistoryPanel'
 import NewEquityForm from '../components/equity/NewEquityForm'
 import NewBondForm from '../components/equity/NewBondForm'
-import { getCompanyNames } from '../hooks/useCompanies'
-import type { Company } from '../types'
+import { usePageCompany } from '../hooks/usePageCompany'
 
 type TabKey = 'stock' | 'bond' | 'unlisted'
 
 export default function EquityPage() {
-  const { company: paramCompany, name: paramName } = useParams<{ company?: string; name?: string }>()
-  const { user, currentCompany, setCurrentCompany, canEdit, canAction } = useAuth()
+  const { name: paramName } = useParams<{ name?: string }>()
+  const { canEdit, canAction } = useAuth()
+  const { company: currentCompany } = usePageCompany()
   const eq   = useEquities()
   const inv  = useInvestments()
 
@@ -31,11 +31,6 @@ export default function EquityPage() {
   const [acqInputs, setAcqInputs]       = useState<Record<string, string>>({})
   const [acqSaving, setAcqSaving]       = useState(false)
   const [acqErrors, setAcqErrors]       = useState<string[]>([])
-
-  useEffect(() => {
-    if (!paramCompany || user?.role === 'company') return
-    if (getCompanyNames().includes(paramCompany)) setCurrentCompany(paramCompany as Company)
-  }, [paramCompany, user?.role, setCurrentCompany])
 
   // 딥링크로 종목명 진입 시 패널 자동 오픈
   useEffect(() => {

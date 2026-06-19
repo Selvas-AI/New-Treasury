@@ -61,6 +61,18 @@
 
 ---
 
+### 7. [D2·P2] 회사 컨텍스트 일원화 (`usePageCompany`)
+| 구분 | 내용 |
+|------|------|
+| **AS-IS** | "URL `:company` param + `currentCompany` + 기본법인" 해석과 URL↔컨텍스트 동기화 로직이 **9개 페이지에 제각각 복제**(fallback `'셀바스에이아이'` vs `companies[0]`, 검증 방식, `role==='company'` 처리, `replace` 유무가 미묘하게 달라 일관성 저하·버그 소지). |
+| **TO-BE** | 신규 훅 **`src/hooks/usePageCompany.ts`** — AuthContext(이미 단일 소스)를 감싸 ① `company`(param>context>기본) 해석 ② param→context 동기화 ③ `setCompany`(컨텍스트 갱신 + basePath 시 URL replace)를 **한 곳**으로 통일. 9개 페이지 모두 이 훅 사용. zustand 전면 도입 없이 기존 구조 재사용(저위험). |
+| **변경된 동작** | 동작 동일(해석 규칙 표준화). 페이지별 중복 `useEffect`/IIFE 제거로 코드 단순화. AuditLog 탭 전환이 `push`→`replace`로 통일(히스토리 누적 감소). |
+| **확인 방법** | 각 페이지에서 URL에 법인 지정 진입·탭 전환 시 회사 컨텍스트가 일관되게 반영, 새로고침 후 유지. |
+| **적용 페이지** | Dashboard / Equity / History / Invest / Loans / DailyReport / DailyReportList / FxTradeHistory / AuditLog |
+| **파일** | `src/hooks/usePageCompany.ts`(신규) + 위 9개 페이지 |
+
+---
+
 ## 🔜 다음 단계 (대규모 — 별도 진행 권장)
 
 다음 항목은 영향 범위가 넓어(다수 파일·아키텍처 변경) 별도 설계·검증 단위로 분리합니다.
@@ -68,7 +80,7 @@
 | 항목 | 사유 | 제안 |
 |------|------|------|
 | ~~D1 집계 SSOT 통합~~ | ✅ 완료 (위 6번 항목) | — |
-| **D2 회사 컨텍스트 일원화** | `currentCompany`(auth) + URL param 이중 관리가 전 페이지에 산재. zustand 전역화는 모든 페이지 영향 | zustand 스토어 도입 + 페이지별 순차 이관 |
+| ~~D2 회사 컨텍스트 일원화~~ | ✅ 완료 (위 7번 항목 — usePageCompany) | — |
 | **B2 GAS 헬스/폴백** | 시세·환율·공휴일·ECOS 단일 의존. 폴백/상태표시 추가 | 연결상태 인디케이터 + 캐시 폴백 |
 | **C1 아이콘 마이그레이션** | 이모지 → Tabler Icons. 45+ 파일 영향 | 컴포넌트 래퍼 도입 후 점진 치환 |
 | **C2/C3/C5** | 색각 보강·모바일 카드뷰·공통 토스트 | UX 일괄 개선 스프린트 |

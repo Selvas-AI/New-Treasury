@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
-import { useParams } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
+import { usePageCompany } from '../hooks/usePageCompany'
 import { useFxTradeHistory } from '../hooks/useFxTradeHistory'
 import { getCompanyNames } from '../hooks/useCompanies'
 import { fmtKRW, fmtNumber } from '../lib/format'
@@ -33,13 +33,11 @@ function statusBadge(s: string) {
 }
 
 export default function FxTradeHistoryPage() {
-  const { company: paramCompany } = useParams<{ company?: string }>()
-  const { user, currentCompany, setCurrentCompany, canEdit, canApprove } = useAuth()
+  const { user, canEdit, canApprove } = useAuth()
+  const { company: resolvedCompany } = usePageCompany()
   const hist = useFxTradeHistory()
 
   const companies = getCompanyNames()
-  const resolvedCompany = (paramCompany && companies.includes(paramCompany)
-    ? paramCompany : currentCompany) as Company
 
   // 필터 상태
   const [filterCompany, setFilterCompany] = useState<string>(resolvedCompany ?? '전체')
@@ -52,11 +50,6 @@ export default function FxTradeHistoryPage() {
   const [completeTarget, setCompleteTarget] = useState<string | null>(null)
   const [completeRate,   setCompleteRate]   = useState('')
   const [completing,     setCompleting]     = useState(false)
-
-  useEffect(() => {
-    if (paramCompany && companies.includes(paramCompany))
-      setCurrentCompany(paramCompany as Company)
-  }, [paramCompany]) // eslint-disable-line
 
   const doFetch = useCallback(() => {
     hist.fetch({

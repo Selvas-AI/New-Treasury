@@ -4,13 +4,11 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Legend,
 } from 'recharts'
-import { useAuth } from '../hooks/useAuth'
+import { usePageCompany } from '../hooks/usePageCompany'
 import { useDaily } from '../hooks/useDaily'
 import { useInvestments, getLatestInvestments } from '../hooks/useInvestments'
 import { useLoans } from '../hooks/useLoans'
 import { fmtKRW, fmtDateShort, calcBondValue } from '../lib/format'
-import { getCompanyNames } from '../hooks/useCompanies'
-import type { Company } from '../types'
 
 type Period = 7 | 30 | 90 | 365
 const PERIODS: { label: string; value: Period }[] = [
@@ -31,9 +29,9 @@ interface HistoryRow {
 }
 
 export default function HistoryPage() {
-  const { company: paramCompany, from: paramFrom, to: paramTo } =
-    useParams<{ company?: string; from?: string; to?: string }>()
-  const { user, setCurrentCompany } = useAuth()
+  const { from: paramFrom, to: paramTo } =
+    useParams<{ from?: string; to?: string }>()
+  usePageCompany()  // 회사 컨텍스트 해석·동기화 (D2 SSOT)
 
   const daily = useDaily()
   const inv   = useInvestments()
@@ -41,11 +39,6 @@ export default function HistoryPage() {
 
   const [period, setPeriod] = useState<Period>(30)
   const [view, setView]     = useState<'chart' | 'table'>('table')
-
-  useEffect(() => {
-    if (!paramCompany || user?.role === 'company') return
-    if (getCompanyNames().includes(paramCompany)) setCurrentCompany(paramCompany as Company)
-  }, [paramCompany, user?.role, setCurrentCompany])
 
   // URL 파라미터로 날짜 범위 지정 시 맞는 Period 선택
   useEffect(() => {

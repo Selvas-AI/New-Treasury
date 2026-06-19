@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useCompanies } from '../hooks/useCompanies'
+import { usePageCompany } from '../hooks/usePageCompany'
 
 interface AuditLog {
   id: string
@@ -45,13 +45,11 @@ function fmtDatetime(iso: string): string {
 }
 
 export default function AuditLogPage() {
-  const { company: paramCompany } = useParams<{ company?: string }>()
-  const navigate = useNavigate()
-  const { currentCompany, setCurrentCompany, hasCompany } = useAuth()
+  const { hasCompany } = useAuth()
   const { names: allCompanies } = useCompanies()
+  const { company: resolvedCompany, setCompany: handleCompany } = usePageCompany('/audit-log')
 
   const companies = allCompanies.filter(hasCompany)
-  const resolvedCompany = paramCompany ?? currentCompany ?? companies[0] ?? '셀바스에이아이'
 
   const [logs, setLogs] = useState<AuditLog[]>([])
   const [loading, setLoading] = useState(false)
@@ -92,11 +90,6 @@ export default function AuditLogPage() {
   useEffect(() => {
     void fetch(resolvedCompany, rangeDays, filterTable)
   }, [fetch, resolvedCompany, rangeDays, filterTable])
-
-  function handleCompany(c: string) {
-    setCurrentCompany(c as Parameters<typeof setCurrentCompany>[0])
-    navigate(`/audit-log/${c}`)
-  }
 
   return (
     <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-4">

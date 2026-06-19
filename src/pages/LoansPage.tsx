@@ -1,11 +1,11 @@
 ﻿import { useState, useEffect, useMemo } from 'react'
 import { useParams } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
+import { usePageCompany } from '../hooks/usePageCompany'
 import { useLoans } from '../hooks/useLoans'
 import { fmtKRW, calcDday } from '../lib/format'
 import { NumInput } from '../components/common/NumInput'
-import { getCompanyNames } from '../hooks/useCompanies'
-import type { LoanRecord, Company } from '../types'
+import type { LoanRecord } from '../types'
 
 const LOAN_TYPES    = ['일반대출', '한도대출', 'CP', '전자단기사채', '팩토링', '기타']
 const CURRENCY_LIST = ['KRW', 'USD', 'EUR', 'JPY', 'GBP', 'CNY']
@@ -33,8 +33,9 @@ function DdayBadge({ dday }: { dday: number }) {
 }
 
 export default function LoansPage() {
-  const { company: paramCompany, id: paramId } = useParams<{ company?: string; id?: string }>()
-  const { user, currentCompany, setCurrentCompany, canEdit, canAction } = useAuth()
+  const { id: paramId } = useParams<{ id?: string }>()
+  const { canEdit, canAction } = useAuth()
+  const { company: currentCompany } = usePageCompany()
   const loans = useLoans()
 
   const [tab, setTab]         = useState<'active' | 'inactive'>('active')
@@ -44,11 +45,6 @@ export default function LoansPage() {
   const [saving, setSaving]   = useState(false)
   const [error, setError]     = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
-
-  useEffect(() => {
-    if (!paramCompany || user?.role === 'company') return
-    if (getCompanyNames().includes(paramCompany)) setCurrentCompany(paramCompany as Company)
-  }, [paramCompany, user?.role, setCurrentCompany])
 
   // 딥링크 진입 시 수정 모드
   useEffect(() => {

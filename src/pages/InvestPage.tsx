@@ -4,11 +4,11 @@ import { useAuth } from '../hooks/useAuth'
 import { useInvestments } from '../hooks/useInvestments'
 import { usePolicyBankLimits } from '../hooks/usePolicyBankLimits'
 import { useFx } from '../hooks/useFx'
+import { usePageCompany } from '../hooks/usePageCompany'
 import { toKRWAmount } from '../lib/treasuryCalc'
 import { fmtKRW, calcDday, fmtReturn, returnBadgeClass, calcReturn } from '../lib/format'
 import { NumInput } from '../components/common/NumInput'
-import { getCompanyNames } from '../hooks/useCompanies'
-import type { InvestmentRecord, Company } from '../types'
+import type { InvestmentRecord } from '../types'
 
 const PRODUCT_OPTIONS = ['정기예금', 'RP', 'MMF', '발행어음', 'CMA', '채권', '기타']
 const CURRENCY_OPTIONS = ['KRW', 'USD', 'EUR', 'JPY', 'GBP', 'CNY']
@@ -28,8 +28,9 @@ const EMPTY_FORM = {
 type FormState = typeof EMPTY_FORM
 
 export default function InvestPage() {
-  const { company: paramCompany, id: paramId } = useParams<{ company?: string; id?: string }>()
-  const { user, currentCompany, setCurrentCompany, canEdit, canAction } = useAuth()
+  const { id: paramId } = useParams<{ id?: string }>()
+  const { canEdit, canAction } = useAuth()
+  const { company: currentCompany } = usePageCompany()
   const invest = useInvestments()
   const fx = useFx()
   const bankMaster = usePolicyBankLimits(currentCompany)
@@ -41,11 +42,6 @@ export default function InvestPage() {
   const [saving, setSaving]     = useState(false)
   const [error, setError]       = useState<string | null>(null)
   const [success, setSuccess]   = useState(false)
-
-  useEffect(() => {
-    if (!paramCompany || user?.role === 'company') return
-    if (getCompanyNames().includes(paramCompany)) setCurrentCompany(paramCompany as Company)
-  }, [paramCompany, user?.role, setCurrentCompany])
 
   useEffect(() => {
     if (!paramId || !invest.nonBonds.length) return

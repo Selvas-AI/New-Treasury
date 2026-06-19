@@ -5,12 +5,12 @@
  * 법인별 자금일보 작성 현황을 날짜순으로 표시
  */
 import { useEffect, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { supabase } from '../lib/supabase'
 import { todayStr, prevBizDay, snapToBizDay } from '../lib/bizDay'
-import { useCompanies, getCompanyNames } from '../hooks/useCompanies'
-import type { Company } from '../types'
+import { useCompanies } from '../hooks/useCompanies'
+import { usePageCompany } from '../hooks/usePageCompany'
 
 type ReportStatus = 'draft' | 'submitted' | 'approved' | 'rejected'
 
@@ -33,15 +33,10 @@ const STATUS: Record<ReportStatus, { label: string; cls: string }> = {
 }
 
 export default function DailyReportListPage() {
-  const { company: paramCompany } = useParams<{ company?: string }>()
   const navigate  = useNavigate()
-  const { user, currentCompany, setCurrentCompany } = useAuth()
+  const { user } = useAuth()
   const { names: companyNames } = useCompanies()
-
-  const resolvedCompany: Company = (() => {
-    if (paramCompany && getCompanyNames().includes(paramCompany)) return paramCompany as Company
-    return currentCompany ?? '셀바스에이아이'
-  })()
+  const { company: resolvedCompany, setCompany: handleCompanyChange } = usePageCompany('/daily-report-list')
 
   const [rows,    setRows]    = useState<ReportRow[]>([])
   const [loading, setLoading] = useState(false)
@@ -78,11 +73,6 @@ export default function DailyReportListPage() {
   })()
 
   const rowMap = new Map(rows.map(r => [r.report_date, r]))
-
-  function handleCompanyChange(c: Company) {
-    setCurrentCompany(c)
-    navigate(`/daily-report-list/${c}`, { replace: true })
-  }
 
   const fmt = (iso: string | null) =>
     iso ? new Date(iso).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'

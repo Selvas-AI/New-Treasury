@@ -23,7 +23,8 @@ import { ACCOUNT_LABELS } from '../lib/accountLabels'
 import CmsVerificationModal from '../components/daily-report/CmsVerificationModal'
 import UserPicker from '../components/common/UserPicker'
 import { useDailyReportAttachments } from '../hooks/useDailyReportAttachments'
-import { useCompanies, getCompanyNames } from '../hooks/useCompanies'
+import { useCompanies } from '../hooks/useCompanies'
+import { usePageCompany } from '../hooks/usePageCompany'
 import type { Company, DailyRecord } from '../types'
 
 
@@ -230,17 +231,13 @@ function BusinessDatePicker({
 }
 
 export default function DailyReportPage() {
-  const { company: paramCompany, date: paramDate } = useParams<{ company?: string; date?: string }>()
+  const { date: paramDate } = useParams<{ date?: string }>()
   const navigate = useNavigate()
-  const { user, currentCompany, setCurrentCompany, canEdit } = useAuth()
+  const { user, setCurrentCompany, canEdit } = useAuth()
   const { names: companyNames } = useCompanies()
-
-  // 법인 결정
-  const resolvedCompany: Company = (() => {
-    if (user?.role === 'company') return currentCompany ?? '셀바스에이아이'
-    if (paramCompany && getCompanyNames().includes(paramCompany)) return paramCompany as Company
-    return currentCompany ?? '셀바스에이아이'
-  })()
+  // 회사 컨텍스트 해석·동기화 (D2 SSOT). URL 에 :date 가 있어 basePath 자동 nav 는
+  // 쓰지 않고, 법인 전환은 아래 handleCompanyChange 가 날짜까지 포함해 navigate 한다.
+  const { company: resolvedCompany, paramCompany } = usePageCompany()
 
   // ── 날짜 모델 (docs/pages/DailyReportPage.md §0 참조) ──────────
   // 전제: daily[D] = 담당자가 D일 아침 입력 = 전일(D-1영업일) 마감잔액

@@ -1,6 +1,6 @@
 ﻿import { useEffect, useState, useCallback } from 'react'
-import { useParams } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
+import { usePageCompany } from '../hooks/usePageCompany'
 import { useDashboard } from '../hooks/useDashboard'
 import { useIssueCount } from '../contexts/issueCount'
 import { fmtKRW } from '../lib/format'
@@ -12,12 +12,11 @@ import IssueDrawer from '../components/dashboard/IssueDrawer'
 import CashflowChart from '../components/dashboard/CashflowChart'
 import EquityCard from '../components/dashboard/EquityCard'
 import type { FlowItemKey } from '../components/dashboard/WaterfallCard'
-import { getCompanyNames } from '../hooks/useCompanies'
-import type { Company, IssueStatus } from '../types'
+import type { IssueStatus } from '../types'
 
 export default function DashboardPage() {
-  const { company } = useParams<{ company?: string }>()
-  const { user, currentCompany, setCurrentCompany } = useAuth()
+  const { user } = useAuth()
+  const { company } = usePageCompany()
   const { setOpenCount } = useIssueCount()
   const db = useDashboard()
 
@@ -37,17 +36,12 @@ export default function DashboardPage() {
     setOpenCount(db.detectedIssues.filter(i => i.status !== 'done').length)
   }, [db.detectedIssues, setOpenCount])
 
-  useEffect(() => {
-    if (!company || user?.role === 'company') return
-    if (getCompanyNames().includes(company)) setCurrentCompany(company as Company)
-  }, [company, user?.role, setCurrentCompany])
-
   async function handleStatusChange(_key: string, _id: string, status: IssueStatus) {
     const issue = db.detectedIssues.find(i => i.key === _key)
-    if (!issue || !currentCompany || !user) return
+    if (!issue || !company || !user) return
     await db.issues.addComment({
       issue_key:   _key,
-      company:     currentCompany,
+      company:     company,
       user_label:  user.label,
       user_role:   user.role,
       body:        `상태를 [${status}]로 변경했습니다.`,
@@ -185,7 +179,7 @@ export default function DashboardPage() {
         latestInvests={db.latestInvests}
         loans={db.loans}
         equities={db.equityReturns}
-        company={currentCompany ?? ''}
+        company={company ?? ''}
         onClose={() => setFlowDetail(null)}
       />
 
