@@ -140,6 +140,17 @@
 
 ---
 
+### 14. [소형 정리 배치] InputPage D2 + C5 확산(Equity) + D4 Equity 역링크
+| 항목 | AS-IS → TO-BE | 파일 |
+|------|---------------|------|
+| **InputPage D2** | 운전자금 페이지만 `usePageCompany` 미적용 → 9개 페이지와 통일(중복 sync effect·IIFE 제거) | `InputPage.tsx` |
+| **C5 확산(Equity)** | 취득가액 일괄저장·시세/기준가 일괄갱신에 성공/실패 토스트 추가(기존 인라인 유지) | `EquityPage.tsx` |
+| **D4 Equity 역링크** | 종목 행 펼침 영역에 **🔔 이 종목 이슈 보기 ↗**(→ `/issue-history/equity_{name}`) 추가. 행 클릭=패널 토글과 충돌 없게 펼침 영역에 배치. 지분·비상장 탭 모두 적용 | `EquityPage.tsx` |
+
+> 남은 C5 확산: admin 페이지(UsersPage/CompaniesPage 등)는 후속.
+
+---
+
 ## 🔜 다음 단계 (대규모 — 별도 진행 권장)
 
 다음 항목은 영향 범위가 넓어(다수 파일·아키텍처 변경) 별도 설계·검증 단위로 분리합니다.

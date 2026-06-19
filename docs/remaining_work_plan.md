@@ -29,9 +29,9 @@
 권장 시작: **묶음 A**.
 
 ### 후속 소형 정리 항목 (세션15차 작업 중 발견)
-- **InputPage D2 미적용**: 운전자금 입력 페이지가 `usePageCompany` 미사용(여전히 `useParams`+`setCurrentCompany` 패턴). 다른 9개 페이지와 통일 필요. (~5%)
-- **C5 확산 잔여**: Equity(자식 폼 NewEquity/NewBondForm)·admin 페이지 `setError`→토스트. (~10-15%)
-- **D4 역방향 잔여**: EquityPage 종목→이슈 링크(행 클릭=패널 토글 충돌 회피 설계 필요). (~5-10%)
+- ~~**InputPage D2 미적용**~~: ✅ 완료(usePageCompany 적용)
+- **C5 확산 잔여**: ~~Equity~~ ✅ 완료 / **admin 페이지(UsersPage/CompaniesPage 등)** `setError`→토스트는 후속. (~8-12%)
+- ~~**D4 역방향 잔여(Equity)**~~: ✅ 완료(종목 펼침 영역에 이슈 링크)
 - **D5 잔여**: net/unavailable/asset 복합 항목은 단일 딥링크 타겟 없음(현행 유지).
 
 ---

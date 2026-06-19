@@ -1,6 +1,7 @@
 ﻿import { useState, useEffect, useMemo } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, Link } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
+import { useToast } from '../contexts/ToastProvider'
 import { useEquities, getLatestEquities } from '../hooks/useEquities'
 import { useInvestments, getLatestBonds } from '../hooks/useInvestments'
 import { fetchStockPrice, fetchBondPrice } from '../hooks/useGas'
@@ -17,6 +18,7 @@ export default function EquityPage() {
   const { name: paramName } = useParams<{ name?: string }>()
   const { canEdit, canAction } = useAuth()
   const { company: currentCompany } = usePageCompany()
+  const toast = useToast()
   const eq   = useEquities()
   const inv  = useInvestments()
 
@@ -69,8 +71,13 @@ export default function EquityPage() {
       if (err) errs.push(`${name}: ${err}`)
     }
     setAcqSaving(false)
-    if (errs.length === 0) setAcqPopupOpen(false)
-    else setAcqErrors(errs)
+    if (errs.length === 0) {
+      setAcqPopupOpen(false)
+      toast.success(`취득가액 ${entries.length}건 저장되었습니다`)
+    } else {
+      setAcqErrors(errs)
+      toast.error(`취득가액 ${errs.length}건 저장 실패`)
+    }
   }
 
   // ─── 국채 ────────────────────────────────────────────────
@@ -115,6 +122,8 @@ export default function EquityPage() {
       setBulkState(prev => ({ ...prev, done: i + 1, errors }))
     }
     setBulkState(prev => ({ ...prev, running: false }))
+    if (errors.length === 0) toast.success(`시세 ${targets.length}건 갱신 완료`)
+    else toast.error(`시세 갱신 ${errors.length}/${targets.length}건 실패`)
   }
 
   async function bulkRefreshBonds() {
@@ -150,6 +159,8 @@ export default function EquityPage() {
       setBulkState(prev => ({ ...prev, done: i + 1, errors }))
     }
     setBulkState(prev => ({ ...prev, running: false }))
+    if (errors.length === 0) toast.success(`기준가 ${targets.length}건 갱신 완료`)
+    else toast.error(`기준가 갱신 ${errors.length}/${targets.length}건 실패`)
   }
 
   return (
@@ -276,15 +287,25 @@ export default function EquityPage() {
                     </div>
                   </button>
                   {isOpen && (
-                    <EquityHistoryPanel
-                      name={s.name} ticker={s.ticker} market={s.market}
-                      company={currentCompany ?? ''}
-                      history={eq.historyOf(s.name)}
-                      onSave={eq.save}
-                      onRemove={eq.remove}
-                      onBulkAcq={eq.updateAcquisitionCost}
-                      isEditable={isEditable}
-                    />
+                    <>
+                      {/* 역방향 링크(D4): 종목 → 이슈 스레드 */}
+                      <div className="px-5 pt-2">
+                        <Link to={`/issue-history/${encodeURIComponent('equity_' + s.name)}`}
+                          title="이 종목의 이슈 보기"
+                          className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-blue-500">
+                          🔔 이 종목 이슈 보기 <span className="text-[10px]">↗</span>
+                        </Link>
+                      </div>
+                      <EquityHistoryPanel
+                        name={s.name} ticker={s.ticker} market={s.market}
+                        company={currentCompany ?? ''}
+                        history={eq.historyOf(s.name)}
+                        onSave={eq.save}
+                        onRemove={eq.remove}
+                        onBulkAcq={eq.updateAcquisitionCost}
+                        isEditable={isEditable}
+                      />
+                    </>
                   )}
                 </div>
               )
@@ -401,15 +422,25 @@ export default function EquityPage() {
                     </div>
                   </button>
                   {isOpen && (
-                    <EquityHistoryPanel
-                      name={s.name} ticker={s.ticker} market={s.market}
-                      company={currentCompany ?? ''}
-                      history={eq.historyOf(s.name)}
-                      onSave={eq.save}
-                      onRemove={eq.remove}
-                      onBulkAcq={eq.updateAcquisitionCost}
-                      isEditable={isEditable}
-                    />
+                    <>
+                      {/* 역방향 링크(D4): 종목 → 이슈 스레드 */}
+                      <div className="px-5 pt-2">
+                        <Link to={`/issue-history/${encodeURIComponent('equity_' + s.name)}`}
+                          title="이 종목의 이슈 보기"
+                          className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-blue-500">
+                          🔔 이 종목 이슈 보기 <span className="text-[10px]">↗</span>
+                        </Link>
+                      </div>
+                      <EquityHistoryPanel
+                        name={s.name} ticker={s.ticker} market={s.market}
+                        company={currentCompany ?? ''}
+                        history={eq.historyOf(s.name)}
+                        onSave={eq.save}
+                        onRemove={eq.remove}
+                        onBulkAcq={eq.updateAcquisitionCost}
+                        isEditable={isEditable}
+                      />
+                    </>
                   )}
                 </div>
               )

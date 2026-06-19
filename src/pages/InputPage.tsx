@@ -1,14 +1,14 @@
 ﻿import { useState, useEffect, useMemo } from 'react'
 import { useParams } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
+import { usePageCompany } from '../hooks/usePageCompany'
 import { useToast } from '../contexts/ToastProvider'
 import { useDaily } from '../hooks/useDaily'
 import { useFx } from '../hooks/useFx'
 import { fmtKRW, normDate } from '../lib/format'
 import { NumInput } from '../components/common/NumInput'
 import { isTodayBusinessDay } from '../lib/bizDay'
-import { getCompanyNames } from '../hooks/useCompanies'
-import type { DailyRecord, Company, FxCode } from '../types'
+import type { DailyRecord, FxCode } from '../types'
 
 const FX_FIELDS: { key: FxCode; label: string }[] = [
   { key: 'USD', label: 'USD' },
@@ -35,8 +35,9 @@ const EMPTY_FORM = {
 type FormState = typeof EMPTY_FORM
 
 export default function InputPage() {
-  const { company: paramCompany, date: paramDate } = useParams<{ company?: string; date?: string }>()
-  const { user, currentCompany, setCurrentCompany, canEdit, canAction } = useAuth()
+  const { date: paramDate } = useParams<{ date?: string }>()
+  const { user, canEdit, canAction } = useAuth()
+  const { company: currentCompany } = usePageCompany()
   const { data, loading, upsert, remove } = useDaily()
   const fx = useFx()
   const toast = useToast()
@@ -46,14 +47,6 @@ export default function InputPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
-
-  // URL 파라미터로 법인 자동 전환
-  useEffect(() => {
-    if (!paramCompany || user?.role === 'company') return
-    if (getCompanyNames().includes(paramCompany)) {
-      setCurrentCompany(paramCompany as Company)
-    }
-  }, [paramCompany, user?.role, setCurrentCompany])
 
   // URL 파라미터로 날짜 자동 세팅
   useEffect(() => {
