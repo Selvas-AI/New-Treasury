@@ -1,4 +1,5 @@
-﻿import { useNavigate } from 'react-router-dom'
+﻿import { useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import type { IssueItem } from '../../hooks/useDashboard'
 import type { IssueStatus } from '../../types'
@@ -32,6 +33,14 @@ function buildLinkUrl(key: string, company: string | null): string | null {
 export default function IssueDrawer({ open, issues, activeKey, onStatusChange, onHover, onFocus, onClose }: Props) {
   const navigate = useNavigate()
   const { currentCompany } = useAuth()
+
+  // ESC 키로 닫기 (접근성)
+  useEffect(() => {
+    if (!open) return
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [open, onClose])
 
   if (!open) return null
 

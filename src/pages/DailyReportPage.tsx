@@ -231,7 +231,7 @@ function BusinessDatePicker({
 export default function DailyReportPage() {
   const { company: paramCompany, date: paramDate } = useParams<{ company?: string; date?: string }>()
   const navigate = useNavigate()
-  const { user, currentCompany, setCurrentCompany } = useAuth()
+  const { user, currentCompany, setCurrentCompany, canEdit } = useAuth()
   const { names: companyNames } = useCompanies()
 
   // 법인 결정
@@ -396,6 +396,7 @@ export default function DailyReportPage() {
 
   useEffect(() => {
     if (summary.loading) return
+    if (!canEdit()) return  // 조회-쓰기 분리: viewer 는 자동기재(DB write) 미수행
     const groups = equityGroupsLatest.current
     if (groups.length === 0) return
 
@@ -511,6 +512,7 @@ export default function DailyReportPage() {
 
   useEffect(() => {
     if (summary.loading) return
+    if (!canEdit()) return  // 조회-쓰기 분리: viewer 는 자동기재(DB write) 미수행
 
     const bondCandidates = investGroupsLatest.current.filter(g =>
       g.isBondGroup === true &&
@@ -591,9 +593,16 @@ export default function DailyReportPage() {
   const isReadOnly = status === 'approved'
   const canSubmit  = status === 'draft' || status === 'rejected'
   const myApproveStep = ac.config.find(c => c.approver_code === user?.code)?.step
+  // 다단계 순차 결재: 정렬된 결재선 단계 + 이미 승인된 단계 → 다음 기대 단계
+  const sortedSteps   = [...ac.config].map(c => c.step).sort((a, b) => a - b)
+  const approvedSteps = new Set(dr.approvals.filter(a => a.action === 'approve').map(a => a.step))
+  const nextStep      = sortedSteps.find(s => !approvedSteps.has(s))  // undefined = 모든 단계 완료
+  const lastStep      = sortedSteps.length ? sortedSteps[sortedSteps.length - 1] : undefined
   const canApprove = status === 'submitted' && (
+    // master: 다음 기대 단계를 대행 승인 가능 (오버라이드)
     (user?.role === 'master') ||
-    (myApproveStep !== undefined && (user?.can_approve !== false))
+    // 일반: 본인 단계가 '다음 기대 단계'일 때만 (이전 단계 미승인 시 차단)
+    (myApproveStep !== undefined && myApproveStep === nextStep && (user?.can_approve !== false))
   )
 
   // ── 모달 상태 ────────────────────────────────────────────────
@@ -682,9 +691,11 @@ export default function DailyReportPage() {
   async function handleApprove() {
     if (!user) return
     setActionBusy(true)
-    // master는 결재선에 없으면 step 1로 처리
-    const step = myApproveStep ?? 1
-    await dr.approveReport(step, user.code, user.label ?? user.code, approveModal?.comment || undefined)
+    // 승인 단계: master는 다음 기대 단계 대행, 일반은 본인 단계
+    const step = user.role === 'master' ? (nextStep ?? lastStep ?? 1) : (myApproveStep ?? 1)
+    // 최종 단계(또는 결재선 미설정)일 때만 승인 확정
+    const isFinal = lastStep === undefined ? true : step === lastStep
+    await dr.approveReport(step, user.code, user.label ?? user.code, approveModal?.comment || undefined, isFinal)
     setApproveModal(null)
     setActionBusy(false)
   }

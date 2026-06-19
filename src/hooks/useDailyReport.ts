@@ -163,20 +163,25 @@ export function useDailyReport() {
   }, [report])
 
   // ── 승인 ──────────────────────────────────────────────────
+  // isFinal=true(최종 결재 단계)일 때만 status='approved' 확정 + daily.confirmed.
+  // 중간 단계 승인은 로그만 남기고 status='submitted' 유지 → 다단계 순차 결재.
   const approveReport = useCallback(async (
     step: number,
     actorCode: string,
     actorLabel: string,
     comment?: string,
+    isFinal: boolean = true,
   ): Promise<boolean> => {
     if (!report?.id) return false
     setError(null)
     try {
       const now = new Date().toISOString()
-      const { error: err } = await restUpdate('daily_reports', {
-        status: 'approved', approved_by: actorCode, approved_at: now, updated_at: now,
-      }, { id: report.id })
-      if (err) throw new Error(err.message)
+      if (isFinal) {
+        const { error: err } = await restUpdate('daily_reports', {
+          status: 'approved', approved_by: actorCode, approved_at: now, updated_at: now,
+        }, { id: report.id })
+        if (err) throw new Error(err.message)
+      }
 
       const logId = generateUUID()
       await restInsert('daily_report_approvals', {
@@ -184,10 +189,12 @@ export function useDailyReport() {
         actor_code: actorCode, actor_label: actorLabel, comment: comment ?? null, created_at: now,
       })
 
-      // C안: daily 테이블 confirmed = true 업데이트 (daily.report_id 로 연결된 레코드들)
-      await restUpdate('daily', { confirmed: true }, { report_id: report.id })
+      // C안: 최종 승인 시에만 daily 테이블 confirmed = true (daily.report_id 연결 레코드)
+      if (isFinal) await restUpdate('daily', { confirmed: true }, { report_id: report.id })
 
-      setReport(prev => prev ? { ...prev, status: 'approved', approved_by: actorCode, approved_at: now } : prev)
+      if (isFinal) {
+        setReport(prev => prev ? { ...prev, status: 'approved', approved_by: actorCode, approved_at: now } : prev)
+      }
       setApprovals(prev => [...prev, {
         id: logId, report_id: report.id, step,
         action: 'approve', actor_code: actorCode, actor_label: actorLabel,

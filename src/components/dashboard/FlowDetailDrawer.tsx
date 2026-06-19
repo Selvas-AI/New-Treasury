@@ -45,6 +45,13 @@ export default function FlowDetailDrawer({ itemKey, kpi, fxKrw: fxKrwProp, lates
   // 팝업 열릴 때 환율 즉시 로드 (자체 useFx 인스턴스라 별도 fetch 필요)
   useEffect(() => { void fx.fetchRates() }, [fx.fetchRates])
 
+  // ESC 키로 닫기 (접근성)
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
+
   // 외화 → 원화 환산 (useDashboard.kpi 계산과 동일 로직)
   const toKRWAmt = (amount: number, currency: string): number => {
     if (!currency || currency === 'KRW') return amount

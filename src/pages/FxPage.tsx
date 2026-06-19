@@ -39,8 +39,15 @@ export default function FxPage() {
       if (!cancelled) await fx.fetchRates()
     }
     void load()
-    const timer = window.setInterval(() => void load(), 5 * 60 * 1000)
-    return () => { cancelled = true; window.clearInterval(timer) }
+    // 탭이 보일 때만 폴링 (백그라운드 GAS 호출 방지)
+    const timer = window.setInterval(() => { if (!document.hidden) void load() }, 5 * 60 * 1000)
+    function onVisible() { if (!document.hidden) void load() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const latestDaily = useMemo(() => daily.data[0] ?? null, [daily.data])

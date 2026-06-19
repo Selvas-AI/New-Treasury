@@ -304,55 +304,9 @@ export function useDailyReportSummary() {
   }, [loans])
 
   // ── 입출금 항목 집계 ──────────────────────────────────────
-  const itemSums = useMemo((): ItemSums => {
-    const krwAmt = (i: ReportItem) => i.amount_krw ?? toKRW(i.amount, i.currency)
-
-    const byAccount:    Record<string, { inKrw: number; outKrw: number; inRaw: number; outRaw: number }> = {}
-    const byEquityName: Record<string, { inKrw: number; outKrw: number }> = {}
-    const byBondLabel:  Record<string, { inKrw: number; outKrw: number }> = {}
-
-    for (const item of items) {
-      // account_type별 집계 (KRW 환산 + 외화 원본금액)
-      const acct = item.account_type
-      if (acct) {
-        if (!byAccount[acct]) byAccount[acct] = { inKrw: 0, outKrw: 0, inRaw: 0, outRaw: 0 }
-        if (item.direction === 'in') { byAccount[acct].inKrw  += krwAmt(item); byAccount[acct].inRaw  += item.amount }
-        else                         { byAccount[acct].outKrw += krwAmt(item); byAccount[acct].outRaw += item.amount }
-      }
-
-      // 지분 평가손익 — memo='@auto:종목명' 또는 category=invest_eval_*
-      const isEval = item.category === 'invest_eval_in' || item.category === 'invest_eval_out'
-      if (isEval) {
-        const raw = item.memo?.startsWith('@auto:') ? item.memo.slice(6) : (item.memo ?? '기타')
-        if (raw.startsWith('bond:')) {
-          // 국채: '@auto:bond:채권명' → byBondLabel['채권명']
-          const label = raw.slice(5)
-          if (!byBondLabel[label]) byBondLabel[label] = { inKrw: 0, outKrw: 0 }
-          if (item.direction === 'in') byBondLabel[label].inKrw  += krwAmt(item)
-          else                         byBondLabel[label].outKrw += krwAmt(item)
-        } else {
-          // 지분: '@auto:종목명' → byEquityName['종목명']
-          if (!byEquityName[raw]) byEquityName[raw] = { inKrw: 0, outKrw: 0 }
-          if (item.direction === 'in') byEquityName[raw].inKrw  += krwAmt(item)
-          else                         byEquityName[raw].outKrw += krwAmt(item)
-        }
-      }
-    }
-
-    return {
-      opIn:      items.filter(i => i.direction === 'in').reduce((s, i) => s + krwAmt(i), 0),
-      opOut:     items.filter(i => i.direction === 'out').reduce((s, i) => s + krwAmt(i), 0),
-      investIn:  items.filter(i => i.direction === 'out' && i.category === 'invest_execute').reduce((s, i) => s + krwAmt(i), 0),
-      investOut: items.filter(i => i.direction === 'in'  && i.category === 'invest_return' ).reduce((s, i) => s + krwAmt(i), 0),
-      loanIn:    items.filter(i => i.direction === 'in'  && i.category === 'loan_drawdown' ).reduce((s, i) => s + krwAmt(i), 0),
-      loanOut:   items.filter(i => i.direction === 'out' && i.category === 'loan_repayment').reduce((s, i) => s + krwAmt(i), 0),
-      evalIn:    items.filter(i => i.category === 'invest_eval_in' ).reduce((s, i) => s + krwAmt(i), 0),
-      evalOut:   items.filter(i => i.category === 'invest_eval_out').reduce((s, i) => s + krwAmt(i), 0),
-      byAccount,
-      byEquityName,
-      byBondLabel,
-    }
-  }, [items, toKRW])
+  // [E1] itemSums 는 DailyReportPage 의 liveItemSums(itemHook.items 실시간 집계)가
+  // 단일 진실원천이며, 본 훅의 집계는 stale(summary.items 기준)이라 소비처가 없어 제거함.
+  // ItemSums 타입은 liveItemSums·ReportSummaryTable 에서 계속 사용.
 
   // ── 운전자금 KRW 소계 (안A: fx_krw 사전계산값 사용 — 대시보드와 동일 공식) ──
   // fx_krw = InputPage 저장 시 그날 환율로 계산된 외화 원화환산 합계 (고정값)
@@ -403,7 +357,6 @@ export function useDailyReportSummary() {
     investGroups, depositSubtotal, nonDepositSubtotal,
     loanGroups,
     equityGroups, equityUnavailTotal,
-    itemSums,
     loading, error,
     fetch, fx, toKRW,
     opTotal,

@@ -56,8 +56,19 @@ export function useStockTicker() {
     }
 
     void run()
-    const timer = window.setInterval(() => void run(), POLL_MS)
-    return () => { cancelled = true; window.clearInterval(timer) }
+    // 탭이 보일 때만 폴링 (백그라운드 탭에서는 불필요한 GAS 호출 방지)
+    const timer = window.setInterval(() => {
+      if (document.hidden) return
+      void run()
+    }, POLL_MS)
+    // 탭 복귀 시 즉시 1회 갱신 (마지막 갱신이 오래됐을 수 있음)
+    function onVisible() { if (!document.hidden) void run() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
   }, [])
 
   return { tickers, loading, error, lastAt }
