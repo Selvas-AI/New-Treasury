@@ -95,26 +95,28 @@ export default function FlowDetailDrawer({ itemKey, kpi, fxKrw: fxKrwProp, lates
           {itemKey === 'equity_avail' && <EquityAvailDetail equities={equities.filter(e => e.available === '가용')} total={kpi.equityAvail} />}
         </div>
 
-        {/* 하단 바로가기 */}
-        {(itemKey === 'operating' || itemKey === 'invest' || itemKey === 'loan' || itemKey === 'available' || itemKey === 'equity_avail') && (
-          <div className="shrink-0 px-4 py-3 border-t border-gray-100 dark:border-slate-700">
-            <button
-              onClick={() => {
-                onClose()
-                if (itemKey === 'operating' || itemKey === 'available') navigate(`/input/${company}`)
-                if (itemKey === 'invest')      navigate(`/invest/${company}`)
-                if (itemKey === 'loan')        navigate(`/loans/${company}`)
-                if (itemKey === 'equity_avail') navigate(`/equity/${company}`)
-              }}
-              className="w-full text-xs text-blue-600 dark:text-blue-400 hover:underline text-center py-1"
-            >
-              {(itemKey === 'operating' || itemKey === 'available') ? '운전자금 입력 →'
-                : itemKey === 'invest' ? '운용자금 관리 →'
-                : itemKey === 'equity_avail' ? '지분/장기투자 →'
-                : '차입금 관리 →'}
-            </button>
-          </div>
-        )}
+        {/* 하단 바로가기 (D5: 항목별 딥링크 맵으로 표준화 + fx 추가) */}
+        {(() => {
+          const SHORTCUTS: Partial<Record<FlowItemKey, { path: string; label: string }>> = {
+            operating:    { path: `/input/${company}`,  label: '운전자금 입력 →' },
+            available:    { path: `/input/${company}`,  label: '운전자금 입력 →' },
+            invest:       { path: `/invest/${company}`, label: '운용자금 관리 →' },
+            loan:         { path: `/loans/${company}`,  label: '차입금 관리 →' },
+            equity_avail: { path: `/equity/${company}`, label: '지분/장기투자 →' },
+            fx:           { path: `/fx`,                label: '환율 현황 →' },
+          }
+          const sc = itemKey ? SHORTCUTS[itemKey] : undefined
+          return sc ? (
+            <div className="shrink-0 px-4 py-3 border-t border-gray-100 dark:border-slate-700">
+              <button
+                onClick={() => { onClose(); navigate(sc.path) }}
+                className="w-full text-xs text-blue-600 dark:text-blue-400 hover:underline text-center py-1"
+              >
+                {sc.label}
+              </button>
+            </div>
+          ) : null
+        })()}
       </div>
     </>
   )
