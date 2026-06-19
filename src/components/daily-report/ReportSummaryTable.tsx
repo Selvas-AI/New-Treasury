@@ -58,9 +58,11 @@ function DeltaCell({ diff, isFx, code, onClick }: {
   if (diff === 0) return <td className="px-3 py-2 text-right text-gray-300 dark:text-gray-600 text-[10px]">—</td>
   const pos   = diff > 0
   const cls   = pos ? 'text-blue-500 dark:text-blue-400' : 'text-red-500 dark:text-red-400'
+  // 색각 접근성(C2): 색 외 방향 글리프(▲▼)를 함께 표기해 색 없이도 증감 구분 가능
+  const arrow = pos ? '▲' : '▼'
   const label = isFx && code
-    ? `${pos ? '+' : ''}${fmtFx(diff, code)}`
-    : `${pos ? '+' : ''}${Math.round(diff).toLocaleString('ko-KR')}`
+    ? `${arrow} ${pos ? '+' : ''}${fmtFx(diff, code)}`
+    : `${arrow} ${pos ? '+' : ''}${Math.round(diff).toLocaleString('ko-KR')}`
 
   if (onClick) {
     return (
