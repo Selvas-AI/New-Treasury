@@ -31,18 +31,18 @@ export function usePageCompany(basePath?: string): {
 } {
   const { company: paramCompany } = useParams<{ company?: string }>()
   const navigate = useNavigate()
-  const { currentCompany, setCurrentCompany } = useAuth()
+  const { currentCompany, setCurrentCompany, hasCompany } = useAuth()
 
   const names    = getCompanyNames()
-  const fallback = (names[0] ?? '셀바스에이아이') as Company
+  const fallback = (currentCompany ?? names.find(n => hasCompany(n as Company)) ?? names[0] ?? '셀바스에이아이') as Company
 
-  const company: Company = (paramCompany && names.includes(paramCompany))
-    ? (paramCompany as Company)
-    : ((currentCompany ?? fallback) as Company)
+  // 권한 있는 법인 param 만 수용 (직접 URL 로 미권한 법인 진입 차단)
+  const paramAllowed = !!paramCompany && names.includes(paramCompany) && hasCompany(paramCompany as Company)
+  const company: Company = paramAllowed ? (paramCompany as Company) : fallback
 
-  // URL param → 컨텍스트 동기화 (param 이 바뀔 때만)
+  // URL param → 컨텍스트 동기화 (권한 있는 param 이 바뀔 때만)
   useEffect(() => {
-    if (paramCompany && names.includes(paramCompany) && paramCompany !== currentCompany) {
+    if (paramAllowed && paramCompany !== currentCompany) {
       setCurrentCompany(paramCompany as Company)
     }
     // names/currentCompany 는 매 렌더 새 참조라 deps 제외 — param 변화만 트리거

@@ -34,8 +34,9 @@ const STATUS: Record<ReportStatus, { label: string; cls: string }> = {
 
 export default function DailyReportListPage() {
   const navigate  = useNavigate()
-  const { user } = useAuth()
-  const { names: companyNames } = useCompanies()
+  const { user, hasCompany } = useAuth()
+  const { names: allCompanyNames } = useCompanies()
+  const companyNames = allCompanyNames.filter(c => hasCompany(c))  // 권한 부여 법인만
   const { company: resolvedCompany, setCompany: handleCompanyChange } = usePageCompany('/daily-report-list')
 
   const [rows,    setRows]    = useState<ReportRow[]>([])

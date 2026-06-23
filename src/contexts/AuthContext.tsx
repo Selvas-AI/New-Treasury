@@ -240,9 +240,9 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
   const currentCompany = useMemo<Company | null>(() => {
     if (!user) return null
     if (selectedCompany && hasCompanyCheck(user, selectedCompany)) return selectedCompany
-    // companies 미지정 계정 또는 master/admin → 기본 첫 법인
+    // 법인 미지정(=전체 접근) 계정 → 기본 첫 법인
     if (user.companies.length === 0 && !user.company) return selectedCompany ?? '셀바스에이아이'
-    if (user.role === 'master' || user.role === 'admin') return selectedCompany ?? '셀바스에이아이'
+    // 법인 지정 계정(master/admin 포함)은 지정된 첫 법인으로 — 미지정 법인으로 새지 않도록
     return user.company ?? (user.companies[0] as Company | undefined) ?? null
   }, [user, selectedCompany])
 

@@ -233,8 +233,9 @@ function BusinessDatePicker({
 export default function DailyReportPage() {
   const { date: paramDate } = useParams<{ date?: string }>()
   const navigate = useNavigate()
-  const { user, setCurrentCompany, canEdit } = useAuth()
-  const { names: companyNames } = useCompanies()
+  const { user, setCurrentCompany, canEdit, hasCompany } = useAuth()
+  const { names: allCompanyNames } = useCompanies()
+  const companyNames = allCompanyNames.filter(c => hasCompany(c))  // 권한 부여 법인만
   // 회사 컨텍스트 해석·동기화 (D2 SSOT). URL 에 :date 가 있어 basePath 자동 nav 는
   // 쓰지 않고, 법인 전환은 아래 handleCompanyChange 가 날짜까지 포함해 navigate 한다.
   const { company: resolvedCompany, paramCompany } = usePageCompany()

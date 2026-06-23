@@ -53,10 +53,12 @@ interface Props {
 }
 
 export default function TopBar({ onMenuClick }: Props) {
-  const { user, currentCompany, setCurrentCompany, logout } = useAuth()
+  const { user, currentCompany, setCurrentCompany, logout, hasCompany } = useAuth()
   const { tickers, loading, lastAt, error } = useStockTicker()
   const { dark, toggle: toggleDark } = useDarkMode()
-  const { names: companyNames } = useCompanies()
+  const { names: allCompanyNames } = useCompanies()
+  // 권한 부여된 법인만 노출 (admin/editor/viewer 가 지정 법인만 보도록)
+  const companyNames = allCompanyNames.filter(c => hasCompany(c as Company))
   const navigate = useNavigate()
   const [helpOpen, setHelpOpen] = useState(false)
 
