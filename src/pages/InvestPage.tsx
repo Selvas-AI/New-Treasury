@@ -6,9 +6,11 @@ import { usePolicyBankLimits } from '../hooks/usePolicyBankLimits'
 import { useFx } from '../hooks/useFx'
 import { usePageCompany } from '../hooks/usePageCompany'
 import { useToast } from '../contexts/ToastProvider'
+import { useNegoLogs } from '../hooks/useNegoLogs'
 import { toKRWAmount } from '../lib/treasuryCalc'
 import { fmtKRW, calcDday, fmtReturn, returnBadgeClass, calcReturn } from '../lib/format'
 import { NumInput } from '../components/common/NumInput'
+import NegoLogPanel from '../components/common/NegoLogPanel'
 import type { InvestmentRecord } from '../types'
 
 const PRODUCT_OPTIONS = ['정기예금', 'RP', 'MMF', '발행어음', 'CMA', '채권', '기타']
@@ -30,7 +32,8 @@ type FormState = typeof EMPTY_FORM
 
 export default function InvestPage() {
   const { id: paramId } = useParams<{ id?: string }>()
-  const { canEdit, canAction } = useAuth()
+  const auth = useAuth()
+  const { canEdit, canAction } = auth
   const { company: currentCompany } = usePageCompany()
   const toast = useToast()
   const invest = useInvestments()
@@ -44,6 +47,9 @@ export default function InvestPage() {
   const [saving, setSaving]     = useState(false)
   const [error, setError]       = useState<string | null>(null)
   const [success, setSuccess]   = useState(false)
+  const [negoId, setNegoId]     = useState<string | null>(null)
+
+  const nego = useNegoLogs(currentCompany, 'investment')
 
   useEffect(() => { void fx.fetchRates() }, [fx.fetchRates])
 
@@ -367,14 +373,41 @@ export default function InvestPage() {
                           <div className="flex justify-between items-center"><span className="text-gray-400 dark:text-gray-500">수익률</span><span className={`px-1.5 py-0.5 rounded font-medium ${returnBadgeClass(ret)}`}>{fmtReturn(ret)}</span></div>
                         )}
                       </div>
-                      {isEditable && (
-                        <div className="flex gap-2 pt-2 border-t border-gray-100 dark:border-slate-700">
-                          <button onClick={() => loadRecord(rec)} className="flex-1 text-xs text-blue-600 dark:text-blue-400 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100">수정</button>
-                          {tab === 'active'
-                            ? <button onClick={() => handleSetActive(rec.id, false)} className="flex-1 text-xs text-amber-600 dark:text-amber-400 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100">만기처리</button>
-                            : <button onClick={() => handleSetActive(rec.id, true)} className="flex-1 text-xs text-emerald-600 dark:text-emerald-400 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100">복원</button>
-                          }
-                          <button onClick={() => handleDelete(rec.id)} className="text-xs text-red-400 hover:text-red-600 px-3 py-1.5 rounded-lg bg-red-50 dark:bg-red-900/20">삭제</button>
+                      <div className="flex gap-2 pt-2 border-t border-gray-100 dark:border-slate-700">
+                        {isEditable && (
+                          <>
+                            <button onClick={() => loadRecord(rec)} className="flex-1 text-xs text-blue-600 dark:text-blue-400 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100">수정</button>
+                            {tab === 'active'
+                              ? <button onClick={() => handleSetActive(rec.id, false)} className="flex-1 text-xs text-amber-600 dark:text-amber-400 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100">만기처리</button>
+                              : <button onClick={() => handleSetActive(rec.id, true)} className="flex-1 text-xs text-emerald-600 dark:text-emerald-400 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100">복원</button>
+                            }
+                            <button onClick={() => handleDelete(rec.id)} className="text-xs text-red-400 hover:text-red-600 px-3 py-1.5 rounded-lg bg-red-50 dark:bg-red-900/20">삭제</button>
+                          </>
+                        )}
+                        <button
+                          onClick={() => setNegoId(id => id === rec.id ? null : rec.id)}
+                          className={`text-xs px-2.5 py-1.5 rounded-lg border transition-colors ${
+                            negoId === rec.id
+                              ? 'bg-blue-600 text-white border-blue-600'
+                              : 'border-blue-200 text-blue-600 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400'
+                          }`}>
+                          💬 {nego.byRecord.get(rec.id)?.length ?? 0}
+                        </button>
+                      </div>
+                      {negoId === rec.id && (
+                        <div className="mt-3 -mx-4 -mb-4 rounded-b-xl overflow-hidden">
+                          <NegoLogPanel
+                            logs={nego.byRecord.get(rec.id) ?? []}
+                            company={currentCompany ?? ''}
+                            recordType="investment"
+                            recordId={rec.id}
+                            contextLabel={`${rec.bank} · ${rec.product} · 만기 ${rec.maturity}`}
+                            userLabel={auth.user?.label ?? ''}
+                            canEdit={isEditable}
+                            onAdd={nego.add}
+                            onUpdate={nego.update}
+                            onRemove={nego.remove}
+                          />
                         </div>
                       )}
                     </div>
@@ -397,31 +430,66 @@ export default function InvestPage() {
                       const dday = calcDday(rec.maturity)
                       const ret  = calcReturn(rec.amount, rec.acquisition_cost)
                       const urgent = tab === 'active' && dday <= 30
+                      const negoLogs = nego.byRecord.get(rec.id) ?? []
+                      const isOpen   = negoId === rec.id
                       return (
-                        <tr key={rec.id} className={`border-b border-gray-50 hover:bg-gray-50 dark:border-slate-700 dark:hover:bg-slate-700 ${urgent ? 'bg-red-50 dark:bg-red-950/20' : ''}`}>
-                          <td className="py-2 pr-3 font-medium text-gray-800 whitespace-nowrap dark:text-gray-100">{rec.bank}</td>
-                          <td className="py-2 pr-3 text-gray-600 dark:text-slate-100">{rec.product}</td>
-                          <td className="py-2 pr-3 text-gray-500 dark:text-slate-300">{rec.currency}</td>
-                          <td className="py-2 pr-3 text-right tabular-nums font-medium text-gray-800 dark:text-gray-100">
-                            {(() => { const { primary, sub } = fmtAmtDisplay(rec.amount, rec.currency); return (
-                              <><div>{primary}</div>{sub && <div className="text-[10px] text-gray-400 dark:text-gray-500">{sub}</div>}</>
-                            ) })()}
-                          </td>
-                          <td className="py-2 pr-3">{ret !== null ? <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${returnBadgeClass(ret)}`}>{fmtReturn(ret)}</span> : <span className="text-xs text-gray-400 dark:text-gray-500">{rec.rate ? `${rec.rate}%` : '-'}</span>}</td>
-                          <td className="py-2 pr-3"><span className={`text-xs px-1.5 rounded ${rec.available === '가용' ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{rec.available}</span></td>
-                          <td className="py-2 pr-3 text-xs text-gray-400 whitespace-nowrap dark:text-gray-500">{rec.start}</td>
-                          <td className="py-2 pr-3 text-xs text-gray-600 whitespace-nowrap dark:text-slate-100">{rec.maturity}</td>
-                          <td className="py-2 pr-3 whitespace-nowrap">{tab === 'active' && <span className={`text-xs font-medium ${dday <= 7 ? 'text-red-600' : dday <= 30 ? 'text-amber-600' : 'text-gray-500'}`}>D-{dday}</span>}</td>
-                          <td className="py-2 whitespace-nowrap">
-                            {isEditable && (
-                              <div className="flex gap-1.5">
-                                <button onClick={() => loadRecord(rec)} className="text-xs text-blue-500 hover:text-blue-700">수정</button>
-                                {tab === 'active' ? <button onClick={() => handleSetActive(rec.id, false)} className="text-xs text-amber-500 hover:text-amber-700">만기</button> : <button onClick={() => handleSetActive(rec.id, true)} className="text-xs text-emerald-500 hover:text-emerald-700">복원</button>}
-                                <button onClick={() => handleDelete(rec.id)} className="text-xs text-red-400 hover:text-red-600">삭제</button>
+                        <>
+                          <tr key={rec.id} className={`border-b border-gray-50 hover:bg-gray-50 dark:border-slate-700 dark:hover:bg-slate-700 ${urgent ? 'bg-red-50 dark:bg-red-950/20' : ''} ${isOpen ? '!bg-blue-50/40 dark:!bg-slate-800/80' : ''}`}>
+                            <td className="py-2 pr-3 font-medium text-gray-800 whitespace-nowrap dark:text-gray-100">{rec.bank}</td>
+                            <td className="py-2 pr-3 text-gray-600 dark:text-slate-100">{rec.product}</td>
+                            <td className="py-2 pr-3 text-gray-500 dark:text-slate-300">{rec.currency}</td>
+                            <td className="py-2 pr-3 text-right tabular-nums font-medium text-gray-800 dark:text-gray-100">
+                              {(() => { const { primary, sub } = fmtAmtDisplay(rec.amount, rec.currency); return (
+                                <><div>{primary}</div>{sub && <div className="text-[10px] text-gray-400 dark:text-gray-500">{sub}</div>}</>
+                              ) })()}
+                            </td>
+                            <td className="py-2 pr-3">{ret !== null ? <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${returnBadgeClass(ret)}`}>{fmtReturn(ret)}</span> : <span className="text-xs text-gray-400 dark:text-gray-500">{rec.rate ? `${rec.rate}%` : '-'}</span>}</td>
+                            <td className="py-2 pr-3"><span className={`text-xs px-1.5 rounded ${rec.available === '가용' ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{rec.available}</span></td>
+                            <td className="py-2 pr-3 text-xs text-gray-400 whitespace-nowrap dark:text-gray-500">{rec.start}</td>
+                            <td className="py-2 pr-3 text-xs text-gray-600 whitespace-nowrap dark:text-slate-100">{rec.maturity}</td>
+                            <td className="py-2 pr-3 whitespace-nowrap">{tab === 'active' && <span className={`text-xs font-medium ${dday <= 7 ? 'text-red-600' : dday <= 30 ? 'text-amber-600' : 'text-gray-500'}`}>D-{dday}</span>}</td>
+                            <td className="py-2 whitespace-nowrap">
+                              <div className="flex gap-1.5 items-center">
+                                {isEditable && (
+                                  <>
+                                    <button onClick={() => loadRecord(rec)} className="text-xs text-blue-500 hover:text-blue-700">수정</button>
+                                    {tab === 'active' ? <button onClick={() => handleSetActive(rec.id, false)} className="text-xs text-amber-500 hover:text-amber-700">만기</button> : <button onClick={() => handleSetActive(rec.id, true)} className="text-xs text-emerald-500 hover:text-emerald-700">복원</button>}
+                                    <button onClick={() => handleDelete(rec.id)} className="text-xs text-red-400 hover:text-red-600">삭제</button>
+                                  </>
+                                )}
+                                <button
+                                  onClick={() => setNegoId(id => id === rec.id ? null : rec.id)}
+                                  className={`text-[11px] px-2 py-0.5 rounded-full border transition-colors ${
+                                    isOpen
+                                      ? 'bg-blue-600 text-white border-blue-600'
+                                      : negoLogs.length > 0
+                                        ? 'border-blue-300 text-blue-600 hover:bg-blue-50 dark:border-blue-600 dark:text-blue-400'
+                                        : 'border-gray-200 text-gray-400 hover:bg-gray-50 dark:border-slate-600 dark:text-slate-500'
+                                  }`}>
+                                  💬{negoLogs.length > 0 ? ` ${negoLogs.length}` : ''}
+                                </button>
                               </div>
-                            )}
-                          </td>
-                        </tr>
+                            </td>
+                          </tr>
+                          {isOpen && (
+                            <tr key={`${rec.id}-nego`}>
+                              <td colSpan={10} className="p-0">
+                                <NegoLogPanel
+                                  logs={negoLogs}
+                                  company={currentCompany ?? ''}
+                                  recordType="investment"
+                                  recordId={rec.id}
+                                  contextLabel={`${rec.bank} · ${rec.product} · 만기 ${rec.maturity}`}
+                                  userLabel={auth.user?.label ?? ''}
+                                  canEdit={isEditable}
+                                  onAdd={nego.add}
+                                  onUpdate={nego.update}
+                                  onRemove={nego.remove}
+                                />
+                              </td>
+                            </tr>
+                          )}
+                        </>
                       )
                     })}
                   </tbody>
