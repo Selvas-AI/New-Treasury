@@ -13,7 +13,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { supabase } from '../lib/supabase'
 import { prevBizDay, snapToBizDay, nextBizDay, todayStr, isBusinessDay } from '../lib/bizDay'
-import { opCashKRW } from '../lib/treasuryCalc'
+
 import { useDailyReport, useApprovalConfig } from '../hooks/useDailyReport'
 import { useDailyReportSummary, type ItemSums } from '../hooks/useDailyReportSummary'
 import { useDailyReportItems } from '../hooks/useDailyReportItems'
@@ -658,13 +658,25 @@ export default function DailyReportPage() {
   }
 
   // ── 검증 로직 (useMemo — 상신 버튼 조건 공유) ────────────────
+  // 환율 기준 통일: 항목 amount_krw(저장 시점 환율) vs daily.fx_krw(InputPage 저장 시점 환율)의
+  // 기준 불일치로 FX 환율 변동분만큼 차이 발생 → 현재 시세로 모두 재계산하여 통일.
   const validation = useMemo(() => {
-    const krwAmt = (i: { amount: number; amount_krw: number | null }) => i.amount_krw ?? i.amount
+    // FX 항목: 현재 시세로 재계산 (저장된 amount_krw 대신 현재 환율 적용)
+    const krwAmt = (i: { amount: number; currency: string; amount_krw: number | null }) => {
+      if (i.currency && i.currency !== 'KRW') return summary.toKRW(i.amount, i.currency)
+      return i.amount_krw ?? i.amount
+    }
     const inTotal  = itemHook.items.filter(i => i.direction === 'in'  && i.category !== 'invest_eval_in' ).reduce((s, i) => s + krwAmt(i), 0)
     const outTotal = itemHook.items.filter(i => i.direction === 'out' && i.category !== 'invest_eval_out').reduce((s, i) => s + krwAmt(i), 0)
-    // 운전자금 잔액 = SSOT opCashKRW(저장값 fx_krw) → 자금현황 테이블 Δ·대시보드와 동일 기준
-    const prevKRW = opCashKRW(summary.prevDaily)
-    const currKRW = opCashKRW(summary.currDaily)
+    // 잔액 증감: daily.fx_krw(저장값) 대신 raw FX 필드 × 현재 시세로 재계산
+    const calcAtCurrentRate = (d: DailyRecord | null): number => {
+      if (!d) return 0
+      const FX_FIELDS: [string, string][] = [['fx_usd','USD'],['fx_eur','EUR'],['fx_jpy','JPY'],['fx_gbp','GBP'],['fx_cny','CNY']]
+      const fxKrw = FX_FIELDS.reduce((s, [f, c]) => s + summary.toKRW((d as unknown as Record<string,number>)[f] ?? 0, c), 0)
+      return (d.krw_demand ?? 0) + (d.krw_govt ?? 0) + (d.krw_mmda ?? 0) + fxKrw
+    }
+    const prevKRW = calcAtCurrentRate(summary.prevDaily)
+    const currKRW = calcAtCurrentRate(summary.currDaily)
     const delta   = currKRW - prevKRW
     const diff    = inTotal - outTotal - delta
     const hasData = inTotal > 0 || outTotal > 0

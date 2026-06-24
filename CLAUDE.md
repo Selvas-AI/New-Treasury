@@ -1,6 +1,6 @@
 # CLAUDE.md — Selvas Treasury (New-Treasury)
 > 신규 세션 시작 시 이 파일을 먼저 읽어 컨텍스트를 복원하세요.
-> 최종 업데이트: 2026-06-17 (세션14차 — 결재선 자동 fetch 원천해결 + 평가손익 유령항목 제거 + 결재선 이름 컬럼)
+> 최종 업데이트: 2026-06-24 (세션15차 — 법인 권한 누수 fix + P1~P3 UI개선 + 자금일보 검증 FX 환율 기준 통일)
 
 ---
 
@@ -762,6 +762,42 @@ VITE_GAS_API_URL=https://script.google.com/macros/s/AKfycbwZ.../exec
        lock 을 다시 no-op 으로 되돌리지 말 것(멀티탭 동시 로그아웃 재발).
 검증: preview_eval 로 navigator.locks.query() → held/pending 비어있고,
        새로고침 후 로그인 유지 + 대시보드 정상 렌더 확인.
+```
+
+---
+
+### 2026-06-24 세션 15차 (법인 권한 누수 fix + P1~P3 UI개선 + 자금일보 FX 검증 통일)
+
+#### 법인 권한 누수 4개소 수정 (30e0e0d)
+- `AuthContext.tsx` — admin 역할도 `companies[]` 기반 `currentCompany` 결정 (기존: 무조건 '셀바스에이아이')
+- `TopBar.tsx` — 법인 드롭다운 `allCompanyNames.filter(c => hasCompany(c))`
+- `usePageCompany.ts` — URL param 법인도 `hasCompany()` 통과 검증
+- `DailyReportListPage.tsx` / `DailyReportPage.tsx` — 법인 탭 목록도 hasCompany 필터
+
+#### P1~P3 UI/UX 개선 (다수 커밋)
+- B1 자동기재 effect — editor 이하 계정에서 `if (!canEdit()) return` 가드
+- B2 FX 환율 연결 끊김 표시 (Sidebar)
+- B3 순차 결재선 — `nextStep` 기반 `canApprove` 로직
+- B4 백그라운드 탭 주가 폴링 억제 (`document.hidden` 체크)
+- C2 DeltaCell ▲▼ 글리프 (색맹 접근성)
+- C5 공통 토스트 인프라 (`ToastProvider`) + InputPage/LoansPage/EquityPage 적용
+- D1 `src/lib/treasuryCalc.ts` SSOT 유틸 (opCashKRW/toKRWAmount/bondValueOf)
+- D2 `src/hooks/usePageCompany.ts` 페이지 법인 해석 공통화 (9개 페이지 적용)
+- D4 `src/lib/issueLink.ts` 이슈↔원천 역링크 (IssueHistoryPage/LoansPage/EquityPage)
+- D5 FlowDetailDrawer SHORTCUTS 맵 + fx 딥링크 추가
+- ReportSummaryTable: bondEvalIn/Out, equityEvalIn/Out 분리 (중복 평가손익 해소), 운용자금 in/out 방향 정정
+
+#### [CRITICAL] 자금일보 검증 FX 환율 기준 통일 ⭐
+```
+증상: 입출금 항목 완성 후 "X억 차이 발생" — 실제 오류 없는 경우에도 통과 불가.
+원인: 항목 amount_krw(항목 저장 시점 환율) vs daily.fx_krw(InputPage 저장 시점 환율)
+      기준 날짜·환율이 다르면 FX 환율 변동분만큼 자동으로 차이 발생.
+      예) USD +384K × (1,537 − 1,509) = 약 0.41억 불일치.
+해결: DailyReportPage 검증 useMemo를 현재 시세 기준으로 통일.
+  1. 항목 금액: amount_krw(저장값) → toKRW(amount, currency) 현재 시세 재계산
+  2. 잔액증감: daily.fx_krw(저장값) → daily.fx_usd/eur/jpy/gbp/cny × 현재 시세 합산
+  → 두 값 모두 동일 시점 환율 기준 → 환율 차이 제거.
+금지: 검증에서 amount_krw(저장값)와 daily.fx_krw(저장값)를 혼용하지 말 것.
 ```
 
 ---
