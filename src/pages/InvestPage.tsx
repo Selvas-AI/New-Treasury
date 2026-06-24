@@ -45,6 +45,8 @@ export default function InvestPage() {
   const [error, setError]       = useState<string | null>(null)
   const [success, setSuccess]   = useState(false)
 
+  useEffect(() => { void fx.fetchRates() }, [fx.fetchRates])
+
   useEffect(() => {
     if (!paramId || !invest.nonBonds.length) return
     const rec = invest.nonBonds.find(r => r.id === paramId)
@@ -54,6 +56,9 @@ export default function InvestPage() {
   const activeList   = useMemo(() => invest.nonBonds.filter(r => r.active),  [invest.nonBonds])
   const inactiveList = useMemo(() => invest.nonBonds.filter(r => !r.active), [invest.nonBonds])
   const displayList  = tab === 'active' ? activeList : inactiveList
+
+  const hasFxInvest = useMemo(() => activeList.some(r => r.currency && r.currency !== 'KRW'), [activeList])
+  const fxLoading = hasFxInvest && fx.rates.length === 0
 
   const toKRWAmt = (amount: number, currency: string) => toKRWAmount(amount, currency, fx.toKRW)
   const totalAvail   = useMemo(() => activeList.filter(r => r.available === '가용')  .reduce((s, r) => s + toKRWAmt(r.amount, r.currency), 0), [activeList, fx.toKRW])  // eslint-disable-line react-hooks/exhaustive-deps
@@ -156,15 +161,21 @@ export default function InvestPage() {
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 dark:bg-blue-950/30 dark:border-blue-800">
           <p className="text-xs text-blue-600 font-medium mb-1 dark:text-blue-400">가용 합계</p>
-          <p className="text-xl font-bold text-blue-800 dark:text-blue-300">{fmtKRW(totalAvail)}</p>
+          <p className="text-xl font-bold text-blue-800 dark:text-blue-300">
+            {fxLoading ? <span className="text-sm animate-pulse">환율 조회 중…</span> : fmtKRW(totalAvail)}
+          </p>
         </div>
         <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 dark:bg-slate-800 dark:border-slate-700">
           <p className="text-xs text-gray-500 font-medium mb-1 dark:text-slate-300">불가용 합계</p>
-          <p className="text-xl font-bold text-gray-700 dark:text-gray-200">{fmtKRW(totalUnavail)}</p>
+          <p className="text-xl font-bold text-gray-700 dark:text-gray-200">
+            {fxLoading ? <span className="text-sm animate-pulse">환율 조회 중…</span> : fmtKRW(totalUnavail)}
+          </p>
         </div>
         <div className="col-span-2 md:col-span-1 bg-emerald-50 border border-emerald-200 rounded-xl p-4 dark:bg-emerald-950/30 dark:border-emerald-800">
           <p className="text-xs text-emerald-600 font-medium mb-1 dark:text-emerald-400">총 운용 합계</p>
-          <p className="text-xl font-bold text-emerald-800 dark:text-emerald-300">{fmtKRW(totalAvail + totalUnavail)}</p>
+          <p className="text-xl font-bold text-emerald-800 dark:text-emerald-300">
+            {fxLoading ? <span className="text-sm animate-pulse">환율 조회 중…</span> : fmtKRW(totalAvail + totalUnavail)}
+          </p>
         </div>
       </div>
 

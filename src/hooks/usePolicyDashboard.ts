@@ -3,6 +3,8 @@ import { supabase } from '../lib/supabase'
 import type { Company, DailyRecord, InvestmentRecord, LoanRecord } from '../types'
 import { calcBondValue } from '../lib/format'
 import { normBank } from '../lib/bankUtils'
+import { useFx } from './useFx'
+import { toKRWAmount, type FxCode } from '../lib/treasuryCalc'
 
 // ── DB row → InvestmentRecord (간소화 버전) ───────────────────────────────
 type DbRow = Record<string, unknown>
@@ -77,8 +79,11 @@ async function fetchCompanyRaw(company: Company): Promise<RawCompanyData> {
   }
 }
 
+type ToKRWFn = (amount: number, currency: string) => number
+const identityKRW: ToKRWFn = (a) => a   // fallback when rates not loaded
+
 /** raw 데이터 → PolicyRealData 집계 (단일/멀티 훅 공용) */
-function computePolicyData(raw: RawCompanyData, loading: boolean): PolicyRealData {
+function computePolicyData(raw: RawCompanyData, loading: boolean, toKRW: ToKRWFn = identityKRW): PolicyRealData {
   const { daily: dailyData, invest: investData, loan: loanData } = raw
   const latestDaily = dailyData[0] ?? null
 
@@ -91,8 +96,13 @@ function computePolicyData(raw: RawCompanyData, loading: boolean): PolicyRealDat
   const nonBonds = investData.filter(i => i.product !== '국채')
   const bonds    = investData.filter(i => i.product === '국채')
 
-  const investAvail   = nonBonds.filter(i => i.available === '가용').reduce((s, i) => s + (i.amount || 0), 0)
-  const investUnavail = nonBonds.filter(i => i.available === '불가용').reduce((s, i) => s + (i.amount || 0), 0)
+  const toKRWAmt = (amount: number, currency: string) =>
+    toKRWAmount(amount, currency, toKRW as (a: number, c: FxCode) => number)
+
+  const investAvail   = nonBonds.filter(i => i.available === '가용')
+    .reduce((s, i) => s + toKRWAmt(i.amount || 0, i.currency || 'KRW'), 0)
+  const investUnavail = nonBonds.filter(i => i.available === '불가용')
+    .reduce((s, i) => s + toKRWAmt(i.amount || 0, i.currency || 'KRW'), 0)
 
   const bondAvail = bonds.filter(i => i.available === '가용').reduce((s, i) => {
     const qty = i.bondQty ?? 0; const price = i.bondPrice ?? 0
@@ -101,12 +111,12 @@ function computePolicyData(raw: RawCompanyData, loading: boolean): PolicyRealDat
 
   const totalLoan = loanData.reduce((s, l) => s + (l.amount || 0), 0)
 
-  // 금융기관별 운용자금 집계 — 은행만, normBank로 계좌별 등록명 합산
+  // 금융기관별 운용자금 집계 — 은행만, normBank로 계좌별 등록명 합산 (KRW 환산 기준)
   const bankMap = new Map<string, number>()
   nonBonds.forEach(i => {
     const key = normBank(i.bank)
     if (!key.includes('은행')) return
-    bankMap.set(key, (bankMap.get(key) ?? 0) + (i.amount || 0))
+    bankMap.set(key, (bankMap.get(key) ?? 0) + toKRWAmt(i.amount || 0, i.currency || 'KRW'))
   })
   const investByBank = [...bankMap.entries()].map(([bank, amount]) => ({ bank, amount }))
     .sort((a, b) => b.amount - a.amount)
@@ -133,6 +143,9 @@ const EMPTY_RAW: RawCompanyData = { daily: [], invest: [], loan: [] }
 export function usePolicyDashboard(company: Company | null): PolicyRealData {
   const [raw, setRaw]         = useState<RawCompanyData>(EMPTY_RAW)
   const [loading, setLoading] = useState(false)
+  const fx = useFx()
+  const fetchFxRates = fx.fetchRates
+  useEffect(() => { void fetchFxRates() }, [fetchFxRates])
 
   const fetch = useCallback(async () => {
     if (!company) { setRaw(EMPTY_RAW); return }
@@ -143,7 +156,8 @@ export function usePolicyDashboard(company: Company | null): PolicyRealData {
 
   useEffect(() => { void fetch() }, [fetch])
 
-  return useMemo(() => computePolicyData(raw, loading), [raw, loading])
+  const toKRW = fx.toKRW as ToKRWFn
+  return useMemo(() => computePolicyData(raw, loading, toKRW), [raw, loading, toKRW])
 }
 
 /**
@@ -153,6 +167,10 @@ export function usePolicyDashboard(company: Company | null): PolicyRealData {
 export function usePolicyDashboards(companies: Company[]): Record<Company, PolicyRealData> {
   const [rawMap, setRawMap]   = useState<Record<Company, RawCompanyData>>({})
   const [loading, setLoading] = useState(false)
+  const fx = useFx()
+  const fetchFxRates = fx.fetchRates
+  useEffect(() => { void fetchFxRates() }, [fetchFxRates])
+
   const key = companies.join('|')
 
   useEffect(() => {
@@ -171,11 +189,12 @@ export function usePolicyDashboards(companies: Company[]): Record<Company, Polic
     return () => { cancelled = true }
   }, [key]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  const toKRW = fx.toKRW as ToKRWFn
   return useMemo(() => {
     const out: Record<Company, PolicyRealData> = {}
     for (const c of companies) {
-      out[c] = computePolicyData(rawMap[c] ?? EMPTY_RAW, loading)
+      out[c] = computePolicyData(rawMap[c] ?? EMPTY_RAW, loading, toKRW)
     }
     return out
-  }, [rawMap, loading, key]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [rawMap, loading, key, toKRW]) // eslint-disable-line react-hooks/exhaustive-deps
 }
