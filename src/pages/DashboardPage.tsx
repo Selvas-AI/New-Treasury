@@ -1,8 +1,8 @@
-﻿import { useEffect, useState, useCallback } from 'react'
+﻿import { useState, useCallback } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { usePageCompany } from '../hooks/usePageCompany'
 import { useDashboard } from '../hooks/useDashboard'
-import { useIssueCount } from '../contexts/issueCount'
+
 import { fmtKRW } from '../lib/format'
 import KpiCard from '../components/dashboard/KpiCard'
 import WaterfallCard from '../components/dashboard/WaterfallCard'
@@ -17,7 +17,6 @@ import type { IssueStatus } from '../types'
 export default function DashboardPage() {
   const { user } = useAuth()
   const { company } = usePageCompany()
-  const { setOpenCount } = useIssueCount()
   const db = useDashboard()
 
   const [hoverKey, setHoverKey] = useState<string | null>(null)
@@ -31,10 +30,6 @@ export default function DashboardPage() {
   const handleFlowClick = useCallback((key: FlowItemKey) => {
     setFlowDetail(prev => prev === key ? null : key)
   }, [])
-
-  useEffect(() => {
-    setOpenCount(db.detectedIssues.filter(i => i.status !== 'done').length)
-  }, [db.detectedIssues, setOpenCount])
 
   async function handleStatusChange(_key: string, _id: string, status: IssueStatus) {
     const issue = db.detectedIssues.find(i => i.key === _key)
