@@ -1,9 +1,11 @@
-﻿import { useState, useMemo } from 'react'
+﻿import { useState, useMemo, useEffect } from 'react'
 import { usePolicyBankLimits } from '../../hooks/usePolicyBankLimits'
 import { getLatestInvestments } from '../../hooks/useInvestments'
+import { useFx } from '../../hooks/useFx'
 import { fmtKRW } from '../../lib/format'
+import { toKRWAmount } from '../../lib/treasuryCalc'
 import { BANK_TYPES, normBank } from '../../lib/bankUtils'
-import type { Company, InvestmentRecord } from '../../types'
+import type { Company, FxCode, InvestmentRecord } from '../../types'
 
 const DEFAULT_LIMIT_PCT = 30
 
@@ -38,6 +40,8 @@ const EMPTY_FORM = { bankType: '은행' as typeof BANK_TYPES[number], limitPct: 
 
 export default function BankLimitsTab({ company, investments, isMaster, userLabel }: Props) {
   const limits = usePolicyBankLimits(company)
+  const fx = useFx()
+  useEffect(() => { void fx.fetchRates() }, [fx.fetchRates])
 
   // 편집/등록 폼 상태
   const [editBank, setEditBank]   = useState<string | null>(null)
@@ -57,7 +61,19 @@ export default function BankLimitsTab({ company, investments, isMaster, userLabe
     () => latestInvests.filter(i => normBank(i.bank).includes('은행')),
     [latestInvests],
   )
-  const totalAmt = useMemo(() => bankInvests.reduce((s, i) => s + (i.amount || 0), 0), [bankInvests])
+  const toKRWAmt = (amount: number, currency: string | null | undefined) =>
+    toKRWAmount(amount, currency, (amt, code) => fx.toKRW(amt, code as FxCode))
+
+  // 전체 운용자금 합계 (규정 §9 분모: 전체 대비 기관별 비중)
+  const totalAllAmt = useMemo(
+    () => latestInvests.filter(i => i.product !== '국채').reduce((s, i) => s + toKRWAmt(i.amount || 0, i.currency), 0),
+    [latestInvests, fx.toKRW], // eslint-disable-line react-hooks/exhaustive-deps
+  )
+  // 은행 합계 (테이블 footer용)
+  const totalAmt = useMemo(
+    () => bankInvests.reduce((s, i) => s + toKRWAmt(i.amount || 0, i.currency), 0),
+    [bankInvests, fx.toKRW], // eslint-disable-line react-hooks/exhaustive-deps
+  )
 
   // ── bankRows: 운용 기관 + 마스터 등록 기관 합산 (은행만) ────────────────
   const bankRows = useMemo<BankRow[]>(() => {
@@ -65,7 +81,7 @@ export default function BankLimitsTab({ company, investments, isMaster, userLabe
     const grouped = new Map<string, number>()
     for (const i of bankInvests) {
       const key = normBank(i.bank)
-      grouped.set(key, (grouped.get(key) ?? 0) + (i.amount || 0))
+      grouped.set(key, (grouped.get(key) ?? 0) + toKRWAmt(i.amount || 0, i.currency))
     }
 
     // 2. 마스터 등록 기관도 포함 (은행만, 운용 잔고 없으면 0)
@@ -76,10 +92,11 @@ export default function BankLimitsTab({ company, investments, isMaster, userLabe
     }
 
     // 3. 행 생성 (잔고 내림차순 → 미운용 기관 하단)
+    // 집중도 % 분모: 전체 운용자금(규정 §9 — 전체 대비 기관별 비중)
     return Array.from(grouped.entries())
       .sort((a, b) => b[1] - a[1])
       .map(([bank, amount]) => {
-        const pct      = totalAmt > 0 ? (amount / totalAmt) * 100 : 0
+        const pct      = totalAllAmt > 0 ? (amount / totalAllAmt) * 100 : 0
         const limitRec = limits.data.find(l => normBank(l.bank_name) === bank)
         const limitPct = limitRec?.limit_pct ?? DEFAULT_LIMIT_PCT
         const limitAmt = limitRec?.limit_amt ?? null
@@ -102,7 +119,7 @@ export default function BankLimitsTab({ company, investments, isMaster, userLabe
           registered: !!limitRec,
         }
       })
-  }, [bankInvests, limits.data, totalAmt])
+  }, [bankInvests, limits.data, totalAllAmt, fx.toKRW]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── 기관 등록/한도 설정 ─────────────────────────────────────────────────
   function openEdit(bank: string, row?: BankRow) {
@@ -172,9 +189,9 @@ export default function BankLimitsTab({ company, investments, isMaster, userLabe
       <div className="grid grid-cols-3 gap-3">
         <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-4">
           <p className="text-xs text-gray-500 dark:text-slate-300 mb-1">총 운용자금</p>
-          <p className="text-lg font-bold text-gray-800 dark:text-white">{fmtKRW(totalAmt)}</p>
+          <p className="text-lg font-bold text-gray-800 dark:text-white">{fmtKRW(totalAllAmt)}</p>
           <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
-            운용 {activeCount}개 · 등록 {bankRows.length}개 기관
+            은행 {fmtKRW(totalAmt)} · 운용 {activeCount}개 기관
           </p>
         </div>
         <div className={`rounded-xl border p-4 ${overCount > 0
