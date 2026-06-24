@@ -47,6 +47,12 @@ export default function FxPolicyTab({ company }: { company: Company }) {
   const interestIncome   = params.get('fx_interest_income')   ?? 2_300_000_000
   const maxFxRatio       = params.get('fx_max_fx_ratio')      ?? 0.30
   const confidenceLevel  = Number(params.get('fx_confidence_level') ?? 95) as ConfLevel
+  // 의결 확정값 — master가 🔒 확정 버튼으로 승격; null = 미의결
+  const decidedLevel     = params.get('fx_confidence_level_decided') != null
+    ? Number(params.get('fx_confidence_level_decided')) as ConfLevel
+    : null
+  const decidedDate         = params.getText('fx_conf_decided_date')    ?? null
+  const decidedMeetingLabel = params.getText('fx_conf_decided_meeting') ?? null
 
   const currencyRows = FX_CURRENCIES.map(c => ({
     ...c,
@@ -194,6 +200,24 @@ export default function FxPolicyTab({ company }: { company: Company }) {
   const [autoCalcMsg,   setAutoCalcMsg]   = useState<string | null>(null)
   const [bandPreview, setBandPreview]     = useState<{ min: number; max: number; bandWidth: number } | null>(null)
   const [bandError,   setBandError]       = useState<string | null>(null)
+
+  // ── 의결 확정 흐름
+  const [decidingConf, setDecidingConf]   = useState(false)
+  const [decideMeeting, setDecideMeeting] = useState('')
+  const [decideSaving,  setDecideSaving]  = useState(false)
+
+  async function handleDecideConf() {
+    setDecideSaving(true)
+    const today = new Date().toISOString().slice(0, 10)
+    await params.set('fx_confidence_level_decided', localConfLevel,  null,                                          user?.label ?? '')
+    await params.set('fx_conf_decided_date',         null,           today,                                         user?.label ?? '')
+    await params.set('fx_conf_decided_meeting',      null,           decideMeeting.trim() || '자금정책위원회',      user?.label ?? '')
+    // 동시에 시뮬 값도 동기화 (의결 확정 = 공식 채택)
+    await params.set('fx_confidence_level', localConfLevel, null, user?.label ?? '')
+    setDecideSaving(false)
+    setDecidingConf(false)
+    setDecideMeeting('')
+  }
 
   // ── 환전 발의 모달 상태
   const tradeHist = useFxTradeHistory()
@@ -398,10 +422,16 @@ export default function FxPolicyTab({ company }: { company: Company }) {
             cls: isOverLimit ? 'text-orange-600 dark:text-orange-400' : 'text-green-600 dark:text-green-400',
           },
           {
-            label: `최대 환율 변동폭 (${localConfLevel}% 신뢰도)`,
+            label: decidedLevel !== null && localConfLevel !== decidedLevel
+              ? `최대 환율 변동폭 (${localConfLevel}% 🧪시뮬)`
+              : decidedLevel !== null
+                ? `최대 환율 변동폭 (${localConfLevel}% 🔒의결)`
+                : `최대 환율 변동폭 (${localConfLevel}% ⬜미의결)`,
             value: `${(maxRateChange * 100).toFixed(2)}%`,
             sub: `z=${z} · 가중 σ ${(weightedStdSum * 100).toFixed(2)}%`,
-            cls: 'text-gray-800 dark:text-slate-100',
+            cls: decidedLevel !== null && localConfLevel !== decidedLevel
+              ? 'text-amber-600 dark:text-amber-400'
+              : 'text-gray-800 dark:text-slate-100',
           },
         ].map(item => (
           <div key={item.label} className={`${card} !p-4 space-y-0.5`}>
@@ -902,26 +932,68 @@ export default function FxPolicyTab({ company }: { company: Company }) {
 
           {/* 신뢰도 선택 */}
           <div className="mb-3">
-            <p className="text-xs text-gray-500 dark:text-slate-300 mb-2">보수성 수준 선택 — 클릭 시 한도 즉시 반영</p>
+            {/* 의결 상태 배지 */}
+            <div className="flex items-center justify-between mb-2 flex-wrap gap-1">
+              <p className="text-xs text-gray-500 dark:text-slate-300">보수성 수준 선택 — 클릭 시 즉시 시뮬레이션</p>
+              {decidedLevel !== null ? (
+                <span className="inline-flex items-center gap-1 text-[11px] px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300 font-medium border border-blue-200 dark:border-blue-700">
+                  🔒 의결 {decidedLevel}%
+                  {decidedDate && <span className="text-blue-400 font-normal">· {decidedDate}</span>}
+                  {decidedMeetingLabel && <span className="text-blue-400 font-normal hidden sm:inline">· {decidedMeetingLabel}</span>}
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 text-[11px] px-2.5 py-0.5 rounded-full bg-gray-100 text-gray-500 dark:bg-slate-700 dark:text-slate-400 border border-gray-200 dark:border-slate-600">
+                  ⬜ 미의결 — 정책회의 의결 필요
+                </span>
+              )}
+            </div>
+
+            {/* 시뮬레이션 중 배너 (sim ≠ decided) */}
+            {decidedLevel !== null && localConfLevel !== decidedLevel && (
+              <div className="mb-2 flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-700 text-xs text-amber-700 dark:text-amber-300">
+                <span className="shrink-0">🧪 시뮬레이션 중</span>
+                <span className="text-amber-600 dark:text-amber-400">
+                  현재 선택 <strong>{localConfLevel}%</strong>는 의결 기준 <strong>{decidedLevel}%</strong>과 다릅니다.
+                  {(() => {
+                    const simVol     = weightedStdSum * Z_TABLE[localConfLevel]
+                    const decidedVol = weightedStdSum * Z_TABLE[decidedLevel]
+                    const diff       = (simVol - decidedVol) * 100
+                    return diff !== 0
+                      ? <span className="ml-1">최대변동폭 <span className={diff > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}>{diff > 0 ? '+' : ''}{diff.toFixed(2)}%p</span></span>
+                      : null
+                  })()}
+                </span>
+                <span className="ml-auto shrink-0 text-amber-500 dark:text-amber-400">저장 안 됨</span>
+              </div>
+            )}
+
             <div className="flex gap-2 mb-2">
               {([90, 95, 99] as ConfLevel[]).map(lv => {
-                const lvZ       = Z_TABLE[lv]
-                const lvMaxVol  = weightedStdSum * lvZ
-                const lvLimitA  = lvMaxVol > 0 ? maxAllowedLoss / lvMaxVol : 0
-                const isActive  = localConfLevel === lv
+                const lvZ        = Z_TABLE[lv]
+                const lvMaxVol   = weightedStdSum * lvZ
+                const lvLimitA   = lvMaxVol > 0 ? maxAllowedLoss / lvMaxVol : 0
+                const isActive   = localConfLevel === lv
+                const isDecided  = decidedLevel === lv
                 return (
                   <button key={lv}
                     onClick={async () => {
-                      if (!isMaster) return
                       setLocalConfLevel(lv)
-                      await params.set('fx_confidence_level', lv, null, user?.label ?? '')
+                      // master만 sim값 저장; 나머지는 로컬 시뮬레이션만
+                      if (isMaster) await params.set('fx_confidence_level', lv, null, user?.label ?? '')
                     }}
-                    className={`flex-1 py-2 px-1 rounded-lg border text-center transition-all ${
-                      isActive
+                    className={`flex-1 py-2 px-1 rounded-lg border-2 text-center transition-all cursor-pointer
+                      ${isDecided && isActive
                         ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 shadow-sm'
-                        : 'border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-700/50'
-                    } ${!isMaster ? 'cursor-default' : 'cursor-pointer hover:border-blue-400'}`}>
-                    <p className={`text-sm font-bold ${isActive ? 'text-blue-600 dark:text-blue-400' : 'text-gray-600 dark:text-slate-300'}`}>{lv}%</p>
+                        : isDecided
+                          ? 'border-blue-400 bg-blue-50/50 dark:bg-blue-900/20 dark:border-blue-700'
+                          : isActive
+                            ? 'border-blue-400 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-600 shadow-sm'
+                            : 'border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-700/50 hover:border-blue-300'
+                      }`}>
+                    <div className="flex items-center justify-center gap-1">
+                      <p className={`text-sm font-bold ${isActive ? 'text-blue-600 dark:text-blue-400' : 'text-gray-600 dark:text-slate-300'}`}>{lv}%</p>
+                      {isDecided && <span className="text-[10px]">🔒</span>}
+                    </div>
                     <p className="text-xs text-gray-400">{lv === 90 ? '일반' : lv === 95 ? '표준' : '엄격'} z={lvZ}</p>
                     <p className={`text-xs tabular-nums mt-0.5 font-medium ${isActive ? 'text-blue-500 dark:text-blue-400' : 'text-gray-400'}`}>
                       {fmtKRW(lvLimitA)}
@@ -930,6 +1002,41 @@ export default function FxPolicyTab({ company }: { company: Company }) {
                 )
               })}
             </div>
+
+            {/* master: 의결 확정 UI */}
+            {isMaster && (
+              <div className="mb-2">
+                {!decidingConf ? (
+                  <button
+                    onClick={() => { setDecidingConf(true); setDecideMeeting('') }}
+                    className="w-full text-xs py-1.5 rounded-lg border border-blue-300 dark:border-blue-700 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors font-medium">
+                    🔒 현재 선택({localConfLevel}%)을 의결 기준으로 확정
+                  </button>
+                ) : (
+                  <div className="rounded-lg border border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-950/30 p-3 space-y-2">
+                    <p className="text-xs font-semibold text-blue-700 dark:text-blue-300">🔒 의결 기준 확정 — {localConfLevel}%</p>
+                    <div>
+                      <label className="text-[11px] text-blue-600 dark:text-blue-400">회의명 (선택)</label>
+                      <input
+                        type="text"
+                        value={decideMeeting}
+                        onChange={e => setDecideMeeting(e.target.value)}
+                        placeholder="예: 2026년 2차 자금정책회의"
+                        className="mt-0.5 w-full text-xs border border-blue-200 dark:border-blue-700 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-800 text-gray-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={() => setDecidingConf(false)}
+                        className="flex-1 text-xs py-1.5 rounded-lg border border-blue-200 dark:border-blue-700 text-blue-500 hover:bg-white dark:hover:bg-slate-800">취소</button>
+                      <button onClick={handleDecideConf} disabled={decideSaving}
+                        className="flex-1 text-xs py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 font-medium">
+                        {decideSaving ? '저장 중…' : '확정 저장'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* 신뢰도별 한도 A 영향 미리보기 */}
             <div className="rounded-lg bg-gray-50 dark:bg-slate-700/50 border border-gray-100 dark:border-slate-700 px-3 py-2 text-xs">
               <p className="text-gray-400 dark:text-gray-500 mb-1.5">신뢰도별 리스크 기반 한도 A 변화</p>
@@ -938,9 +1045,12 @@ export default function FxPolicyTab({ company }: { company: Company }) {
                 const lvMaxVol = weightedStdSum * lvZ
                 const lvLimitA = lvMaxVol > 0 ? maxAllowedLoss / lvMaxVol : 0
                 const barPct   = Math.min((lvLimitA / Math.max(maxAllowedLoss / (weightedStdSum * Z_TABLE[90]), 1)) * 100, 100)
+                const isDecided = decidedLevel === lv
                 return (
                   <div key={lv} className={`flex items-center gap-2 mb-1 ${localConfLevel === lv ? 'opacity-100' : 'opacity-55'}`}>
-                    <span className={`w-8 font-medium ${localConfLevel === lv ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500'}`}>{lv}%</span>
+                    <span className={`w-8 font-medium flex items-center gap-0.5 ${localConfLevel === lv ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500'}`}>
+                      {lv}%{isDecided && <span className="text-[9px]">🔒</span>}
+                    </span>
                     <div className="flex-1 h-1.5 bg-gray-200 dark:bg-slate-600 rounded-full overflow-hidden">
                       <div className={`h-full rounded-full transition-all ${localConfLevel === lv ? 'bg-blue-500' : 'bg-gray-300 dark:bg-slate-500'}`}
                         style={{ width: `${barPct}%` }} />
