@@ -84,16 +84,16 @@ export default function IssueHistoryPage() {
     if (paramKey) setOpenKey(decodeURIComponent(paramKey))
   }, [paramKey])
 
-  // 그룹화 및 필터
-  const groups = useMemo(() => {
-    const all = groupByKey(issues.data)
-    if (filterStatus === 'all') return all
-    return all.filter(g => g.latestStatus === filterStatus)
-  }, [issues.data, filterStatus])
+  // 그룹화 및 필터 — 탭 카운트는 개별 코멘트가 아닌 이슈 그룹(latestStatus) 기준
+  const allGroups   = useMemo(() => groupByKey(issues.data), [issues.data])
+  const groups      = useMemo(() => {
+    if (filterStatus === 'all') return allGroups
+    return allGroups.filter(g => g.latestStatus === filterStatus)
+  }, [allGroups, filterStatus])
 
-  const openCount   = useMemo(() => issues.data.filter(c => c.status === 'open').length,   [issues.data])
-  const reviewCount = useMemo(() => issues.data.filter(c => c.status === 'review').length, [issues.data])
-  const doneCount   = useMemo(() => issues.data.filter(c => c.status === 'done').length,   [issues.data])
+  const openCount   = useMemo(() => allGroups.filter(g => g.latestStatus === 'open').length,   [allGroups])
+  const reviewCount = useMemo(() => allGroups.filter(g => g.latestStatus === 'review').length, [allGroups])
+  const doneCount   = useMemo(() => allGroups.filter(g => g.latestStatus === 'done').length,   [allGroups])
 
   // 코멘트 추가
   async function handleAddComment(group: IssueGroup) {

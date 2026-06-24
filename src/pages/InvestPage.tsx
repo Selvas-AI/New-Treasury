@@ -59,6 +59,17 @@ export default function InvestPage() {
   const totalAvail   = useMemo(() => activeList.filter(r => r.available === '가용')  .reduce((s, r) => s + toKRWAmt(r.amount, r.currency), 0), [activeList, fx.toKRW])  // eslint-disable-line react-hooks/exhaustive-deps
   const totalUnavail = useMemo(() => activeList.filter(r => r.available === '불가용').reduce((s, r) => s + toKRWAmt(r.amount, r.currency), 0), [activeList, fx.toKRW])  // eslint-disable-line react-hooks/exhaustive-deps
 
+  // 금액 표시: KRW는 fmtKRW, 외화는 "N만 CCY (≈KRW환산)" 형태
+  function fmtAmtDisplay(amount: number, currency: string): { primary: string; sub: string | null } {
+    if (!currency || currency === 'KRW') return { primary: fmtKRW(amount), sub: null }
+    const native = amount >= 10000
+      ? `${(amount / 10000).toLocaleString('ko-KR', { maximumFractionDigits: 1 })}만 ${currency}`
+      : `${amount.toLocaleString('ko-KR')} ${currency}`
+    const krw = toKRWAmt(amount, currency)
+    const sub = krw > 0 ? `≈${fmtKRW(krw)}` : null
+    return { primary: native, sub }
+  }
+
   function setField<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm(f => ({ ...f, [key]: value }))
   }
@@ -324,7 +335,12 @@ export default function InvestPage() {
                           </div>
                         </div>
                         <div className="text-right shrink-0 ml-2">
-                          <div className="text-sm font-bold text-gray-900 dark:text-white tabular-nums">{fmtKRW(rec.amount)}</div>
+                          {(() => { const { primary, sub } = fmtAmtDisplay(rec.amount, rec.currency); return (
+                            <>
+                              <div className="text-sm font-bold text-gray-900 dark:text-white tabular-nums">{primary}</div>
+                              {sub && <div className="text-[10px] text-gray-400 dark:text-gray-500 tabular-nums">{sub}</div>}
+                            </>
+                          ) })()}
                           {tab === 'active' && (
                             <div className={`text-xs font-semibold mt-0.5 ${urgent ? 'text-red-600 dark:text-red-400' : warn ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400 dark:text-gray-500'}`}>
                               D-{dday}
@@ -375,7 +391,11 @@ export default function InvestPage() {
                           <td className="py-2 pr-3 font-medium text-gray-800 whitespace-nowrap dark:text-gray-100">{rec.bank}</td>
                           <td className="py-2 pr-3 text-gray-600 dark:text-slate-100">{rec.product}</td>
                           <td className="py-2 pr-3 text-gray-500 dark:text-slate-300">{rec.currency}</td>
-                          <td className="py-2 pr-3 text-right tabular-nums font-medium text-gray-800 dark:text-gray-100">{fmtKRW(rec.amount)}</td>
+                          <td className="py-2 pr-3 text-right tabular-nums font-medium text-gray-800 dark:text-gray-100">
+                            {(() => { const { primary, sub } = fmtAmtDisplay(rec.amount, rec.currency); return (
+                              <><div>{primary}</div>{sub && <div className="text-[10px] text-gray-400 dark:text-gray-500">{sub}</div>}</>
+                            ) })()}
+                          </td>
                           <td className="py-2 pr-3">{ret !== null ? <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${returnBadgeClass(ret)}`}>{fmtReturn(ret)}</span> : <span className="text-xs text-gray-400 dark:text-gray-500">{rec.rate ? `${rec.rate}%` : '-'}</span>}</td>
                           <td className="py-2 pr-3"><span className={`text-xs px-1.5 rounded ${rec.available === '가용' ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{rec.available}</span></td>
                           <td className="py-2 pr-3 text-xs text-gray-400 whitespace-nowrap dark:text-gray-500">{rec.start}</td>
