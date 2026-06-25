@@ -47,12 +47,12 @@ export interface IssueItem {
   commentCount: number
 }
 
-export function useDashboard() {
-  const daily    = useDaily()
-  const invest   = useInvestments(true)    // active only
-  const loans    = useLoans(true)          // active only
-  const equities = useEquities()
-  const issues   = useIssues()
+export function useDashboard(companyOverride?: string) {
+  const daily    = useDaily(companyOverride)
+  const invest   = useInvestments(true, companyOverride)
+  const loans    = useLoans(true,  companyOverride)
+  const equities = useEquities(companyOverride)
+  const issues   = useIssues(companyOverride)
   const fx       = useFx()
 
   // 외화 운용자금 환산에 필요한 환율 (Sidebar와 별도 인스턴스이므로 자체 fetch)

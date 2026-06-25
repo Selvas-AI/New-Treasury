@@ -5,7 +5,7 @@ import { useAuth } from './useAuth'
 import { useAuditLog } from './useAuditLog'
 import type { DailyRecord, UseQueryResult } from '../types'
 
-export function useDaily(): UseQueryResult<DailyRecord> & {
+export function useDaily(companyOverride?: string): UseQueryResult<DailyRecord> & {
   upsert: (record: Omit<DailyRecord, 'id'> & { id?: string }) => Promise<string | null>
   remove: (id: string) => Promise<string | null>
 } {
@@ -15,7 +15,7 @@ export function useDaily(): UseQueryResult<DailyRecord> & {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const fetchCompany = user?.role === 'company' ? user.company : currentCompany
+  const fetchCompany = user?.role === 'company' ? user.company : (companyOverride ?? currentCompany)
   const fetchIdRef = useRef(0)
 
   const fetch = useCallback(async () => {

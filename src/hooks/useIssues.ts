@@ -11,7 +11,7 @@ export function makeIssueKey(type: 'loan' | 'equity' | 'input_daily', id?: strin
   return `${type}_${id}`
 }
 
-export function useIssues(): UseQueryResult<IssueComment> & {
+export function useIssues(companyOverride?: string): UseQueryResult<IssueComment> & {
   /** 특정 이슈 키의 코멘트 스레드 */
   threadOf: (issueKey: string) => IssueComment[]
   /** 미완료(open + review) 이슈 수 */
@@ -28,7 +28,7 @@ export function useIssues(): UseQueryResult<IssueComment> & {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const fetchCompany = user?.role === 'company' ? user.company : currentCompany
+  const fetchCompany = user?.role === 'company' ? user.company : (companyOverride ?? currentCompany)
 
   const fetch = useCallback(async () => {
     if (!fetchCompany) return

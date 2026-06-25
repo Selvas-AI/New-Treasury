@@ -17,7 +17,7 @@ import type { IssueStatus } from '../types'
 export default function DashboardPage() {
   const { user } = useAuth()
   const { company } = usePageCompany()
-  const db = useDashboard()
+  const db = useDashboard(company)
 
   const [hoverKey, setHoverKey] = useState<string | null>(null)
   const [fixedKey, setFixedKey] = useState<string | null>(null)
