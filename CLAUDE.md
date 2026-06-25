@@ -920,6 +920,42 @@ VITE_GAS_API_URL=https://script.google.com/macros/s/AKfycbwZ.../exec
 
 ---
 
+### 2026-06-25 세션 16-2차 (대시보드 초기 0원 근본 해결)
+
+#### [CRITICAL] 첫 로드 시 데이터 0원 — supabase-js SELECT가 토큰 갱신 락 뒤에서 대기 ⭐
+```
+증상: 로그인 후 대시보드 첫 오픈 시 모든 KPI/자금흐름 0원. 새로고침(F5) 하거나
+       다른 법인 선택 후 돌아오면 정상 표시. (Supabase Auth 이메일 로그인 계정에서만)
+
+오진 주의: "company 해석 타이밍" 으로 보고 usePageCompany().company 를
+  useDashboard 에 전달하는 fix(커밋 b1b305d)를 먼저 했으나 효과 없음.
+  company 는 fallback 으로 항상 즉시 '셀바스에이아이' 로 해석됨 → 원인 아님.
+
+진단(재현):
+  - 레거시(접근코드) 세션을 sessionStorage 에 주입하면 첫 로드에 정상(77.9억).
+    레거시는 supabase.auth 를 전혀 호출하지 않음 → auth 와의 경합이 원인임을 확정.
+  - anon REST 직접 쿼리는 200·데이터 정상 → 데이터/쿼리 문제 아님.
+
+원인: Supabase Auth 경로는 첫 로드 시 autoRefreshToken 이 토큰 갱신을 트리거.
+  fetchWithTimeout 은 /auth/v1/ 요청에 타임아웃을 적용하지 않음(의도적 — 갱신 abort 시
+  SIGNED_OUT 유발 방지). 그 사이 supabase-js .from().select() 가 내부 _getAccessToken()
+  단계에서 갱신 락(safeLock) 뒤에 대기 → 호출부 withTimeout(6s) 초과 → catch →
+  data 는 setData([]) 인 채 굳음 + 재시도 경로 없음.
+  F5/법인전환 시엔 토큰이 이미 신선해 갱신이 안 일어나 select 즉시 성공.
+
+해결: 데이터 읽기 훅을 supabase.from().select() → restSelect() (PostgREST 직접 호출)로 전환.
+  - src/lib/supabase.ts: restSelect(table, { match, order, limit }) 신규.
+    restHeaders()로 localStorage 토큰을 즉시 사용 → 갱신 락과 무관. fetchWithTimeout(5s) 내장.
+  - 전환 대상: useDaily / useEquities / useInvestments / useLoans / useIssues.
+  - 쓰기는 이미 REST 헬퍼(restInsert/Update/Delete/Upsert) 사용 중 → 읽기까지 통일.
+
+금지: "읽기(SELECT)는 supabase.from().select() 사용 — wedge 유발 안 함" 이라는 과거 주석은
+  토큰 갱신 락 경합 케이스를 누락한 것. 신규 데이터 목록 조회는 restSelect 사용 권장.
+  company 미해석으로 오진하지 말 것 — 레거시 세션 주입으로 auth 경합 여부부터 가를 것.
+```
+
+---
+
 ## 8. 미완료 / 추후 작업
 
 ### GAS 스크립트 현황
