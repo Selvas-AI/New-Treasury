@@ -11,6 +11,7 @@ import { toKRWAmount } from '../lib/treasuryCalc'
 import { fmtKRW, calcDday, fmtReturn, returnBadgeClass, calcReturn } from '../lib/format'
 import { NumInput } from '../components/common/NumInput'
 import NegoLogPanel from '../components/common/NegoLogPanel'
+import AvailabilityModal, { type AvailItem } from '../components/common/AvailabilityModal'
 import type { InvestmentRecord } from '../types'
 
 const PRODUCT_OPTIONS = ['정기예금', 'RP', 'MMF', '발행어음', 'CMA', '채권', '기타']
@@ -48,6 +49,7 @@ export default function InvestPage() {
   const [error, setError]       = useState<string | null>(null)
   const [success, setSuccess]   = useState(false)
   const [negoId, setNegoId]     = useState<string | null>(null)
+  const [availModalOpen, setAvailModalOpen] = useState(false)
 
   const nego = useNegoLogs(currentCompany, 'investment')
 
@@ -64,6 +66,24 @@ export default function InvestPage() {
   const displayList  = tab === 'active' ? activeList : inactiveList
 
   const hasFxInvest = useMemo(() => activeList.some(r => r.currency && r.currency !== 'KRW'), [activeList])
+
+  const availInvestItems = useMemo<AvailItem[]>(() =>
+    activeList.map(r => ({
+      key:      r.id,
+      label:    `${r.bank} ${r.product}`,
+      sublabel: r.currency !== 'KRW' ? `${r.amount.toLocaleString()} ${r.currency}` : undefined,
+      detail:   r.maturity ? `만기 ${r.maturity}` : undefined,
+      current:  r.available ?? '가용',
+    })),
+  [activeList])
+
+  async function handleAvailInvestSave(changes: { key: string; available: '가용' | '불가용' }[]) {
+    for (const ch of changes) {
+      const err = await invest.updateAvailableById(ch.key, ch.available)
+      if (err) toast.error(`항목 ${ch.key}: ${err}`)
+    }
+    toast.success(`${changes.length}건 가용현황 변경 완료`)
+  }
   const fxLoading = hasFxInvest && fx.rates.length === 0
 
   const toKRWAmt = (amount: number, currency: string) => toKRWAmount(amount, currency, fx.toKRW)
@@ -156,10 +176,20 @@ export default function InvestPage() {
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100">운용자금</h2>
         {isEditable && !showForm && (
-          <button onClick={() => setShowForm(true)}
-            className="text-sm bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
-            + 신규 등록
-          </button>
+          <div className="flex items-center gap-2">
+            {tab === 'active' && (
+              <button
+                onClick={() => setAvailModalOpen(true)}
+                className="text-sm border border-indigo-200 text-indigo-600 px-3 py-1.5 rounded-lg hover:bg-indigo-50 transition-colors dark:border-indigo-700 dark:text-indigo-400 dark:hover:bg-indigo-950/30"
+              >
+                🔄 가용현황 변경
+              </button>
+            )}
+            <button onClick={() => setShowForm(true)}
+              className="text-sm bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
+              + 신규 등록
+            </button>
+          </div>
         )}
       </div>
 
@@ -499,6 +529,15 @@ export default function InvestPage() {
           )}
         </div>
       </div>
+
+      {/* ─── 가용/불가용 일괄변경 모달 ─── */}
+      <AvailabilityModal
+        open={availModalOpen}
+        onClose={() => setAvailModalOpen(false)}
+        title="운용자금 가용현황 변경"
+        items={availInvestItems}
+        onSave={handleAvailInvestSave}
+      />
     </div>
   )
 }

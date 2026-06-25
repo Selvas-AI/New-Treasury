@@ -11,6 +11,7 @@ import BondHistoryPanel from '../components/equity/BondHistoryPanel'
 import NewEquityForm from '../components/equity/NewEquityForm'
 import NewBondForm from '../components/equity/NewBondForm'
 import { usePageCompany } from '../hooks/usePageCompany'
+import AvailabilityModal, { type AvailItem } from '../components/common/AvailabilityModal'
 
 type TabKey = 'stock' | 'bond' | 'unlisted'
 
@@ -27,6 +28,9 @@ export default function EquityPage() {
   const [bulkState, setBulkState] = useState<{
     running: boolean; done: number; total: number; errors: string[]
   }>({ running: false, done: 0, total: 0, errors: [] })
+
+  // ─── 가용/불가용 일괄변경 모달 ──────────────────────────
+  const [availModalOpen, setAvailModalOpen] = useState(false)
 
   // ─── 취득가액 일괄입력 팝업 ──────────────────────────────
   const [acqPopupOpen, setAcqPopupOpen] = useState(false)
@@ -78,6 +82,27 @@ export default function EquityPage() {
       setAcqErrors(errs)
       toast.error(`취득가액 ${errs.length}건 저장 실패`)
     }
+  }
+
+  // 가용/불가용 모달 아이템 — 지분(상장+비상장) + 국채 제외
+  const availEquityItems = useMemo<AvailItem[]>(() => {
+    const latestList = [...stocks, ...unlisted]
+    return latestList.map(e => ({
+      key:      e.name,
+      label:    e.name,
+      sublabel: e.market,
+      detail:   e.shares ? `${e.shares.toLocaleString()}주` : undefined,
+      current:  e.available ?? '가용',
+    }))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eq.data, tab])
+
+  async function handleAvailEquitySave(changes: { key: string; available: '가용' | '불가용' }[]) {
+    for (const ch of changes) {
+      const err = await eq.updateAvailableByName(ch.key, ch.available)
+      if (err) toast.error(`${ch.key}: ${err}`)
+    }
+    toast.success(`${changes.length}건 가용현황 변경 완료`)
   }
 
   // ─── 국채 ────────────────────────────────────────────────
@@ -170,6 +195,14 @@ export default function EquityPage() {
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100">지분/장기투자</h2>
         <div className="flex items-center gap-2">
+          {isEditable && tab !== 'bond' && (
+            <button
+              onClick={() => setAvailModalOpen(true)}
+              className="text-sm border border-indigo-200 text-indigo-600 px-3 py-1.5 rounded-lg hover:bg-indigo-50 transition-colors dark:border-indigo-700 dark:text-indigo-400 dark:hover:bg-indigo-950/30"
+            >
+              🔄 가용현황 변경
+            </button>
+          )}
           {isEditable && acqMissing.length > 0 && (
             <button
               onClick={openAcqPopup}
@@ -545,6 +578,15 @@ export default function EquityPage() {
           </div>
         </div>
       )}
+
+      {/* ─── 가용/불가용 일괄변경 모달 ─── */}
+      <AvailabilityModal
+        open={availModalOpen}
+        onClose={() => setAvailModalOpen(false)}
+        title={`가용현황 변경 — ${tab === 'stock' ? '지분(상장)' : '비상장/기타'}`}
+        items={availEquityItems}
+        onSave={handleAvailEquitySave}
+      />
     </div>
   )
 }

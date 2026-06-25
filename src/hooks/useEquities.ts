@@ -23,6 +23,7 @@ export function useEquities(companyOverride?: string): UseQueryResult<EquityReco
   save: (record: Omit<EquityRecord, 'id'> & { id?: string }) => Promise<string | null>
   remove: (id: string) => Promise<string | null>
   updateAcquisitionCost: (name: string, cost: number) => Promise<string | null>
+  updateAvailableByName: (name: string, available: '가용' | '불가용') => Promise<string | null>
 } {
   const { user, currentCompany } = useAuth()
   const { logAction } = useAuditLog()
@@ -101,5 +102,17 @@ export function useEquities(companyOverride?: string): UseQueryResult<EquityReco
     return null
   }
 
-  return { data, loading, error, refetch: fetch, latest, historyOf, save, remove, updateAcquisitionCost }
+  /** 같은 종목 전체 이력에 가용/불가용 일괄 반영 (name+company 매칭) */
+  async function updateAvailableByName(name: string, available: '가용' | '불가용'): Promise<string | null> {
+    if (!fetchCompany) return null
+    const { error: err } = await restUpdate(
+      'equities', { available }, { name, company: fetchCompany },
+    )
+    if (err) return err.message
+    setData(prev => prev.map(r => r.name === name ? { ...r, available } : r))
+    void logAction({ table: 'equities', action: 'UPDATE', company: fetchCompany, recordId: name, summary: `${name} 가용현황 → ${available}` })
+    return null
+  }
+
+  return { data, loading, error, refetch: fetch, latest, historyOf, save, remove, updateAcquisitionCost, updateAvailableByName }
 }

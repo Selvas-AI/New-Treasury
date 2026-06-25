@@ -80,6 +80,7 @@ export function useInvestments(activeOnly = false, companyOverride?: string): Us
   remove: (id: string) => Promise<string | null>
   setActive: (id: string, active: boolean) => Promise<string | null>
   updateAcquisitionCost: (ids: string[], cost: number) => Promise<string | null>
+  updateAvailableById: (id: string, available: '가용' | '불가용') => Promise<string | null>
 } {
   const { user, currentCompany } = useAuth()
   const { logAction } = useAuditLog()
@@ -168,5 +169,18 @@ export function useInvestments(activeOnly = false, companyOverride?: string): Us
     return null
   }
 
-  return { data, loading, error, refetch: fetch, bonds, nonBonds, save, remove, setActive, updateAcquisitionCost }
+  /** 단건 가용/불가용 변경 */
+  async function updateAvailableById(id: string, available: '가용' | '불가용'): Promise<string | null> {
+    const target = data.find(r => r.id === id)
+    const { error: err } = await restUpdate('investments', { available }, { id })
+    if (err) return err.message
+    setData(prev => prev.map(r => r.id === id ? { ...r, available } : r))
+    if (target) {
+      const label = `${target.product ?? ''} ${target.bank ?? ''}`.trim()
+      void logAction({ table: 'investments', action: 'UPDATE', company: fetchCompany || '', recordId: id, summary: `${label} 가용현황 → ${available}` })
+    }
+    return null
+  }
+
+  return { data, loading, error, refetch: fetch, bonds, nonBonds, save, remove, setActive, updateAcquisitionCost, updateAvailableById }
 }
