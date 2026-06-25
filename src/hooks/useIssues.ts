@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { supabase, restInsert, restUpdate, restDelete, withTimeout } from '../lib/supabase'
+import { restSelect, restInsert, restUpdate, restDelete } from '../lib/supabase'
 import { useAuth } from './useAuth'
 import { generateUUID } from '../lib/format'
 import type { IssueComment, IssueStatus, UseQueryResult } from '../types'
@@ -36,11 +36,11 @@ export function useIssues(companyOverride?: string): UseQueryResult<IssueComment
     setData([])
     setError(null)
     try {
-      const { data: rows, error: err } = await withTimeout(
-        supabase.from('issue_comments').select('*').eq('company', fetchCompany).order('created_at', { ascending: false }),
+      const { data: rows, error: err } = await restSelect<IssueComment>(
+        'issue_comments', { match: { company: fetchCompany }, order: 'created_at.desc' },
       )
       if (err) setError(err.message)
-      else setData((rows ?? []) as IssueComment[])
+      else setData(rows ?? [])
     } catch (e) {
       setError(e instanceof Error ? e.message : '조회 실패')
     } finally {

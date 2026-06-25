@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { supabase, restInsert, restUpdate, restDelete, withTimeout } from '../lib/supabase'
+import { restSelect, restInsert, restUpdate, restDelete } from '../lib/supabase'
 import { useAuth } from './useAuth'
 import { useAuditLog } from './useAuditLog'
 import { generateUUID } from '../lib/format'
@@ -25,17 +25,15 @@ export function useLoans(activeOnly = false, companyOverride?: string): UseQuery
     setLoading(true)
     setData([])
     setError(null)
-    let query = supabase
-      .from('loans')
-      .select('*')
-      .eq('company', fetchCompany)
-      .order('maturity', { ascending: true })
-    if (activeOnly) query = query.eq('active', true)
+    const match: Record<string, string | boolean> = { company: fetchCompany }
+    if (activeOnly) match.active = true
     try {
-      const { data: rows, error: err } = await withTimeout(query)
+      const { data: rows, error: err } = await restSelect<LoanRecord>(
+        'loans', { match, order: 'maturity.asc' },
+      )
       if (fetchIdRef.current !== myId) return
       if (err) setError(err.message)
-      else setData((rows ?? []) as LoanRecord[])
+      else setData(rows ?? [])
     } catch (e) {
       if (fetchIdRef.current === myId) setError(e instanceof Error ? e.message : '조회 실패')
     } finally {

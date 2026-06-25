@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { supabase, restInsert, restUpdate, restDelete, restUpdateIn, withTimeout } from '../lib/supabase'
+import { restSelect, restInsert, restUpdate, restDelete, restUpdateIn } from '../lib/supabase'
 import { useAuth } from './useAuth'
 import { useAuditLog } from './useAuditLog'
 import { generateUUID } from '../lib/format'
@@ -99,17 +99,15 @@ export function useInvestments(activeOnly = false, companyOverride?: string): Us
     setLoading(true)
     setData([])
     setError(null)
-    let query = supabase
-      .from('investments')
-      .select('*')
-      .eq('company', fetchCompany)
-      .order('maturity', { ascending: true })
-    if (activeOnly) query = query.eq('active', true)
+    const match: Record<string, string | boolean> = { company: fetchCompany }
+    if (activeOnly) match.active = true
     try {
-      const { data: rows, error: err } = await withTimeout(query)
+      const { data: rows, error: err } = await restSelect<DbRow>(
+        'investments', { match, order: 'maturity.asc' },
+      )
       if (fetchIdRef.current !== myId) return  // 더 최신 요청이 있으면 데이터 반영 생략
       if (err) setError(err.message)
-      else setData((rows ?? []).map(r => fromDb(r as DbRow)))
+      else setData((rows ?? []).map(r => fromDb(r)))
     } catch (e) {
       if (fetchIdRef.current === myId) setError(e instanceof Error ? e.message : '조회 실패')
     } finally {

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { generateUUID } from '../lib/format'
-import { supabase, restUpsert, restDelete, withTimeout } from '../lib/supabase'
+import { restSelect, restUpsert, restDelete } from '../lib/supabase'
 import { useAuth } from './useAuth'
 import { useAuditLog } from './useAuditLog'
 import type { DailyRecord, UseQueryResult } from '../types'
@@ -25,12 +25,12 @@ export function useDaily(companyOverride?: string): UseQueryResult<DailyRecord> 
     setData([])
     setError(null)
     try {
-      const { data: rows, error: err } = await withTimeout(
-        supabase.from('daily').select('*').eq('company', fetchCompany).order('date', { ascending: false }),
+      const { data: rows, error: err } = await restSelect<DailyRecord>(
+        'daily', { match: { company: fetchCompany }, order: 'date.desc' },
       )
       if (fetchIdRef.current !== myId) return
       if (err) setError(err.message)
-      else setData((rows ?? []) as DailyRecord[])
+      else setData(rows ?? [])
     } catch (e) {
       if (fetchIdRef.current === myId) setError(e instanceof Error ? e.message : '조회 실패')
     } finally {

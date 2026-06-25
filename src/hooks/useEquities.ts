@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { supabase, restInsert, restUpdate, restDelete, withTimeout } from '../lib/supabase'
+import { restSelect, restInsert, restUpdate, restDelete } from '../lib/supabase'
 import { useAuth } from './useAuth'
 import { useAuditLog } from './useAuditLog'
 import { generateUUID } from '../lib/format'
@@ -41,12 +41,12 @@ export function useEquities(companyOverride?: string): UseQueryResult<EquityReco
     setData([])
     setError(null)
     try {
-      const { data: rows, error: err } = await withTimeout(
-        supabase.from('equities').select('*').eq('company', fetchCompany).order('date', { ascending: false }),
+      const { data: rows, error: err } = await restSelect<EquityRecord>(
+        'equities', { match: { company: fetchCompany }, order: 'date.desc' },
       )
       if (fetchIdRef.current !== myId) return
       if (err) setError(err.message)
-      else setData((rows ?? []) as EquityRecord[])
+      else setData(rows ?? [])
     } catch (e) {
       if (fetchIdRef.current === myId) setError(e instanceof Error ? e.message : '조회 실패')
     } finally {

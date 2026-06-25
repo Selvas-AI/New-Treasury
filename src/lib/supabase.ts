@@ -192,6 +192,49 @@ export async function restGet<T = unknown>(
   }
 }
 
+/**
+ * SELECT — 정렬·범위·추가 필터 지원 조회 (supabase-js 클라이언트 우회, PostgREST 직접 호출)
+ *
+ * 배경: supabase-js 의 .from().select() 는 _getAccessToken() 단계에서 토큰 자동갱신
+ *   (autoRefreshToken)이 진행 중이면 그 락(safeLock) 뒤에서 대기한다. 첫 페이지 로드 시
+ *   토큰이 만료 임박이면 갱신이 트리거되고, auth fetch 는 타임아웃이 없어 select 가
+ *   withTimeout(6s)을 넘겨 빈 결과로 굳는 사례가 확인됨(대시보드 초기 0원 → 새로고침/법인전환 후 정상).
+ *   → 읽기를 REST 로 직접 호출하면 localStorage 토큰을 즉시 사용해 갱신 락과 무관하게 동작.
+ *
+ * opts:
+ *   - match: col=eq.value 필터 (예: { company: '...', active: true })
+ *   - order: 'date.desc' / 'maturity.asc' 형식 (PostgREST order 구문)
+ *   - limit: 최대 행 수
+ */
+export async function restSelect<T = unknown>(
+  table: string,
+  opts: { match?: Record<string, string | number | boolean>; order?: string; limit?: number } = {},
+): Promise<RestResult<T>> {
+  const parts: string[] = ['select=*']
+  if (opts.match && Object.keys(opts.match).length) parts.push(eqQuery(opts.match))
+  if (opts.order) parts.push(`order=${encodeURIComponent(opts.order)}`)
+  if (opts.limit != null) parts.push(`limit=${opts.limit}`)
+  const url = `${REST_URL}/${table}?${parts.join('&')}`
+  try {
+    const resp = await fetchWithTimeout(url, {
+      method: 'GET',
+      headers: { ...restHeaders(), Accept: 'application/json' },
+    })
+    if (!resp.ok) {
+      let message = `${resp.status} ${resp.statusText}`
+      try { const j = await resp.json() as { message?: string }; if (j.message) message = j.message } catch { /* */ }
+      return { data: null, error: { message, status: resp.status } }
+    }
+    const data = await resp.json() as T[]
+    return { data, error: null }
+  } catch (e) {
+    const message = e instanceof Error
+      ? (e.name === 'AbortError' ? '요청 시간 초과' : e.message)
+      : '네트워크 오류'
+    return { data: null, error: { message, status: 0 } }
+  }
+}
+
 /** INSERT — rows 단건/배열 */
 export function restInsert<T = unknown>(table: string, rows: unknown, returning = false): Promise<RestResult<T>> {
   return restSend<T>('POST', table, { body: rows, returning })
