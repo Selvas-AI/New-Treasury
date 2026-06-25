@@ -73,7 +73,7 @@ export function getLatestInvestments(investments: InvestmentRecord[]): Investmen
   return [...nonBond, ...getLatestBonds(investments)]
 }
 
-export function useInvestments(activeOnly = false): UseQueryResult<InvestmentRecord> & {
+export function useInvestments(activeOnly = false, companyOverride?: string): UseQueryResult<InvestmentRecord> & {
   bonds: InvestmentRecord[]
   nonBonds: InvestmentRecord[]
   save: (record: Omit<InvestmentRecord, 'id'> & { id?: string }) => Promise<string | null>
@@ -87,7 +87,7 @@ export function useInvestments(activeOnly = false): UseQueryResult<InvestmentRec
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const fetchCompany = user?.role === 'company' ? user.company : currentCompany
+  const fetchCompany = user?.role === 'company' ? user.company : (companyOverride ?? currentCompany)
 
   // fetchCompany 변경 시 진행 중인 이전 요청 결과를 무시하기 위한 ref
   const fetchIdRef = useRef(0)

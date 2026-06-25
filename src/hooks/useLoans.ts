@@ -5,7 +5,7 @@ import { useAuditLog } from './useAuditLog'
 import { generateUUID } from '../lib/format'
 import type { LoanRecord, UseQueryResult } from '../types'
 
-export function useLoans(activeOnly = false): UseQueryResult<LoanRecord> & {
+export function useLoans(activeOnly = false, companyOverride?: string): UseQueryResult<LoanRecord> & {
   save: (record: Omit<LoanRecord, 'id'> & { id?: string }) => Promise<string | null>
   remove: (id: string) => Promise<string | null>
   setActive: (id: string, active: boolean) => Promise<string | null>
@@ -16,7 +16,7 @@ export function useLoans(activeOnly = false): UseQueryResult<LoanRecord> & {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const fetchCompany = user?.role === 'company' ? user.company : currentCompany
+  const fetchCompany = user?.role === 'company' ? user.company : (companyOverride ?? currentCompany)
   const fetchIdRef = useRef(0)
 
   const fetch = useCallback(async () => {

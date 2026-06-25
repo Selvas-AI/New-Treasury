@@ -19,8 +19,8 @@ export default function EquityPage() {
   const { canEdit, canAction } = useAuth()
   const { company: currentCompany } = usePageCompany()
   const toast = useToast()
-  const eq   = useEquities()
-  const inv  = useInvestments()
+  const eq   = useEquities(currentCompany)
+  const inv  = useInvestments(false, currentCompany)
 
   const [tab, setTab]           = useState<TabKey>('stock')
   const [openPanel, setOpenPanel] = useState<string | null>(null)

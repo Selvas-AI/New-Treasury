@@ -168,3 +168,53 @@
 ### Pending 기능
 
 - [ ] **Dashboard 탭 네비게이션**: TopBar 하단 전체 너비 탭 바 (통합 상황판/자금일보/자금정책). DASHBOARD 카테고리 페이지에만 표시. 상세 설계: `docs/pending/DashboardTabNav.md`
+
+---
+
+## 📊 자금일보 누적 현황/통계 분석 (2026-06-24 기획 확정)
+
+> 원천: `daily_report_items`(15개 카테고리 × direction in/out) + `daily_reports`(report_date, company, status)  
+> 결합: `daily`(잔액 추이), `cashflow_plan`(예실 비교), `investments/loans`(연동 건별)  
+> 라우트 예정: `/cashflow-analytics/:company?`  
+> 상세 기획: `docs/pages/CashflowAnalyticsPage.md` (작성 예정)
+
+### P1 — 핵심 집계 뷰 (자금일보 데이터 최소 2개월 누적 후 의미있음)
+
+- [ ] **`useCashflowAnalytics` 훅 신규**: 법인 + 기간 + 상태(approved/all) 파라미터 → `daily_report_items JOIN daily_reports` GROUP BY 집계. 반환: `byCategory`, `byPeriod`, `totals`(총입금/총출금/순유입). Supabase `.gte/.lte(report_date)` 필터.
+- [ ] **기간별 현황 탭**: KPI 4개(총입금/총출금/순유입/기말잔액) + 월별 Recharts 막대+꺾은선 복합 차트(입금=green, 출금=red, 순유입=blue 꺾은선). 기간 선택 1M/3M/6M/YTD/1Y/직접 선택. 승인 완료만/전체 토글.
+- [ ] **카테고리별 분석 탭**: 입금 항목별 + 출금 항목별 가로 비율 바 차트(각 카테고리 금액·비율). 카테고리 클릭 → 해당 카테고리의 기간별 추이 꺾은선 드릴다운. CF 성격 배지: 영업활동(blue)/투자활동(green)/재무활동(purple)/평가손익(amber).
+
+### P2 — 심화 분석
+
+- [ ] **현금흐름표 탭 (직접법)**: 카테고리 → 영업/투자/재무 CF 섹션 매핑. 당월/전월/YTD 3열 비교 테이블. 순 현금흐름 합계행. CF 섹션 매핑:
+  - 영업: ar_collection, other_receivable, govt_fund, advance_in/out, ap_payment, trade_ap_payment, interest_income, interest_expense, enote_payment, other_in/out
+  - 투자: invest_return, invest_execute
+  - 재무: loan_drawdown, loan_repayment
+- [ ] **예실 비교 탭**: `cashflow_plan`(주별 예측 유입/유출) × `daily_report_items` 실적 집계 JOIN → 주별 달성률 테이블. 달성률 75% 미만 ⚠ 경고 강조.
+- [ ] **3사 법인 비교 뷰**: 동일 카테고리+기간을 3사 병렬 비교 (CEO 보고용). 법인 선택 멀티체크 또는 "전체 법인" 모드.
+
+### P3 — 부가 기능
+
+- [ ] **이상값 감지**: 최근 3개월 이동평균 대비 ±30% 초과 카테고리 자동 표시 → 대시보드 이슈 배지 연동 검토.
+- [ ] **CSV 내보내기**: 선택 기간 × 카테고리 필터 적용 후 CSV 다운로드. 승인 완료 건만/전체 선택 옵션. SheetJS(xlsx) 활용.
+- [ ] **Sidebar 메뉴 추가**: 자금일보 섹션에 "📊 현황 분석" 항목 추가. slug: `cashflow-analytics`, 접근 권한: viewer 이상.
+
+---
+
+## 🏦 금리 네고/비딩 이력 (2026-06-24 구현 완료)
+
+- [x] **`rate_nego_logs` 테이블**: `docs/db/rate_nego_logs.sql` DDL 작성. company/record_type/record_id/nego_type/outcome/offered_rate/contact_person/notes 컬럼. RLS permissive. → **2026-06-24 완료**
+  - ⚠ Supabase SQL Editor 실행 필요 (미실행 시 네고 이력 저장 불가)
+- [x] **`useNegoLogs` 훅**: 법인+레코드유형 수준 전체 fetch, `byRecord: Map<string, NegoLog[]>` O(1) 조회. add/update/remove CRUD. → **2026-06-24 완료**
+- [x] **`NegoLogPanel` 컴포넌트**: 아코디언 인라인 패널. 타임라인 이력 표시, 비딩 비교 카드(≥2건 offered_rate 시), 인라인 추가/편집 폼. 결과 배지(진행중/채택/미채택/보류), 유형 배지(비딩/금리네고/재예치협의/상환협의/기타). → **2026-06-24 완료**
+- [x] **InvestPage 연동**: 운용자금 PC 테이블 + 모바일 카드에 React.Fragment 아코디언 추가. 네고 건수 배지, colSpan=10 확장 행. → **2026-06-24 완료**
+- [x] **LoansPage 연동**: 차입금 PC 테이블 + 모바일 카드 동일 패턴. colSpan=9. → **2026-06-24 완료**
+
+---
+
+## 💱 FX 신뢰도 의결 UX (2026-06-24 구현 완료)
+
+- [x] **의결 기준 고정 + 시뮬레이션 분리**: `fx_confidence_level_decided`/`fx_conf_decided_date`/`fx_conf_decided_meeting` 3개 `policy_params` 키 추가(DB 마이그레이션 불필요 — key-value upsert). → **2026-06-24 완료**
+- [x] **미의결 배지**: `decidedLevel === null` → `⬜ 미의결 — 정책회의 의결 필요` 회색 배지 표시. → **2026-06-24 완료**
+- [x] **의결 확정 UI (master)**: "🔒 현재 선택(N%)을 의결 기준으로 확정" 버튼 → 회의명 입력 폼 → 저장 시 `fx_confidence_level`(실제 계산 기준)도 동시 업데이트. → **2026-06-24 완료**
+- [x] **시뮬레이션 모드 배너**: 의결 기준과 다른 신뢰도 선택 시 amber "🧪 시뮬레이션 중 (의결: N%, 시뮬: M%, Δ +X%p)" 배너 표시. → **2026-06-24 완료**

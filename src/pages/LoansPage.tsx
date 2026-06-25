@@ -41,7 +41,7 @@ export default function LoansPage() {
   const { canEdit, canAction } = auth
   const { company: currentCompany } = usePageCompany()
   const toast = useToast()
-  const loans = useLoans()
+  const loans = useLoans(false, currentCompany)
   const nego  = useNegoLogs(currentCompany, 'loan')
 
   const [tab, setTab]         = useState<'active' | 'inactive'>('active')

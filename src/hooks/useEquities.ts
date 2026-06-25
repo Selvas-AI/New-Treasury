@@ -15,7 +15,7 @@ export function getLatestEquities(equities: EquityRecord[]): EquityRecord[] {
   return Array.from(latest.values())
 }
 
-export function useEquities(): UseQueryResult<EquityRecord> & {
+export function useEquities(companyOverride?: string): UseQueryResult<EquityRecord> & {
   /** 종목별 최신 1건 */
   latest: EquityRecord[]
   /** 특정 종목 전체 이력 */
@@ -30,7 +30,7 @@ export function useEquities(): UseQueryResult<EquityRecord> & {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const fetchCompany = user?.role === 'company' ? user.company : currentCompany
+  const fetchCompany = user?.role === 'company' ? user.company : (companyOverride ?? currentCompany)
   const fetchIdRef = useRef(0)
 
   const fetch = useCallback(async () => {

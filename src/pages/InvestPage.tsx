@@ -36,7 +36,7 @@ export default function InvestPage() {
   const { canEdit, canAction } = auth
   const { company: currentCompany } = usePageCompany()
   const toast = useToast()
-  const invest = useInvestments()
+  const invest = useInvestments(false, currentCompany)
   const fx = useFx()
   const bankMaster = usePolicyBankLimits(currentCompany)
 
