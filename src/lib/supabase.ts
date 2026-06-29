@@ -3,6 +3,30 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
 
+// ── 브라우저 종료 시 자동 로그아웃 (sessionStorage 플래그 방식) ─────────────
+// 원리: Supabase Auth 세션은 기본적으로 localStorage에 영구 저장된다.
+//      sessionStorage는 탭/브라우저 완전 종료 시 자동 소멸한다 (F5 리프레시는 유지).
+// 해결: 앱 초기화 시 sessionStorage 플래그 부재 → 새 브라우저 기동 → localStorage
+//      Auth 토큰·프로필 캐시를 즉시 제거 → 로그인 화면으로 이동.
+//      F5 리프레시 시에는 플래그가 살아있으므로 → 로그인 유지.
+// 주의: makeClient() 보다 반드시 먼저 실행돼야 Supabase 클라이언트가 빈 저장소를 본다.
+const _SESSION_FLAG = 'treasury_session_alive'
+if (typeof sessionStorage !== 'undefined' && !sessionStorage.getItem(_SESSION_FLAG)) {
+  // 새 브라우저 세션 → localStorage의 Supabase 토큰 및 캐시 전부 제거
+  if (typeof localStorage !== 'undefined') {
+    Object.keys(localStorage)
+      .filter(k =>
+        (k.startsWith('sb-') && (k.endsWith('-auth-token') || k.endsWith('-code-verifier')))
+        || k === 'treasury_profile_cache',
+      )
+      .forEach(k => localStorage.removeItem(k))
+  }
+}
+// 현재 브라우저 탭이 살아있는 동안 플래그 유지 (브라우저 종료 시 자동 소멸)
+if (typeof sessionStorage !== 'undefined') {
+  sessionStorage.setItem(_SESSION_FLAG, '1')
+}
+
 // Supabase 네트워크 요청 타임아웃
 // - 인증(auth) 요청: 타임아웃 미적용 — 토큰 갱신이 abort되면 SIGNED_OUT 발생 → 강제 로그아웃
 // - 데이터 API 요청: 5초 — hang 감지 + withTimeout(6s) 조합으로 완전 보호
