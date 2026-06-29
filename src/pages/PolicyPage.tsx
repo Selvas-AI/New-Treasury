@@ -1029,6 +1029,8 @@ export default function PolicyPage() {
                 investments={selectedData.investments}
                 loans={selectedData.loans}
                 isMaster={isMaster}
+                company={companyTab as string}
+                userLabel={userLabel}
               />
             )}
 
@@ -1430,6 +1432,8 @@ export default function PolicyPage() {
             investments={selectedData.investments}
             loans={selectedData.loans}
             isMaster={isMaster}
+            company={companyTab !== 'all' ? companyTab as string : ''}
+            userLabel={userLabel}
           />
         ) : null
       )}

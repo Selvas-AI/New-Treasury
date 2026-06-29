@@ -16,7 +16,8 @@ const ISSUE_TYPE: { test: (k: string) => boolean; label: string; cls: string }[]
   { test: k => k === 'input_daily',    label: '운전자금', cls: 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' },
   { test: k => k.startsWith('loan_'),  label: '차입금',   cls: 'bg-orange-50 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400' },
   { test: k => k.startsWith('equity_'),label: '지분',     cls: 'bg-pink-50 text-pink-600 dark:bg-pink-900/30 dark:text-pink-400' },
-  { test: k => k.startsWith('policy_'),label: '정책',     cls: 'bg-purple-50 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400' },
+  { test: k => k.startsWith('policy_'),         label: '정책',   cls: 'bg-purple-50 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400' },
+  { test: k => k.startsWith('product_review_'), label: '적정성', cls: 'bg-teal-50 text-teal-600 dark:bg-teal-900/30 dark:text-teal-400' },
 ]
 function issueTypeBadge(key: string) {
   const found = ISSUE_TYPE.find(t => t.test(key))
