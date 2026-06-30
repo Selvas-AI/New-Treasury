@@ -1,6 +1,7 @@
 ﻿import { useState, useEffect, useRef } from 'react'
 import { Outlet, Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
+import { useAutoRefreshPrices } from '../hooks/useAutoRefreshPrices'
 import Sidebar from './Sidebar'
 import TopBar from './TopBar'
 
@@ -77,6 +78,8 @@ function useLoadingWatchdog() {
 export default function Layout() {
   const { user } = useAuth()
   const { countdown, dismiss } = useLoadingWatchdog()
+  // 백그라운드 시세 자동 갱신 (하루 1회, 로그인 직후 실행)
+  useAutoRefreshPrices()
 
   // PC: 접기/펼치기 상태 (localStorage 유지)
   const [collapsed, setCollapsed] = useState<boolean>(() => {

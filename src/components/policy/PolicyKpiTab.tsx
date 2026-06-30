@@ -85,6 +85,9 @@ export default function PolicyKpiTab({ company }: Props) {
   const meetings = usePolicyMeetings()
   const fx       = useFx()
 
+  // PolicyKpiTab은 Sidebar와 별개 useFx 인스턴스 — 직접 fetchRates 호출 필요
+  useEffect(() => { void fx.fetchRates() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   const [dailyHistory, setDailyHistory]     = useState<DailyRow[]>([])
   const [allBonds, setAllBonds]             = useState<InvRow[]>([])
   const [allDecisions, setAllDecisions]     = useState<PolicyDecision[]>([])
@@ -281,7 +284,7 @@ export default function PolicyKpiTab({ company }: Props) {
           </div>
           <span className={`text-gray-400 dark:text-slate-400 text-lg transition-transform duration-200 ${fxOpen ? 'rotate-180' : ''}`}>▾</span>
         </button>
-        <div className={`transition-all duration-200 ${fxOpen ? 'px-6 pb-6 space-y-5' : 'hidden'}`}>
+        {fxOpen && <div className="px-6 pb-6 space-y-5">
         <div className="flex flex-wrap items-center justify-end gap-3">
           {/* 기준일 선택 */}
           <div className="flex items-center gap-2 flex-wrap">
@@ -420,7 +423,7 @@ export default function PolicyKpiTab({ company }: Props) {
             외화 잔고 이력 데이터가 없습니다.
           </div>
         )}
-        </div>{/* end collapsible */}
+        </div>}
       </section>
 
       {/* ── 섹션 2: 국채 Exit 효과 ───────────────────────────────── */}
@@ -437,7 +440,7 @@ export default function PolicyKpiTab({ company }: Props) {
           </div>
           <span className={`text-gray-400 dark:text-slate-400 text-lg transition-transform duration-200 ${bondOpen ? 'rotate-180' : ''}`}>▾</span>
         </button>
-        <div className={`transition-all duration-200 ${bondOpen ? 'px-6 pb-6 space-y-5' : 'hidden'}`}>
+        {bondOpen && <div className="px-6 pb-6 space-y-5">
         {/* 기준일 선택 */}
         <div className="flex flex-wrap items-center justify-end gap-2">
             <span className="text-xs text-gray-400 dark:text-slate-400">기준일</span>
@@ -555,7 +558,7 @@ export default function PolicyKpiTab({ company }: Props) {
             국채 이력 데이터가 없습니다.
           </div>
         )}
-        </div>{/* end collapsible */}
+        </div>}
       </section>
 
     </div>

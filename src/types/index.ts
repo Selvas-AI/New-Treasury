@@ -84,6 +84,32 @@ export interface InvestmentRecord {
   acquisition_cost: number
 }
 
+// ─── 외화 환전 이력 (fx_trade_history) ──────────────────
+export interface FxTradeRecord {
+  id: string
+  company: Company
+  trade_date: string        // YYYY-MM-DD
+  currency: string          // USD | EUR | JPY | GBP | CNY
+  direction: string         // sell | buy (기본 sell)
+  amount_fx: number         // 외화 금액
+  acq_rate: number | null   // 장부환율 (가중평균 취득환율)
+  trade_rate: number | null // 매각환율 (예정)
+  amount_krw: number | null // 원화환산액
+  fx_pnl: number | null     // 환차손익 (예상)
+  status: string            // 발의 | 승인 | 완료 | 취소
+  memo: string | null
+  created_by: string | null
+  created_at: string
+  // 승인 정보
+  approved_by: string | null
+  approved_at: string | null
+  // 완료(체결) 정보
+  completed_rate: number | null   // 실제 체결 환율
+  completed_pnl: number | null    // 확정 환차손익
+  completed_at: string | null
+  completed_by: string | null
+}
+
 // ─── 차입금 (loans) ──────────────────────────────────────
 export interface LoanRecord {
   id: string
