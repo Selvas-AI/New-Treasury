@@ -1,4 +1,4 @@
-﻿import { useState } from 'react'
+﻿import { useState, useEffect } from 'react'
 import { fmtKRW, fmtReturn, returnBadgeClass, calcReturn } from '../../lib/format'
 import { fetchStockPrice } from '../../hooks/useGas'
 import type { EquityRecord } from '../../types'
@@ -59,6 +59,16 @@ export default function EquityHistoryPanel({
 }: Props) {
   const [form, setForm] = useState(() => prefillFromHistory(history))
   const [editId, setEditId] = useState<string | null>(null)
+
+  // history prop 변경(updateAvailableByName 등) 시 편집 중이 아닌 경우에만 available 동기화
+  // — useState 초기값은 마운트 시 1회만 계산되므로, 이후 history 변경은 별도 effect로 반영
+  useEffect(() => {
+    if (editId) return
+    if (!history.length) return
+    const latest = history.reduce((best, r) => r.date > best.date ? r : best)
+    const latestAvailable = latest.available ?? '가용'
+    setForm(prev => prev.available === latestAvailable ? prev : { ...prev, available: latestAvailable })
+  }, [history, editId])
   const [fetching, setFetching] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)

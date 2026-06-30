@@ -1,4 +1,4 @@
-﻿import { useState } from 'react'
+﻿import { useState, useEffect } from 'react'
 import { fmtKRW, fmtReturn, returnBadgeClass, calcReturn, calcBondValue } from '../../lib/format'
 import { fetchBondPrice } from '../../hooks/useGas'
 import type { InvestmentRecord } from '../../types'
@@ -63,6 +63,17 @@ export default function BondHistoryPanel({
 }: Props) {
   const [form, setForm]     = useState(() => prefillFromHistory(history))
   const [editId, setEditId] = useState<string | null>(null)
+
+  // history prop 변경(updateAvailableByName 등) 시 편집 중이 아닌 경우에만 available 동기화
+  useEffect(() => {
+    if (editId) return
+    if (!history.length) return
+    const latest = history.reduce((best, r) =>
+      (r.priceDate ?? r.start ?? '') > (best.priceDate ?? best.start ?? '') ? r : best
+    )
+    const latestAvailable = latest.available ?? '가용'
+    setForm(prev => prev.available === latestAvailable ? prev : { ...prev, available: latestAvailable })
+  }, [history, editId])
   const [fetching, setFetching] = useState(false)
   const [saving, setSaving]   = useState(false)
   const [error, setError]     = useState<string | null>(null)
