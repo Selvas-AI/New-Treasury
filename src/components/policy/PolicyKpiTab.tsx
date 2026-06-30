@@ -90,6 +90,10 @@ export default function PolicyKpiTab({ company }: Props) {
   const [allDecisions, setAllDecisions]     = useState<PolicyDecision[]>([])
   const [loadingData, setLoadingData]       = useState(false)
 
+  // 접기/펼치기
+  const [fxOpen, setFxOpen]     = useState(true)
+  const [bondOpen, setBondOpen] = useState(true)
+
   // 기준일: null=자동, string=수동 오버라이드
   const [baseDateFx, setBaseDateFx]         = useState<string | null>(null)
   const [baseDateBond, setBaseDateBond]     = useState<string | null>(null)
@@ -264,14 +268,21 @@ export default function PolicyKpiTab({ company }: Props) {
     <div className="space-y-8">
 
       {/* ── 섹션 1: FX 환전 효과 ─────────────────────────────────── */}
-      <section className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-700 p-6 space-y-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+      <section className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-700 overflow-hidden">
+        <button
+          onClick={() => setFxOpen(o => !o)}
+          className="w-full flex items-center justify-between gap-3 px-6 py-4 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors text-left"
+        >
           <div>
             <h3 className="text-base font-bold text-gray-800 dark:text-slate-100">💱 FX 환전 효과 분석</h3>
             <p className="text-xs text-gray-400 dark:text-slate-400 mt-0.5">
               환전을 실행하지 않았다면 노출됐을 환율 변동성과 현재 절감 효과를 비교합니다.
             </p>
           </div>
+          <span className={`text-gray-400 dark:text-slate-400 text-lg transition-transform duration-200 ${fxOpen ? 'rotate-180' : ''}`}>▾</span>
+        </button>
+        <div className={`transition-all duration-200 ${fxOpen ? 'px-6 pb-6 space-y-5' : 'hidden'}`}>
+        <div className="flex flex-wrap items-center justify-end gap-3">
           {/* 기준일 선택 */}
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs text-gray-400 dark:text-slate-400">기준일</span>
@@ -409,19 +420,26 @@ export default function PolicyKpiTab({ company }: Props) {
             외화 잔고 이력 데이터가 없습니다.
           </div>
         )}
+        </div>{/* end collapsible */}
       </section>
 
       {/* ── 섹션 2: 국채 Exit 효과 ───────────────────────────────── */}
-      <section className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-700 p-6 space-y-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+      <section className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-700 overflow-hidden">
+        <button
+          onClick={() => setBondOpen(o => !o)}
+          className="w-full flex items-center justify-between gap-3 px-6 py-4 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors text-left"
+        >
           <div>
             <h3 className="text-base font-bold text-gray-800 dark:text-slate-100">📈 국채 Exit 효과 분석</h3>
             <p className="text-xs text-gray-400 dark:text-slate-400 mt-0.5">
               국채를 매도하지 않았을 때의 금리 리스크와 현재 절감된 Duration 리스크를 비교합니다.
             </p>
           </div>
-          {/* 기준일 선택 */}
-          <div className="flex items-center gap-2 flex-wrap">
+          <span className={`text-gray-400 dark:text-slate-400 text-lg transition-transform duration-200 ${bondOpen ? 'rotate-180' : ''}`}>▾</span>
+        </button>
+        <div className={`transition-all duration-200 ${bondOpen ? 'px-6 pb-6 space-y-5' : 'hidden'}`}>
+        {/* 기준일 선택 */}
+        <div className="flex flex-wrap items-center justify-end gap-2">
             <span className="text-xs text-gray-400 dark:text-slate-400">기준일</span>
             {baseDateBond === null && autoBaseDate.bond ? (
               <span className="text-xs bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 px-2 py-0.5 rounded-full">
@@ -444,7 +462,6 @@ export default function PolicyKpiTab({ company }: Props) {
               </button>
             )}
           </div>
-        </div>
 
         {bondAnalysis ? (
           <>
@@ -538,6 +555,7 @@ export default function PolicyKpiTab({ company }: Props) {
             국채 이력 데이터가 없습니다.
           </div>
         )}
+        </div>{/* end collapsible */}
       </section>
 
     </div>
