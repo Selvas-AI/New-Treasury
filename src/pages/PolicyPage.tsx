@@ -12,11 +12,12 @@ import FvplRiskTab from '../components/policy/FvplRiskTab'
 import BankLimitsTab from '../components/policy/BankLimitsTab'
 import CashflowForecastTab from '../components/policy/CashflowForecastTab'
 import PolicyCTab from '../components/policy/PolicyCTab'
+import PolicyKpiTab from '../components/policy/PolicyKpiTab'
 import { fmtKRW } from '../lib/format'
 import { NumInput } from '../components/common/NumInput'
 import type { Company, DecisionStatus, PolicyDecision } from '../types'
 
-type PolicyTab = 'decisions' | 'fx' | 'fvpl' | 'banks' | 'forecast' | 'plan_c'
+type PolicyTab = 'decisions' | 'fx' | 'fvpl' | 'banks' | 'forecast' | 'plan_c' | 'kpi'
 
 const STATUS_META: Record<DecisionStatus, { label: string; cls: string }> = {
   pending:     { label: '대기',   cls: 'bg-gray-100 text-gray-600 dark:bg-slate-700 dark:text-slate-100' },
@@ -741,6 +742,14 @@ function getMobileCards(
       sub: `차입 ${loanRatio.toFixed(1)}% (한도 ${loanMax ?? '-'}%)`,
       status: loanStatus,
     },
+    {
+      key: 'kpi',
+      icon: '🏆',
+      title: '정책 성과',
+      value: '효과 분석',
+      sub: 'FX 환전 · 국채 Exit',
+      status: 'na' as const,
+    },
   ]
 }
 
@@ -1321,6 +1330,7 @@ export default function PolicyPage() {
           { key: 'banks',    label: '🏦 기관한도' },
           { key: 'forecast', label: '📅 주간예측' },
           { key: 'plan_c',   label: '📊 만기래더링' },
+          { key: 'kpi',      label: '🏆 정책 성과' },
         ] as const).map(t => (
           <button key={t.key} onClick={() => handlePolicyTab(t.key)}
             className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
@@ -1436,6 +1446,18 @@ export default function PolicyPage() {
             userLabel={userLabel}
           />
         ) : null
+      )}
+
+      {/* ── 정책 성과 탭 ───────────────────────────────────────────── */}
+      {policyTab === 'kpi' && (
+        companyTab === 'all' ? (
+          <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl p-5 text-center">
+            <p className="text-sm font-medium text-amber-700 dark:text-amber-300 mb-1">법인을 선택해주세요</p>
+            <p className="text-xs text-amber-600 dark:text-amber-400">정책 성과 분석은 법인별로 제공됩니다.</p>
+          </div>
+        ) : (
+          <PolicyKpiTab company={companyTab as string} isMaster={isMaster} />
+        )
       )}
 
       {/* ── 회의·의결사항 (decisions 탭만 표시) ──────────────────────── */}
