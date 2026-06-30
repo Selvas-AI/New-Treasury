@@ -20,6 +20,19 @@ const FX_CODES: FxCode[] = ['USD', 'EUR', 'JPY', 'GBP', 'CNY']
 
 type Tab = 'rates' | 'history'
 
+// ── 숫자 천단위 포맷 헬퍼 ────────────────────────────────
+// 정수부 콤마, 소수부 그대로 유지 (입력 중 소수점 끝 허용)
+function fmtComma(val: string): string {
+  if (!val) return ''
+  const [int, dec] = val.replace(/,/g, '').split('.')
+  const intFmt = (Number(int) || 0).toLocaleString('ko-KR')
+  return dec !== undefined ? `${intFmt}.${dec}` : intFmt
+}
+// 콤마 제거 후 숫자 파싱
+function parseComma(val: string): number {
+  return Number(val.replace(/,/g, '')) || 0
+}
+
 // ── 환전이력 입력 폼 ─────────────────────────────────────
 const EMPTY_FORM = {
   trade_date: new Date().toISOString().slice(0, 10),
@@ -46,9 +59,9 @@ function TradeForm({
 
   if (!canEdit()) return null
 
-  const amtFx    = Number(form.amount_fx) || 0
-  const acqRate  = Number(form.acq_rate)  || 0
-  const saleRate = Number(form.trade_rate) || 0
+  const amtFx    = parseComma(form.amount_fx)
+  const acqRate  = parseComma(form.acq_rate)
+  const saleRate = parseComma(form.trade_rate)
   const krwAmt   = amtFx && saleRate ? Math.round(amtFx * saleRate) : null
   const pnl      = amtFx && acqRate && saleRate
     ? Math.round((saleRate - acqRate) * amtFx)
@@ -107,21 +120,30 @@ function TradeForm({
             </div>
             <div>
               <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">금액 (외화)</label>
-              <input type="number" min="0" step="any" value={form.amount_fx} placeholder="0.00"
-                onChange={e => setForm(f => ({ ...f, amount_fx: e.target.value }))}
-                className="w-full border border-gray-300 dark:border-slate-600 rounded-lg px-2 py-1.5 text-right dark:bg-slate-700 dark:text-gray-100" />
+              <input type="text" inputMode="decimal" value={form.amount_fx} placeholder="0.00"
+                onChange={e => {
+                  const raw = e.target.value.replace(/[^\d.]/g, '')
+                  setForm(f => ({ ...f, amount_fx: fmtComma(raw) }))
+                }}
+                className="w-full border border-gray-300 dark:border-slate-600 rounded-lg px-2 py-1.5 text-right tabular-nums dark:bg-slate-700 dark:text-gray-100" />
             </div>
             <div>
               <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">장부환율 (가중평균)</label>
-              <input type="number" min="0" step="0.01" value={form.acq_rate} placeholder="0.00"
-                onChange={e => setForm(f => ({ ...f, acq_rate: e.target.value }))}
-                className="w-full border border-gray-300 dark:border-slate-600 rounded-lg px-2 py-1.5 text-right dark:bg-slate-700 dark:text-gray-100" />
+              <input type="text" inputMode="decimal" value={form.acq_rate} placeholder="0.00"
+                onChange={e => {
+                  const raw = e.target.value.replace(/[^\d.]/g, '')
+                  setForm(f => ({ ...f, acq_rate: fmtComma(raw) }))
+                }}
+                className="w-full border border-gray-300 dark:border-slate-600 rounded-lg px-2 py-1.5 text-right tabular-nums dark:bg-slate-700 dark:text-gray-100" />
             </div>
             <div>
               <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">매각환율</label>
-              <input type="number" min="0" step="0.01" value={form.trade_rate} placeholder="0.00"
-                onChange={e => setForm(f => ({ ...f, trade_rate: e.target.value }))}
-                className="w-full border border-gray-300 dark:border-slate-600 rounded-lg px-2 py-1.5 text-right dark:bg-slate-700 dark:text-gray-100" />
+              <input type="text" inputMode="decimal" value={form.trade_rate} placeholder="0.00"
+                onChange={e => {
+                  const raw = e.target.value.replace(/[^\d.]/g, '')
+                  setForm(f => ({ ...f, trade_rate: fmtComma(raw) }))
+                }}
+                className="w-full border border-gray-300 dark:border-slate-600 rounded-lg px-2 py-1.5 text-right tabular-nums dark:bg-slate-700 dark:text-gray-100" />
             </div>
             <div>
               <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">원화환산액 (자동)</label>
