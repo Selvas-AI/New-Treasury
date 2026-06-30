@@ -195,14 +195,11 @@ function TradeHistoryTab({ company }: { company: string | null }) {
     { accessorKey: 'trade_date', header: '환전일자', cell: ({ getValue }) => getValue<string>() },
     {
       accessorKey: 'currency', header: '통화',
-      cell: ({ getValue }) => {
-        const c = getValue<string>() as FxCode
-        return <span className="flex items-center gap-1">{FX_META[c]?.flag ?? ''} {c}</span>
-      },
+      cell: ({ getValue }) => <span className="font-medium">{getValue<string>()}</span>,
     },
     {
       accessorKey: 'amount_fx', header: '금액(외화)',
-      cell: ({ getValue, row }) => `${fmtNumber(getValue<number>(), 2)} ${row.original.currency}`,
+      cell: ({ getValue, row }) => `${row.original.currency} ${fmtNumber(getValue<number>(), 2)}`,
     },
     {
       accessorKey: 'acq_rate', header: '장부환율',
