@@ -380,13 +380,23 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
     return perms?.[action] ?? false
   }, [user])
 
+  const setCurrentCompany = useCallback((c: Company | null) => setSelectedCompany(c), [])
+
+  // Provider value 메모이즈 — 인라인 객체는 매 렌더 새 참조라 모든 useAuth 소비처가
+  // 불필요하게 리렌더됨(앱 전반 성능·상태 안정성 저하). 의존값만 바뀔 때 갱신.
+  const ctxValue = useMemo(() => ({
+    user, currentCompany, loading,
+    login, loginWithCode, register, resetPassword, logout,
+    setCurrentCompany,
+    canEdit, canDelete, canApprove, hasMenu, hasCompany, hasCategory, canAction,
+  }), [
+    user, currentCompany, loading,
+    login, loginWithCode, register, resetPassword, logout, setCurrentCompany,
+    canEdit, canDelete, canApprove, hasMenu, hasCompany, hasCategory, canAction,
+  ])
+
   return (
-    <AuthContext.Provider value={{
-      user, currentCompany, loading,
-      login, loginWithCode, register, resetPassword, logout,
-      setCurrentCompany: (c) => setSelectedCompany(c),
-      canEdit, canDelete, canApprove, hasMenu, hasCompany, hasCategory, canAction,
-    }}>
+    <AuthContext.Provider value={ctxValue}>
       {children}
     </AuthContext.Provider>
   )
