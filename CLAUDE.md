@@ -1,6 +1,6 @@
 # CLAUDE.md — Selvas Treasury (New-Treasury)
 > 신규 세션 시작 시 이 파일을 먼저 읽어 컨텍스트를 복원하세요.
-> 최종 업데이트: 2026-07-01 (세션17차 — GAS UrlFetch 할당량 폭발 근본해결: 공유 FX 캐시 + 서킷브레이커)
+> 최종 업데이트: 2026-07-01 (세션17차 — GAS 할당량 서킷브레이커/공유 FX 캐시 + 정책파라미터 저장 fix + 커스텀 도메인 treasury.selvas.com 루트 서빙 전환)
 
 ---
 
@@ -18,9 +18,10 @@
 | 작업 경로 | `D:\workspace\claude\New-Treasury` |
 | Node.js | v24.15.0 |
 | 패키지 매니저 | pnpm v11.4.0 |
-| Dev 서버 | `pnpm dev` → `http://localhost:5175/New-Treasury` (LAN: `http://192.168.22.241:5175/New-Treasury`) |
+| Dev 서버 | `pnpm dev` → `http://localhost:5175/` (LAN: `http://192.168.22.241:5175/`) — 커스텀 도메인 루트 서빙 대응으로 base '/'로 전환(2026-07-01) |
+| 프로덕션 URL | `https://treasury.selvas.com/` (GitHub Pages 커스텀 도메인, `public/CNAME`) |
 | 빌드 | `pnpm build` |
-| LAN 접속 주소 | `http://192.168.22.241:5175/New-Treasury/` (같은 사내망/192.168.22.x) — 포트 고정(strictPort) |
+| LAN 접속 주소 | `http://192.168.22.241:5175/` (같은 사내망/192.168.22.x) — 포트 고정(strictPort) |
 | LAN 설정 | `vite.config.ts` → `server: { port: 5175, host: true }` |
 | Preview 도구 서버 이름 | `vite-dev` (`.claude/launch.json` 참조) |
 
@@ -32,7 +33,7 @@
 React 19.2.6 + TypeScript + Vite 8
 Tailwind CSS v4       (@tailwindcss/vite 플러그인, NOT postcss)
 Recharts              (차트)
-react-router-dom v7   (BrowserRouter, basename="/New-Treasury")
+react-router-dom v7   (BrowserRouter, basename="/" — 커스텀 도메인 루트)
 @supabase/supabase-js
 @tanstack/react-table (테이블 헤드리스 UI — NotionTable 내부 사용)
 zustand               (설치됨, 아직 미사용)
@@ -1317,7 +1318,7 @@ useEffect(() => {
 /admin/mycode | /admin/companies | /admin/users | /admin/data | /admin/org-chart
 ```
 
-basename: `/New-Treasury`
+basename: `/` (커스텀 도메인 `treasury.selvas.com` 루트 서빙 — 2026-07-01 전환. 과거 `/New-Treasury`)
 
 ---
 
@@ -1374,10 +1375,10 @@ basename: `/New-Treasury`
 2. 다른 PC(**같은 사내망 192.168.22.x**)에서 브라우저 열기
 3. 주소창에 입력:
    ```
-   http://192.168.22.241:5175/New-Treasury/
+   http://192.168.22.241:5175/
    ```
    > 포트 고정(`strictPort: true`) — 5175 점유 시 자동 변경 없이 실패하므로 링크가 항상 5175로 일정
-   > ⚠ 끝의 `/New-Treasury/` 경로 필수. 상대방은 반드시 **192.168.22.x 대역**에 있어야 함
+   > ⚠ base가 루트(`/`)로 전환됨(2026-07-01). 과거의 `/New-Treasury/` 경로는 더 이상 사용 안 함. 상대방은 반드시 **192.168.22.x 대역**에 있어야 함
    > (개발 PC는 이더넷 192.168.22.241 / Wi-Fi 172.30.0.154 두 망에 동시 연결 — 상대 망에 맞는 IP 사용)
 
 ### 방화벽 차단 시 포트 허용 (관리자 PowerShell — 최초 1회)
