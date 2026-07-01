@@ -989,6 +989,37 @@ VITE_GAS_API_URL=https://script.google.com/macros/s/AKfycbwZ.../exec
 - **`docs/db/daily_report_tables.sql` §8-1** — category CHECK 제약에 신규 항목(`interest_income`/`trade_ap_payment`/`interest_expense`/`enote_payment`) 추가. **미실행 시 해당 입출금 항목 저장이 제약 위반으로 실패**.
 - **`docs/db/user_permissions_migration.sql`** — `treasury_users.allowed_categories` / `action_permissions` 컬럼 (세션13차 세분화 권한). 미실행 시 카테고리/작업 권한 탭 저장이 컬럼 부재로 실패. 읽기는 `null` fallback이라 앱은 정상.
 - **`docs/db/fx_trade_history.sql`** — 외화매매거래 이력 (이전 세션)
+- **`docs/db/user_password_policy.sql`** ⭐ — `treasury_users.must_change_password` 컬럼 (세션18차 비밀번호 정책). **실행 필요**. 미실행 시 마스터의 "비번초기화" 버튼은 Auth 비밀번호는 바꾸지만 강제변경 플래그 갱신이 실패(컬럼 없음) — Edge Function은 500 반환.
+
+### ⚠️ 비밀번호 찾기/초기화 — 배포 전 필수 수동 작업 3건 (세션18차)
+```
+구현 완료(코드): ResetPasswordPage(/reset-password) + ChangePasswordForm 공용 컴포넌트 +
+  ForcePasswordChangeGate(Layout에서 user.must_change_password=true 시 강제 표시) +
+  AuthContext.recoveryMode/updatePassword + UsersPage "🔑 비번초기화" 버튼(master 전용,
+  supabase.functions.invoke('admin-reset-password') 호출).
+
+아래 3가지는 코드만으로 완결 불가 — Claude가 Supabase 대시보드/CLI 접근 권한이 없어
+사용자가 직접 수행해야 함:
+
+1. DB 마이그레이션: docs/db/user_password_policy.sql 을 Supabase SQL Editor에서 실행.
+
+2. Edge Function 배포 (관리자 "비번초기화" 버튼이 동작하려면 필수):
+     supabase functions deploy admin-reset-password
+     supabase secrets set SUPABASE_SERVICE_ROLE_KEY=<프로젝트 service_role 키>
+   (SUPABASE_URL/SUPABASE_ANON_KEY는 Edge Function 런타임에 기본 주입됨)
+   service_role 키는 Supabase 대시보드 Project Settings → API 에서 확인. 이 키는
+   절대 클라이언트 번들에 넣지 말 것 — Edge Function 시크릿에만 저장.
+
+3. Redirect URL 허용목록 등록 (비밀번호 찾기 이메일 링크가 동작하려면 필수):
+   Supabase 대시보드 → Authentication → URL Configuration → Redirect URLs 에 추가:
+     http://localhost:5175/reset-password
+     https://treasury.selvas.com/reset-password
+   ⚠ 미등록 시 Supabase가 resetPasswordForEmail의 redirectTo를 무시하고 Site URL(origin)
+   로 잘라버려 /reset-password 에 도달하지 못함 — "비밀번호 찾기 메뉴가 무용지물"이었던
+   2026-07-01 실사용 버그의 원인. (부가로 index.html의 404-fallback 복원 스크립트가
+   해시(#access_token=...)를 보존하도록도 수정함 — GitHub Pages 배포본에서 recovery
+   토큰이 유실되는 것 방지.)
+```
 
 ### 미구현 기능
 - `useDashboardLayout.ts` — 생성됐으나 현재 미사용 (DnD 롤백)

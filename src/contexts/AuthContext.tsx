@@ -55,6 +55,7 @@ interface TreasuryUserRow {
   role: string; companies: string[]; menus: string[] | null
   can_delete: boolean; can_approve: boolean; is_active: boolean
   allowed_categories: unknown; action_permissions: unknown
+  must_change_password?: boolean | null   // 마이그레이션 전 DB엔 컬럼이 없을 수 있음 → optional
 }
 
 async function loadProfile(email: string, authId: string): Promise<TreasuryUser | null> {
@@ -74,6 +75,7 @@ async function loadProfile(email: string, authId: string): Promise<TreasuryUser 
     menus: row.menus ?? null, can_delete: row.can_delete, can_approve: row.can_approve,
     allowed_categories: (row.allowed_categories as TreasuryUser['allowed_categories']) ?? null,
     action_permissions: (row.action_permissions as TreasuryUser['action_permissions']) ?? null,
+    must_change_password: row.must_change_password ?? false,
   }
 }
 
@@ -98,6 +100,7 @@ function mapLegacy(row: AccessCodeRow): TreasuryUser {
     can_approve:        row.role === 'master',
     allowed_categories: null,
     action_permissions: null,
+    must_change_password: false,   // 레거시 접근코드 계정은 정책 대상 아님
   }
 }
 
@@ -106,6 +109,7 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
   const [user,            setUser]            = useState<TreasuryUser | null>(null)
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null)
   const [loading,         setLoading]         = useState(true)
+  const [recoveryMode,    setRecoveryMode]    = useState(false)
   // Ref: onAuthStateChange 클로저 안에서 최신값 읽기 위해 ref 사용
   const legacyRef = useRef(false)
   const userRef   = useRef<TreasuryUser | null>(null)
@@ -220,6 +224,11 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
       // (user 유지, 새 access_token 은 SDK가 localStorage에 자동 반영. 재조회·법인초기화 금지)
       if (event === 'TOKEN_REFRESHED') return
 
+      // ⭐ 비밀번호 찾기(recovery) 링크로 진입 — 세션은 수립되지만 "새 비밀번호 설정" 화면으로
+      // 강제해야 함. 과거엔 이 이벤트를 별도 처리하지 않아 그냥 로그인된 것처럼 대시보드로
+      // 흘러가 버려 사실상 비밀번호를 재설정할 방법이 없었다(2026-07-01 실사용 버그).
+      if (event === 'PASSWORD_RECOVERY') setRecoveryMode(true)
+
       // SIGNED_IN / USER_UPDATED 등:
       //  - 이미 로그인 상태면 재조회·법인초기화 안 함 (깜빡임·튕김 방지)
       //  - user가 없을 때(예: 비밀번호 재설정 리다이렉트)만 백그라운드 프로필 로드
@@ -330,6 +339,20 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
     return error ? error.message : null
   }, [])
 
+  // ── 비밀번호 변경 (recovery 세션 진입 후 새 비밀번호 설정 / 강제변경 정책 공용) ──
+  const updatePassword = useCallback(async (newPassword: string): Promise<string | null> => {
+    const { error } = await supabase.auth.updateUser({ password: newPassword })
+    if (error) return error.message
+    // must_change_password 플래그 해제 — 컬럼 미마이그레이션 DB에서도 실패하지 않도록 무시 가능한 에러로 처리
+    const email = userRef.current?.email
+    if (email) {
+      await restUpdate('treasury_users', { must_change_password: false }, { email })
+      setUser(u => u ? { ...u, must_change_password: false } : u)
+    }
+    setRecoveryMode(false)
+    return null
+  }, [])
+
   // ── 로그아웃 (양쪽 세션 모두 클리어) ────────────────────
   const logout = useCallback(async () => {
     sessionStorage.removeItem(LEGACY_SESSION_KEY)
@@ -387,11 +410,13 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
   const ctxValue = useMemo(() => ({
     user, currentCompany, loading,
     login, loginWithCode, register, resetPassword, logout,
+    recoveryMode, updatePassword,
     setCurrentCompany,
     canEdit, canDelete, canApprove, hasMenu, hasCompany, hasCategory, canAction,
   }), [
     user, currentCompany, loading,
-    login, loginWithCode, register, resetPassword, logout, setCurrentCompany,
+    login, loginWithCode, register, resetPassword, logout,
+    recoveryMode, updatePassword, setCurrentCompany,
     canEdit, canDelete, canApprove, hasMenu, hasCompany, hasCategory, canAction,
   ])
 

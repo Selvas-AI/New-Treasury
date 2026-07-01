@@ -5,6 +5,7 @@ import { useAutoRefreshPrices } from '../hooks/useAutoRefreshPrices'
 import Sidebar from './Sidebar'
 import TopBar from './TopBar'
 import SystemNotice from './SystemNotice'
+import ForcePasswordChangeGate from './auth/ForcePasswordChangeGate'
 
 // ── 전역 로딩 Watchdog ─────────────────────────────────────────
 // 페이지 이동 후 8초 이내에 사용자 상호작용(클릭·스크롤·키 입력)이 없으면
@@ -106,6 +107,7 @@ export default function Layout() {
   }
 
   if (!user) return <Navigate to="/login" replace />
+  if (user.must_change_password) return <ForcePasswordChangeGate />
 
   return (
     <div className="app-shell flex h-screen bg-gray-100 dark:bg-slate-950 overflow-hidden">

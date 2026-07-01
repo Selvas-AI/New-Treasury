@@ -47,6 +47,10 @@ export interface AuthContextValue {
   resetPassword:  (email: string) => Promise<string | null>
   logout:         () => Promise<void>
 
+  // 비밀번호 변경 — 비밀번호 찾기(recovery) 링크 진입 시 / 강제 변경 정책 모두 이 함수 사용
+  recoveryMode:   boolean   // true = 이메일 "비밀번호 찾기" 링크로 진입해 세션이 막 수립된 상태
+  updatePassword: (newPassword: string) => Promise<string | null>
+
   // 법인 전환
   setCurrentCompany: (company: Company) => void
 

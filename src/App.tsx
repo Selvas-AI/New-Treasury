@@ -4,6 +4,7 @@ import IssueCountProvider from './contexts/IssueCountProvider'
 import { ToastProvider } from './contexts/ToastProvider'
 import Layout from './components/Layout'
 import LoginPage from './pages/LoginPage'
+import ResetPasswordPage from './pages/ResetPasswordPage'
 import DashboardPage from './pages/DashboardPage'
 import InputPage from './pages/InputPage'
 import InvestPage from './pages/InvestPage'
@@ -45,6 +46,7 @@ export default function App() {
       <BrowserRouter basename="/">
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
 
           <Route element={<Layout />}>
             {/* 기본 진입점 */}

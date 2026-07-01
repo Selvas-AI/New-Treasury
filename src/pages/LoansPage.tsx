@@ -1,10 +1,12 @@
-﻿import { useState, useEffect, useMemo } from 'react'
+﻿import { useState, useEffect, useMemo, Fragment } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { usePageCompany } from '../hooks/usePageCompany'
 import { useToast } from '../contexts/ToastProvider'
 import { useLoans } from '../hooks/useLoans'
 import { useNegoLogs } from '../hooks/useNegoLogs'
+import { useFx } from '../hooks/useFx'
+import { toKRWAmount } from '../lib/treasuryCalc'
 import { fmtKRW, calcDday } from '../lib/format'
 import { NumInput } from '../components/common/NumInput'
 import NegoLogPanel from '../components/common/NegoLogPanel'
@@ -43,6 +45,22 @@ export default function LoansPage() {
   const toast = useToast()
   const loans = useLoans(false, currentCompany)
   const nego  = useNegoLogs(currentCompany, 'loan')
+  const fx    = useFx()
+
+  useEffect(() => { void fx.fetchRates() }, [fx.fetchRates])
+
+  const toKRWAmt = (amount: number, currency: string) => toKRWAmount(amount, currency, fx.toKRW)
+
+  /** 외화는 "네이티브 금액" + "≈원화환산" 2줄 표시, KRW는 그대로 */
+  function fmtAmtDisplay(amount: number, currency: string): { primary: string; sub: string | null } {
+    if (!currency || currency === 'KRW') return { primary: fmtKRW(amount), sub: null }
+    const native = amount >= 10000
+      ? `${(amount / 10000).toLocaleString('ko-KR', { maximumFractionDigits: 1 })}만 ${currency}`
+      : `${amount.toLocaleString('ko-KR')} ${currency}`
+    const krw = toKRWAmt(amount, currency)
+    const sub = krw > 0 ? `≈${fmtKRW(krw)}` : null
+    return { primary: native, sub }
+  }
 
   const [tab, setTab]         = useState<'active' | 'inactive'>('active')
   const [showForm, setShowForm] = useState(false)
@@ -64,8 +82,8 @@ export default function LoansPage() {
   const inactiveList = useMemo(() => loans.data.filter(r => !r.active), [loans.data])
   const displayList  = tab === 'active' ? activeList : inactiveList
 
-  // 집계
-  const totalActive  = useMemo(() => activeList.reduce((s, r) => s + r.amount, 0), [activeList])
+  // 집계 (외화는 KRW 환산 후 합산)
+  const totalActive  = useMemo(() => activeList.reduce((s, r) => s + toKRWAmt(r.amount, r.currency), 0), [activeList, fx.toKRW])  // eslint-disable-line react-hooks/exhaustive-deps
   const d90Count     = useMemo(() => activeList.filter(r => calcDday(r.maturity) <= 90).length, [activeList])
   const d30Count     = useMemo(() => activeList.filter(r => calcDday(r.maturity) <= 30).length, [activeList])
 
@@ -292,7 +310,12 @@ export default function LoansPage() {
                           <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">{rec.type} · {rec.currency}</p>
                         </div>
                         <div className="text-right shrink-0">
-                          <p className="font-bold text-gray-900 dark:text-gray-100 tabular-nums">{fmtKRW(rec.amount)}</p>
+                          {(() => { const { primary, sub } = fmtAmtDisplay(rec.amount, rec.currency); return (
+                            <>
+                              <p className="font-bold text-gray-900 dark:text-gray-100 tabular-nums">{primary}</p>
+                              {sub && <p className="text-[10px] text-gray-400 dark:text-gray-500 tabular-nums">{sub}</p>}
+                            </>
+                          ) })()}
                           {tab === 'active' && <DdayBadge dday={dday} />}
                         </div>
                       </div>
@@ -374,12 +397,19 @@ export default function LoansPage() {
                       const negoLogs = nego.byRecord.get(rec.id) ?? []
                       const isOpen   = negoId === rec.id
                       return (
-                        <>
-                          <tr key={rec.id} className={`border-b border-gray-50 hover:bg-gray-50 dark:border-slate-700 dark:hover:bg-slate-700 ${rowBg} ${isOpen ? '!bg-blue-50/40 dark:!bg-slate-800/80' : ''}`}>
+                        <Fragment key={rec.id}>
+                          <tr className={`border-b border-gray-50 hover:bg-gray-50 dark:border-slate-700 dark:hover:bg-slate-700 ${rowBg} ${isOpen ? '!bg-blue-50/40 dark:!bg-slate-800/80' : ''}`}>
                             <td className="py-2.5 pr-3 font-medium text-gray-800 whitespace-nowrap dark:text-gray-100">{rec.lender}</td>
                             <td className="py-2.5 pr-3 text-gray-500 dark:text-slate-300">{rec.type}</td>
                             <td className="py-2.5 pr-3 text-gray-400 dark:text-gray-500">{rec.currency}</td>
-                            <td className="py-2.5 pr-3 text-right tabular-nums font-semibold text-gray-800 dark:text-gray-100">{fmtKRW(rec.amount)}</td>
+                            <td className="py-2.5 pr-3 text-right tabular-nums font-semibold text-gray-800 dark:text-gray-100">
+                              {(() => { const { primary, sub } = fmtAmtDisplay(rec.amount, rec.currency); return (
+                                <>
+                                  <div>{primary}</div>
+                                  {sub && <div className="text-[10px] font-normal text-gray-400 dark:text-gray-500">{sub}</div>}
+                                </>
+                              ) })()}
+                            </td>
                             <td className="py-2.5 pr-3 text-right text-gray-600 dark:text-slate-100">{rec.rate ? `${rec.rate}%` : '-'}</td>
                             <td className="py-2.5 pr-3 text-xs text-gray-400 whitespace-nowrap dark:text-gray-500">{rec.start_date}</td>
                             <td className="py-2.5 pr-3 text-xs text-gray-600 whitespace-nowrap dark:text-slate-100">{rec.maturity}</td>
@@ -421,7 +451,7 @@ export default function LoansPage() {
                             </td>
                           </tr>
                           {isOpen && (
-                            <tr key={`${rec.id}-nego`}>
+                            <tr>
                               <td colSpan={9} className="p-0">
                                 <NegoLogPanel
                                   logs={negoLogs}
@@ -438,7 +468,7 @@ export default function LoansPage() {
                               </td>
                             </tr>
                           )}
-                        </>
+                        </Fragment>
                       )
                     })}
                   </tbody>

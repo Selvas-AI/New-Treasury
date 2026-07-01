@@ -39,6 +39,9 @@ export interface TreasuryUser {
   // 세분화 권한 (null=역할 기본값 적용 → 기존 동작 그대로 유지)
   allowed_categories: CategoryPermissions | null
   action_permissions: Partial<Record<SectionKey, SectionPermission>> | null
+
+  // 비밀번호 정책 — master가 초기화한 임시 비밀번호로 로그인 시 true (다음 로그인 강제 변경)
+  must_change_password: boolean
 }
 
 export type Company = string  // DB-driven (companies 테이블); 기존 하드코딩 레거시 제거

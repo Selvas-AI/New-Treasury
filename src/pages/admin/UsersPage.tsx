@@ -155,6 +155,7 @@ export default function UsersPage() {
   const [saving,         setSaving]         = useState(false)
   const [error,          setError]          = useState<string | null>(null)
   const [success,        setSuccess]        = useState(false)
+  const [resettingId,    setResettingId]    = useState<string | null>(null)
 
   // ── 세분화 권한 탭 상태 ────────────────────────────────────
   const [permTab,        setPermTab]        = useState<'menu' | 'category' | 'action'>('menu')
@@ -352,6 +353,26 @@ export default function UsersPage() {
     const { error: err } = await restDelete('treasury_users', { id: row.id })
     if (err) { alert(`삭제 실패: ${err.message}`); return }
     void load()
+  }
+
+  // 비밀번호 초기화 — Edge Function(admin-reset-password)이 service_role로 실행,
+  // 클라이언트(anon 키)에서 직접 Auth 비밀번호를 바꿀 수 없어 서버리스 함수를 경유한다.
+  async function handleResetPassword(row: UserRow) {
+    if (row.id === user?.sb_id) { alert('현재 로그인 계정은 여기서 초기화할 수 없습니다.'); return }
+    if (!confirm(`"${row.name}"(${row.email}) 비밀번호를 임시 비밀번호(selvas11@)로 초기화하시겠습니까?\n다음 로그인 시 새 비밀번호 설정이 강제됩니다.`)) return
+    setResettingId(row.id)
+    try {
+      const { data, error: err } = await supabase.functions.invoke('admin-reset-password', {
+        body: { targetEmail: row.email },
+      })
+      if (err) { alert(`초기화 실패: ${err.message}`); return }
+      if (data?.error) { alert(`초기화 실패: ${data.error}`); return }
+      alert(`임시 비밀번호(selvas11@)로 초기화되었습니다.\n"${row.name}" 님께 안내해 주세요.`)
+    } catch (e) {
+      alert(`초기화 실패: ${e instanceof Error ? e.message : '알 수 없는 오류'}`)
+    } finally {
+      setResettingId(null)
+    }
   }
 
   const inputCls = 'w-full border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-700 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-400'
@@ -800,6 +821,10 @@ export default function UsersPage() {
                         <button onClick={() => void toggleActive(row)}
                           className="text-xs text-amber-500 hover:text-amber-700">
                           {row.is_active ? '비활성화' : '활성화'}
+                        </button>
+                        <button onClick={() => void handleResetPassword(row)} disabled={resettingId === row.id}
+                          className="text-xs text-purple-500 hover:text-purple-700 disabled:opacity-40">
+                          {resettingId === row.id ? '초기화 중…' : '🔑 비번초기화'}
                         </button>
                         <button onClick={() => void handleDelete(row)}
                           className="text-xs text-red-400 hover:text-red-600">삭제</button>
