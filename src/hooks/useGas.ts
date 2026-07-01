@@ -99,7 +99,7 @@ interface GasFxRaw {
   error?: string
 }
 
-async function gasGetOnce<T>(params: Record<string, string>): Promise<T> {
+async function gasGetOnce<T>(params: Record<string, string>, timeoutMs = TIMEOUT_MS): Promise<T> {
   if (!GAS_URL) throw new Error('VITE_GAS_API_URL 미설정')
 
   // 서킷브레이커 활성 중이면 네트워크 호출 없이 즉시 실패 (할당량 추가 소모·폭주 방지)
@@ -111,7 +111,7 @@ async function gasGetOnce<T>(params: Record<string, string>): Promise<T> {
   const url = `${GAS_URL}?${qs}`
 
   const ctrl  = new AbortController()
-  const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS)
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs)
 
   try {
     const res = await fetch(url, { signal: ctrl.signal, redirect: 'follow' })
@@ -133,18 +133,18 @@ async function gasGetOnce<T>(params: Record<string, string>): Promise<T> {
   } catch (e) {
     clearTimeout(timer)
     if (e instanceof DOMException && e.name === 'AbortError') {
-      throw new Error(`GAS 응답 시간 초과 (${TIMEOUT_MS / 1000}s)`, { cause: e })
+      throw new Error(`GAS 응답 시간 초과 (${timeoutMs / 1000}s)`, { cause: e })
     }
     throw e
   }
 }
 
 /** 타임아웃 시 RETRY_LIMIT 회 자동 재시도 */
-async function gasGet<T>(params: Record<string, string>): Promise<T> {
+async function gasGet<T>(params: Record<string, string>, timeoutMs = TIMEOUT_MS): Promise<T> {
   let lastErr: unknown
   for (let attempt = 0; attempt <= RETRY_LIMIT; attempt++) {
     try {
-      return await gasGetOnce<T>(params)
+      return await gasGetOnce<T>(params, timeoutMs)
     } catch (e) {
       lastErr = e
       const isTimeout = e instanceof Error && e.message.includes('초과')
@@ -243,12 +243,16 @@ interface GasFxStdDevRaw {
   guide?: string
 }
 
+// ECOS는 통화 4개 × 1년치 일별 환율을 순차 조회하는 무거운 호출이라 일반 TIMEOUT_MS(20s)로는
+// 부족할 때가 많다(2026-07-01 실사용 버그 — 할당량 대응으로 30s→20s 축소하며 여기도 같이 줄어듦).
+const FXSTDDEV_TIMEOUT_MS = 45000
+
 /**
  * GAS → ECOS API 경유로 과거 1년 일별 환율 표준편차 자동계산
  * GAS 스크립트 속성에 ECOS_API_KEY 필요
  */
 export async function fetchFxStdDev(months = 12): Promise<FxStdDevResult> {
-  const raw = await gasGet<GasFxStdDevRaw>({ type: 'fxstddev', months: String(months) })
+  const raw = await gasGet<GasFxStdDevRaw>({ type: 'fxstddev', months: String(months) }, FXSTDDEV_TIMEOUT_MS)
   if (!raw.success) {
     const msg = raw.error ?? 'FX 표준편차 계산 실패'
     const guide = raw.guide ? ` (${raw.guide})` : ''
