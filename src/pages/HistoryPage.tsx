@@ -8,6 +8,8 @@ import { usePageCompany } from '../hooks/usePageCompany'
 import { useDaily } from '../hooks/useDaily'
 import { useInvestments, getLatestInvestments } from '../hooks/useInvestments'
 import { useLoans } from '../hooks/useLoans'
+import { useFx } from '../hooks/useFx'
+import { toKRWAmount } from '../lib/treasuryCalc'
 import { fmtKRW, fmtDateShort, calcBondValue } from '../lib/format'
 
 type Period = 7 | 30 | 90 | 365
@@ -36,6 +38,11 @@ export default function HistoryPage() {
   const daily = useDaily()
   const inv   = useInvestments()
   const loans = useLoans(true)  // active only
+  const fx    = useFx()
+
+  useEffect(() => { void fx.fetchRates() }, [fx.fetchRates])
+
+  const toKRWAmt = (amount: number, currency: string) => toKRWAmount(amount, currency, fx.toKRW)
 
   const [period, setPeriod] = useState<Period>(30)
   const [view, setView]     = useState<'chart' | 'table'>('table')
@@ -51,10 +58,10 @@ export default function HistoryPage() {
     }
   }, [paramFrom, paramTo])
 
-  // 차입금 합계 (active)
+  // 차입금 합계 (active, 외화는 KRW 환산)
   const totalLoan = useMemo(
-    () => loans.data.reduce((s, l) => s + l.amount, 0),
-    [loans.data]
+    () => loans.data.reduce((s, l) => s + toKRWAmt(l.amount || 0, l.currency || 'KRW'), 0),
+    [loans.data, fx.toKRW]  // eslint-disable-line react-hooks/exhaustive-deps
   )
 
   // 날짜별 행 계산
@@ -84,7 +91,7 @@ export default function HistoryPage() {
       const invest = latest.reduce((s, i) => {
         const v = i.product === '국채' && i.bondQty && i.bondPrice
           ? calcBondValue(i.bondQty, i.bondPrice)
-          : (i.amount || 0)
+          : toKRWAmt(i.amount || 0, i.currency || 'KRW')
         return s + v
       }, 0)
 
@@ -98,7 +105,8 @@ export default function HistoryPage() {
         writer:  d.writer,
       }
     })
-  }, [daily.data, inv.data, totalLoan, period])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [daily.data, inv.data, totalLoan, period, fx.toKRW])
 
   const loading = daily.loading || inv.loading || loans.loading
 

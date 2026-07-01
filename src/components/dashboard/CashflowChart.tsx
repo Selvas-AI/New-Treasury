@@ -6,6 +6,8 @@ import {
 } from 'recharts'
 import { fmtKRW, fmtDateShort, calcBondValue } from '../../lib/format'
 import { getLatestInvestments } from '../../hooks/useInvestments'
+import { useFx } from '../../hooks/useFx'
+import { toKRWAmount } from '../../lib/treasuryCalc'
 import type { DailyRecord, InvestmentRecord, LoanRecord } from '../../types'
 
 interface Props {
@@ -28,6 +30,9 @@ const ALL_SERIES: SeriesKey[] = ['operating', 'investAvail', 'investUnavail', 'l
 export default function CashflowChart({ dailyRecords, investments, loans }: Props) {
   const isDark = typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
   const [period, setPeriod] = useState<Period>(7)
+  const fx = useFx()
+  useEffect(() => { void fx.fetchRates() }, [fx.fetchRates])
+  const toKRWAmt = (amount: number, currency: string) => toKRWAmount(amount, currency, fx.toKRW)
 
   // 모바일 다중선택 토글 모드
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768)
@@ -68,7 +73,7 @@ export default function CashflowChart({ dailyRecords, investments, loans }: Prop
     const valueOf = (i: InvestmentRecord) =>
       i.product === '국채' && i.bondQty && i.bondPrice
         ? calcBondValue(i.bondQty, i.bondPrice)
-        : (i.amount || 0)
+        : toKRWAmt(i.amount || 0, i.currency || 'KRW')
 
     return inRange.map(d => {
       const operating =
@@ -82,7 +87,7 @@ export default function CashflowChart({ dailyRecords, investments, loans }: Prop
       const investAvail   = latest.filter(i => i.available === '가용').reduce((s, i) => s + valueOf(i), 0)
       const investUnavail = latest.filter(i => i.available === '불가용').reduce((s, i) => s + valueOf(i), 0)
 
-      const loan = loans.reduce((s, l) => s + (l.amount || 0), 0)
+      const loan = loans.reduce((s, l) => s + toKRWAmt(l.amount || 0, l.currency || 'KRW'), 0)
 
       return {
         dateLabel: fmtDateShort(d.date),
@@ -97,7 +102,8 @@ export default function CashflowChart({ dailyRecords, investments, loans }: Prop
         loanRaw:      loan,
       }
     })
-  }, [dailyRecords, investments, loans, period])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dailyRecords, investments, loans, period, fx.toKRW])
 
   const xInterval =
     period <= 7  ? 0 :

@@ -100,8 +100,8 @@ export function useDashboard(companyOverride?: string) {
       .filter(i => i.product === '국채' && i.available === '불가용')
       .reduce((s, i) => s + bondValueOf(i), 0)
 
-    // 차입금
-    const totalLoan = loans.data.reduce((s, l) => s + (l.amount || 0), 0)
+    // 차입금 (외화는 KRW 환산)
+    const totalLoan = loans.data.reduce((s, l) => s + toKRWAmt(l.amount || 0, l.currency || 'KRW'), 0)
 
     // 지분 불가용 (평가액 기준)
     const equityUnavail = equities.latest

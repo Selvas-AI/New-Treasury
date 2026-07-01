@@ -86,7 +86,7 @@ export default function FlowDetailDrawer({ itemKey, kpi, fxKrw: fxKrwProp, lates
         <div className="overflow-y-auto flex-1 min-h-0 px-4 py-3">
           {itemKey === 'operating'  && <OperatingDetail daily={latestDaily} kpi={kpi} />}
           {itemKey === 'invest'     && <InvestDetail items={latestInvests.filter(i => i.product !== '국채')} />}
-          {itemKey === 'loan'       && <LoanDetail loans={loans.filter(l => l.active)} kpi={kpi} />}
+          {itemKey === 'loan'       && <LoanDetail loans={loans.filter(l => l.active)} kpi={kpi} toKRWAmt={toKRWAmt} />}
           {itemKey === 'fx'         && <FxDetail daily={latestDaily} />}
           {itemKey === 'net'        && <NetDetail kpi={kpi} />}
           {itemKey === 'unavailable' && <UnavailableDetail kpi={kpi} latestInvests={latestInvests} equities={equities} />}
@@ -162,17 +162,22 @@ function InvestDetail({ items }: { items: InvestmentRecord[] }) {
 }
 
 // ── 차입금 상세 ──────────────────────────────────────────────
-function LoanDetail({ loans, kpi }: { loans: LoanRecord[]; kpi: KpiData }) {
+function LoanDetail({ loans, kpi, toKRWAmt }: {
+  loans: LoanRecord[]
+  kpi: KpiData
+  toKRWAmt: (amount: number, currency: string) => number
+}) {
   if (loans.length === 0) return <p className="text-xs text-gray-400 py-4 text-center">활성 차입금이 없습니다</p>
   return (
     <div>
       {loans.map(loan => {
         const dday = calcDday(loan.maturity)
+        const krw  = toKRWAmt(loan.amount, loan.currency || 'KRW')
         return (
           <div key={loan.id} className="px-2 py-2.5 rounded-lg border border-transparent hover:bg-gray-50 dark:hover:bg-slate-700/50">
             <div className="flex justify-between items-center">
               <span className="text-xs font-semibold text-gray-700 dark:text-gray-200">{loan.lender}</span>
-              <span className="text-xs tabular-nums font-semibold text-gray-700 dark:text-gray-200">{fmtKRW(loan.amount)}</span>
+              <span className="text-xs tabular-nums font-semibold text-gray-700 dark:text-gray-200">{fmtKRW(krw)}</span>
             </div>
             <div className="flex justify-between items-center mt-0.5">
               <span className="text-[10px] text-gray-400">{loan.rate}% · {loan.maturity}</span>

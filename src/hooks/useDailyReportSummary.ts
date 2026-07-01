@@ -292,17 +292,18 @@ export function useDailyReportSummary() {
     const cutoffStr = cutoff.toISOString().slice(0, 10)
     let short = 0, long = 0
     for (const l of loans) {
-      if (l.maturity <= cutoffStr) short += l.amount
-      else                          long  += l.amount
+      const krw = toKRW(l.amount || 0, l.currency || 'KRW')
+      if (l.maturity <= cutoffStr) short += krw
+      else                          long  += krw
     }
     const result: LoanGroup[] = []
     if (short > 0) result.push({ label: '단기차입금', totalKrw: short })
     if (long  > 0) result.push({ label: '장기차입금', totalKrw: long  })
     if (result.length === 0 && loans.length > 0) {
-      result.push({ label: '차입금', totalKrw: loans.reduce((s, l) => s + l.amount, 0) })
+      result.push({ label: '차입금', totalKrw: loans.reduce((s, l) => s + toKRW(l.amount || 0, l.currency || 'KRW'), 0) })
     }
     return result
-  }, [loans])
+  }, [loans, toKRW])
 
   // ── 입출금 항목 집계 ──────────────────────────────────────
   // [E1] itemSums 는 DailyReportPage 의 liveItemSums(itemHook.items 실시간 집계)가

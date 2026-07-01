@@ -124,7 +124,7 @@ function computePolicyData(raw: RawCompanyData, loading: boolean, toKRW: ToKRWFn
     return s + (qty && price ? calcBondValue(qty, price) : (i.amount || 0))
   }, 0)
 
-  const totalLoan = loanData.reduce((s, l) => s + (l.amount || 0), 0)
+  const totalLoan = loanData.reduce((s, l) => s + toKRWAmt(l.amount || 0, l.currency || 'KRW'), 0)
 
   // 금융기관별 운용자금 집계 — 은행만, normBank로 계좌별 등록명 합산 (KRW 환산 기준)
   const bankMap = new Map<string, number>()
@@ -138,7 +138,7 @@ function computePolicyData(raw: RawCompanyData, loading: boolean, toKRW: ToKRWFn
 
   // 금융기관별 차입금 집계
   const loanBankMap = new Map<string, number>()
-  loanData.forEach(l => loanBankMap.set(l.lender, (loanBankMap.get(l.lender) ?? 0) + (l.amount || 0)))
+  loanData.forEach(l => loanBankMap.set(l.lender, (loanBankMap.get(l.lender) ?? 0) + toKRWAmt(l.amount || 0, l.currency || 'KRW')))
   const loanByBank = [...loanBankMap.entries()].map(([bank, amount]) => ({ bank, amount }))
     .sort((a, b) => b.amount - a.amount)
 
