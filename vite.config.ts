@@ -7,8 +7,9 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
-  // GitHub Pages: https://selvas-ai.github.io/New-Treasury/
-  base: '/New-Treasury/',
+  // 커스텀 도메인 루트 서빙: https://treasury.selvas.com/
+  // (과거 https://selvas-ai.github.io/New-Treasury/ 경로는 base '/New-Treasury/' 였음)
+  base: '/',
   resolve: {
     dedupe: ['react', 'react-dom'],
   },

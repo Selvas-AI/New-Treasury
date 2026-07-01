@@ -325,7 +325,7 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
   // ── 비밀번호 재설정 ──────────────────────────────────────
   const resetPassword = useCallback(async (email: string): Promise<string | null> => {
     const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
-      redirectTo: `${window.location.origin}/New-Treasury/reset-password`,
+      redirectTo: `${window.location.origin}/reset-password`,
     })
     return error ? error.message : null
   }, [])

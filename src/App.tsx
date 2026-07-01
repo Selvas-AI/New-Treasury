@@ -42,7 +42,7 @@ export default function App() {
     <AuthProvider>
       <ToastProvider>
       <IssueCountProvider>
-      <BrowserRouter basename="/New-Treasury">
+      <BrowserRouter basename="/">
         <Routes>
           <Route path="/login" element={<LoginPage />} />
 
