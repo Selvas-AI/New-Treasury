@@ -916,12 +916,16 @@ export default function FxPolicyTab({ company }: { company: Company }) {
               <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">환율 변동폭 설정</h3>
             </div>
             {isMaster && (
-              <div className="flex gap-2">
+              <div className="flex items-center gap-2">
                 <button onClick={handleAutoCalcStdDev} disabled={autoCalcState === 'loading'}
+                  title="한국은행 ECOS API에서 4개 통화 1년치 데이터를 조회합니다. 정상적으로도 2~3분 이상 걸릴 수 있습니다."
                   className="text-xs px-2.5 py-1 rounded-lg border border-emerald-300 dark:border-emerald-700
                              text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 disabled:opacity-50">
                   {autoCalcState === 'loading' ? '⏳ 조회 중…' : '🔄 ECOS 자동'}
                 </button>
+                {autoCalcState === 'loading' && (
+                  <span className="text-[10px] text-gray-400">최대 3~4분 소요될 수 있어요 (ECOS API 응답 지연)</span>
+                )}
                 <button onClick={() => setEditingStd(!editingStd)}
                   className="text-xs px-2.5 py-1 border border-blue-200 dark:border-blue-700 text-blue-600 dark:text-blue-400 rounded-lg">
                   {editingStd ? '취소' : '✏️ 수동'}

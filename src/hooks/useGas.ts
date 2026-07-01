@@ -139,16 +139,22 @@ async function gasGetOnce<T>(params: Record<string, string>, timeoutMs = TIMEOUT
   }
 }
 
-/** 타임아웃 시 RETRY_LIMIT 회 자동 재시도 */
-async function gasGet<T>(params: Record<string, string>, timeoutMs = TIMEOUT_MS): Promise<T> {
+/**
+ * 타임아웃 시 RETRY_LIMIT 회 자동 재시도.
+ * retryOnTimeout=false 면 재시도 없이 1회만 시도 — fxstddev처럼 실행 자체가 정상적으로
+ * 몇 분씩 걸리는 무거운 호출은 재시도 시 GAS 서버에 중복 실행이 쌓여(실행 로그에서
+ * "실행"(Running) 상태로 오래 남는 좀비 실행 확인됨, 2026-07-01) 상황을 악화시킨다.
+ */
+async function gasGet<T>(params: Record<string, string>, timeoutMs = TIMEOUT_MS, retryOnTimeout = true): Promise<T> {
+  const limit = retryOnTimeout ? RETRY_LIMIT : 0
   let lastErr: unknown
-  for (let attempt = 0; attempt <= RETRY_LIMIT; attempt++) {
+  for (let attempt = 0; attempt <= limit; attempt++) {
     try {
       return await gasGetOnce<T>(params, timeoutMs)
     } catch (e) {
       lastErr = e
       const isTimeout = e instanceof Error && e.message.includes('초과')
-      if (!isTimeout || attempt >= RETRY_LIMIT) throw e
+      if (!isTimeout || attempt >= limit) throw e
       // 콜드 스타트 후 warm-up 대기 (500ms)
       await new Promise(r => setTimeout(r, 500))
     }
@@ -243,16 +249,18 @@ interface GasFxStdDevRaw {
   guide?: string
 }
 
-// ECOS는 통화 4개 × 1년치 일별 환율을 순차 조회하는 무거운 호출이라 일반 TIMEOUT_MS(20s)로는
-// 부족할 때가 많다(2026-07-01 실사용 버그 — 할당량 대응으로 30s→20s 축소하며 여기도 같이 줄어듦).
-const FXSTDDEV_TIMEOUT_MS = 45000
+// ECOS는 통화 4개 × 1년치 일별 환율을 순차 조회하는 무거운 호출.
+// GAS 실행 로그로 실측(2026-07-01): 정상 완료까지 약 202초 소요(통화당 ~50초 — ECOS API 자체
+// 응답 지연, 우리 쪽 코드 문제 아님). 여유를 두어 240초로 설정 + 재시도 비활성화(중복 실행 방지).
+const FXSTDDEV_TIMEOUT_MS = 240000
 
 /**
  * GAS → ECOS API 경유로 과거 1년 일별 환율 표준편차 자동계산
  * GAS 스크립트 속성에 ECOS_API_KEY 필요
+ * ⚠ 정상적으로도 3분 이상 걸릴 수 있음 — 호출부에서 로딩 안내 문구 필수
  */
 export async function fetchFxStdDev(months = 12): Promise<FxStdDevResult> {
-  const raw = await gasGet<GasFxStdDevRaw>({ type: 'fxstddev', months: String(months) }, FXSTDDEV_TIMEOUT_MS)
+  const raw = await gasGet<GasFxStdDevRaw>({ type: 'fxstddev', months: String(months) }, FXSTDDEV_TIMEOUT_MS, false)
   if (!raw.success) {
     const msg = raw.error ?? 'FX 표준편차 계산 실패'
     const guide = raw.guide ? ` (${raw.guide})` : ''
