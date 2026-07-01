@@ -4,6 +4,7 @@ import { useAuth } from '../hooks/useAuth'
 import { useAutoRefreshPrices } from '../hooks/useAutoRefreshPrices'
 import Sidebar from './Sidebar'
 import TopBar from './TopBar'
+import SystemNotice from './SystemNotice'
 
 // ── 전역 로딩 Watchdog ─────────────────────────────────────────
 // 페이지 이동 후 8초 이내에 사용자 상호작용(클릭·스크롤·키 입력)이 없으면
@@ -108,6 +109,9 @@ export default function Layout() {
 
   return (
     <div className="app-shell flex h-screen bg-gray-100 dark:bg-slate-950 overflow-hidden">
+
+      {/* ── 시스템 공지 팝업 (오늘 전용 · 계정별) ── */}
+      <SystemNotice />
 
       {/* ── Watchdog 오버레이 ── */}
       {countdown !== null && (
