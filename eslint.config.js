@@ -6,7 +6,10 @@ import tseslint from 'typescript-eslint'
 import { globalIgnores } from 'eslint/config'
 
 export default tseslint.config(
-  globalIgnores(['dist']),
+  // dist(빌드산출) + .claude/worktrees(에이전트 작업 사본)는 lint 대상 제외.
+  // worktree 사본이 남아있으면 typescript-eslint가 tsconfigRootDir 후보를 다중 감지해
+  // "No tsconfigRootDir was set" 파싱 에러로 lint 전체가 실패함.
+  globalIgnores(['dist', '.claude/**']),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [
@@ -34,6 +37,8 @@ export default tseslint.config(
       'react-hooks/void-use-memo':      'off',
       'react-hooks/use-memo':           'off',
       'react-hooks/no-deriving-state-in-effects': 'off',
+      'react-hooks/preserve-manual-memoization': 'off',  // 수동 useCallback/useMemo deps 허용 (user?.sb_id 등 부분 dep)
+      'react-hooks/incompatible-library':        'off',  // React Compiler 미사용
     },
   },
 )

@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useMemo } from 'react'
+﻿import { useState, useEffect, useMemo, Fragment } from 'react'
 import { useParams } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useInvestments } from '../hooks/useInvestments'
@@ -463,8 +463,8 @@ export default function InvestPage() {
                       const negoLogs = nego.byRecord.get(rec.id) ?? []
                       const isOpen   = negoId === rec.id
                       return (
-                        <>
-                          <tr key={rec.id} className={`border-b border-gray-50 hover:bg-gray-50 dark:border-slate-700 dark:hover:bg-slate-700 ${urgent ? 'bg-red-50 dark:bg-red-950/20' : ''} ${isOpen ? '!bg-blue-50/40 dark:!bg-slate-800/80' : ''}`}>
+                        <Fragment key={rec.id}>
+                          <tr className={`border-b border-gray-50 hover:bg-gray-50 dark:border-slate-700 dark:hover:bg-slate-700 ${urgent ? 'bg-red-50 dark:bg-red-950/20' : ''} ${isOpen ? '!bg-blue-50/40 dark:!bg-slate-800/80' : ''}`}>
                             <td className="py-2 pr-3 font-medium text-gray-800 whitespace-nowrap dark:text-gray-100">{rec.bank}</td>
                             <td className="py-2 pr-3 text-gray-600 dark:text-slate-100">{rec.product}</td>
                             <td className="py-2 pr-3 text-gray-500 dark:text-slate-300">{rec.currency}</td>
@@ -519,7 +519,7 @@ export default function InvestPage() {
                               </td>
                             </tr>
                           )}
-                        </>
+                        </Fragment>
                       )
                     })}
                   </tbody>

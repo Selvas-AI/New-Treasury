@@ -14,10 +14,10 @@ import type { Company, FxCode } from '../../types'
 
 // 4개 통화 (ECOS 지원 통화만 — CNY 제외)
 const FX_CURRENCIES = [
-  { code: 'USD' as FxCode, flag: '🇺🇸', name: '미국 달러',   color: '#2563EB', stdKey: 'fx_std_usd', wgtKey: 'fx_weight_usd', defaultStd: 0.082458, defaultWgt: 0.80 },
-  { code: 'EUR' as FxCode, flag: '🇪🇺', name: '유로',         color: '#7C3AED', stdKey: 'fx_std_eur', wgtKey: 'fx_weight_eur', defaultStd: 0.114437, defaultWgt: 0.18 },
-  { code: 'JPY' as FxCode, flag: '🇯🇵', name: '일본 엔',      color: '#DC2626', stdKey: 'fx_std_jpy', wgtKey: 'fx_weight_jpy', defaultStd: 0.108875, defaultWgt: 0.02 },
-  { code: 'GBP' as FxCode, flag: '🇬🇧', name: '영국 파운드', color: '#059669', stdKey: 'fx_std_gbp', wgtKey: 'fx_weight_gbp', defaultStd: 0.130257, defaultWgt: 0.00 },
+  { code: 'USD' as FxCode, name: '미국 달러',   color: '#2563EB', stdKey: 'fx_std_usd', wgtKey: 'fx_weight_usd', defaultStd: 0.082458, defaultWgt: 0.80 },
+  { code: 'EUR' as FxCode, name: '유로',         color: '#7C3AED', stdKey: 'fx_std_eur', wgtKey: 'fx_weight_eur', defaultStd: 0.114437, defaultWgt: 0.18 },
+  { code: 'JPY' as FxCode, name: '일본 엔',      color: '#DC2626', stdKey: 'fx_std_jpy', wgtKey: 'fx_weight_jpy', defaultStd: 0.108875, defaultWgt: 0.02 },
+  { code: 'GBP' as FxCode, name: '영국 파운드', color: '#059669', stdKey: 'fx_std_gbp', wgtKey: 'fx_weight_gbp', defaultStd: 0.130257, defaultWgt: 0.00 },
 ]
 
 const Z_TABLE = { 90: 1.282, 95: 1.6503, 99: 2.326 } as const
