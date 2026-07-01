@@ -49,10 +49,13 @@ export function usePolicyParams(company: Company | null) {
     updatedBy: string,
   ): Promise<string | null> {
     if (!company) return '법인이 선택되지 않았습니다.'
+    // ⚠️ on_conflict 필수 — policy_params는 (company, param_key) UNIQUE.
+    // 미지정 시 PostgREST가 PK(id)로 충돌 판정 → 기존 파라미터 갱신이
+    // unique 위반(409)으로 실패하고 저장값이 이전값으로 되돌아감(예: 신뢰도 90% 복귀).
     const { error: err } = await restUpsert('policy_params', {
       company, param_key: key, param_value: value, param_text: text,
       updated_by: updatedBy, updated_at: new Date().toISOString(),
-    })
+    }, false, 'company,param_key')
     if (err) return err.message
     await fetch()
     return null

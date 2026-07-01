@@ -16,6 +16,9 @@ interface Notice {
   lines: string[]
 }
 
+// 공지 전체 on/off 스위치 (false면 어떤 공지도 노출하지 않음)
+const NOTICE_ENABLED = false
+
 // 금일 공지 (2026-07-01 GAS UrlFetch 할당량 초과 안내)
 const NOTICE: Notice = {
   id: '2026-07-01-gas-quota',
@@ -40,7 +43,7 @@ export default function SystemNotice() {
 
   // 활성일이면 기본 노출(초기화 함수로 동기 계산 — 리렌더/StrictMode에 견고).
   // 계정별 "다시 보지 않기" 여부는 user 로드 후 effect에서 닫는 방향으로만 반영.
-  const [open, setOpen] = useState<boolean>(() => todayStr() === NOTICE.activeDate)
+  const [open, setOpen] = useState<boolean>(() => NOTICE_ENABLED && todayStr() === NOTICE.activeDate)
   const [dontShow, setDontShow] = useState(false)
 
   useEffect(() => {
