@@ -247,6 +247,7 @@ interface GasFxStdDevRaw {
   source?: string
   error?: string
   guide?: string
+  details?: Record<string, string>   // 통화별 실패 사유 (예: { USD: "ECOS 오류: ERROR-602 ..." })
 }
 
 // ECOS는 통화 4개 × 1년치 일별 환율을 순차 조회하는 무거운 호출.
@@ -264,7 +265,10 @@ export async function fetchFxStdDev(months = 12): Promise<FxStdDevResult> {
   if (!raw.success) {
     const msg = raw.error ?? 'FX 표준편차 계산 실패'
     const guide = raw.guide ? ` (${raw.guide})` : ''
-    throw new Error(msg + guide)
+    const details = raw.details
+      ? ' — ' + Object.entries(raw.details).map(([c, m]) => `${c}: ${m}`).join(' / ')
+      : ''
+    throw new Error(msg + guide + details)
   }
   return {
     period:    raw.period!,

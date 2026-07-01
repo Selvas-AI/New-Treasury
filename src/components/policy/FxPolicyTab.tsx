@@ -1079,9 +1079,6 @@ export default function FxPolicyTab({ company }: { company: Company }) {
                 : 'bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800'
             }`}>
               {autoCalcMsg}
-              {autoCalcState === 'error' && (
-                <p className="mt-1">GAS 스크립트 속성에 <code className="bg-red-100 dark:bg-red-900/50 px-1 rounded">ECOS_API_KEY</code> 필요</p>
-              )}
             </div>
           )}
 

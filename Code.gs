@@ -892,6 +892,7 @@ function calcFxStdDevFromEcos_(e) {
   Logger.log('ECOS FX 표준편차 계산: ' + fromStr + ' ~ ' + toStr);
 
   const stddevMap = {};
+  const errorDetails = {};   // 통화별 실패 사유 — 웹앱 응답에 그대로 실어 클라이언트 화면에 노출
   let minDataCount = Infinity;
 
   for (const [currency, code] of Object.entries(ECOS_CURRENCY_CODES)) {
@@ -899,8 +900,10 @@ function calcFxStdDevFromEcos_(e) {
     try {
       const prices = fetchEcosRates_(apiKey, code, fromStr, toStr);
       if (!prices || prices.length < 10) {
-        Logger.log(currency + ': 데이터 부족 (' + (prices ? prices.length : 0) + '건)');
+        const msg = '데이터 부족 (' + (prices ? prices.length : 0) + '건)';
+        Logger.log(currency + ': ' + msg);
         stddevMap[currency] = null;
+        errorDetails[currency] = msg;
         continue;
       }
       // 일별 수익률 계산: (오늘 - 전일) / 전일
@@ -919,8 +922,10 @@ function calcFxStdDevFromEcos_(e) {
       Logger.log(currency + ': ' + prices.length + '건, 일별=' + dailyStd.toFixed(6) +
                  ', 연환산=' + annualStd.toFixed(6));
     } catch (err) {
-      Logger.log(currency + ' 오류: ' + err.toString());
+      const msg = err.toString();
+      Logger.log(currency + ' 오류: ' + msg);
       stddevMap[currency] = null;
+      errorDetails[currency] = msg;
     }
   }
 
@@ -928,7 +933,8 @@ function calcFxStdDevFromEcos_(e) {
   if (!hasData) {
     return createResponse({
       success: false,
-      error: 'ECOS에서 환율 데이터를 가져오지 못했습니다. API 키 또는 네트워크를 확인하세요.'
+      error: 'ECOS에서 환율 데이터를 가져오지 못했습니다. API 키 또는 네트워크를 확인하세요.',
+      details: errorDetails   // 예: { USD: "ECOS 오류: ERROR-602 ...", EUR: "ECOS HTTP 403", ... }
     }, 503);
   }
 
