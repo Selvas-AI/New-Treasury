@@ -1,4 +1,4 @@
-﻿import { useState, useMemo, useEffect } from 'react'
+﻿import { useState, useMemo, useEffect, type ReactNode } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { usePolicyMeetings } from '../hooks/usePolicyMeetings'
 import { usePolicyDecisions } from '../hooks/usePolicyDecisions'
@@ -98,22 +98,90 @@ function StatusBadge({ status }: { status: 'ok' | 'warn' | 'over' | 'na' }) {
   return <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 dark:bg-slate-700 dark:text-slate-300 font-medium">미설정</span>
 }
 
+// ── 상태 점(매트릭스 셀용, 컴팩트) ──────────────────────────────────────
+function StatusDot({ status }: { status: 'ok' | 'warn' | 'over' | 'na' }) {
+  if (status === 'ok')   return <span className="text-sm font-bold text-green-500">✓</span>
+  if (status === 'warn') return <span className="text-sm font-bold text-orange-500">⚠</span>
+  if (status === 'over') return <span className="text-sm font-bold text-red-500">✕</span>
+  return <span className="text-sm text-gray-300 dark:text-slate-600">–</span>
+}
+
+// ── 마우스 오버 툴팁 (매트릭스 셀 상세 근거 표시용) ──────────────────────
+function CellTooltip({ children, tooltip }: { children: ReactNode; tooltip: ReactNode }) {
+  return (
+    <div className="relative inline-block group/tip">
+      {children}
+      <div className="pointer-events-none absolute z-30 hidden group-hover/tip:block bottom-full left-1/2
+                       -translate-x-1/2 mb-2 w-56 rounded-lg bg-gray-900 dark:bg-slate-950 text-white
+                       text-[11px] leading-relaxed p-2.5 shadow-2xl text-left whitespace-normal">
+        {tooltip}
+        <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0
+                         border-4 border-transparent border-t-gray-900 dark:border-t-slate-950" />
+      </div>
+    </div>
+  )
+}
+
+// ── 정책 적합성 판정 (SSOT — 카드/매트릭스/다이제스트 공용) ──────────────
+type StatusLevel = 'ok' | 'warn' | 'over' | 'na'
+const CONCENTRATION_LIMIT = 30
+
+function checkLiquidity(data: PolicyRealData, params: PolicyParamReader) {
+  const fixedCost = params.get('liquidity_fixed_cost_monthly') ?? 0
+  const minMonths = params.get('liquidity_min_months') ?? 2
+  const target = fixedCost * minMonths
+  const current = data.operatingCash
+  const status: StatusLevel = target === 0 ? 'na'
+    : current >= target ? 'ok'
+    : current >= target * 0.8 ? 'warn'
+    : 'over'
+  return { status, current, target, ratio: target > 0 ? (current / target) * 100 : null }
+}
+
+function checkFx(data: PolicyRealData, params: PolicyParamReader) {
+  const min = params.get('fx_target_min')
+  const max = params.get('fx_target_max')
+  const ratio = data.fxRatio
+  const status: StatusLevel = min === null || max === null ? 'na'
+    : ratio >= min && ratio <= max ? 'ok'
+    : ratio < min * 0.9 || ratio > max * 1.1 ? 'over'
+    : 'warn'
+  return { status, ratio, min, max, fxKrw: data.fxTotalHoldings, totalFund: data.totalFundAvail }
+}
+
+function checkLoan(data: PolicyRealData, params: PolicyParamReader) {
+  const totalFund = params.get('fx_total_fund') ?? data.totalFundEstimate
+  const max = params.get('loan_max_total_ratio')
+  const ratio = totalFund > 0 ? (data.totalLoan / totalFund) * 100 : 0
+  const status: StatusLevel = max === null ? 'na'
+    : ratio <= max ? 'ok'
+    : ratio <= max * 1.1 ? 'warn'
+    : 'over'
+  return { status, ratio, max, totalLoan: data.totalLoan, totalFund }
+}
+
+function checkConcentration(data: PolicyRealData) {
+  const total = data.investByBank.reduce((s, b) => s + b.amount, 0)
+  if (total === 0) return { status: 'na' as StatusLevel, maxPct: 0, bank: null as string | null, total: 0 }
+  let maxPct = 0, bank: string | null = null
+  for (const b of data.investByBank) {
+    const pct = (b.amount / total) * 100
+    if (pct > maxPct) { maxPct = pct; bank = b.bank }
+  }
+  const status: StatusLevel = maxPct > CONCENTRATION_LIMIT ? 'over'
+    : maxPct > CONCENTRATION_LIMIT * 0.9 ? 'warn' : 'ok'
+  return { status, maxPct, bank, total }
+}
+
 // ── 유동성 버킷 카드 ──────────────────────────────────────────────────────
 function LiquidityCard({
   data, params, isMaster, userLabel,
 }: { data: PolicyRealData; params: ParamApi; isMaster: boolean; userLabel: string }) {
   const fixedCost  = params.get('liquidity_fixed_cost_monthly') ?? 0
   const minMonths  = params.get('liquidity_min_months') ?? 2
-  const minTarget  = fixedCost * minMonths
   const creditLine = params.get('liquidity_credit_line') ?? 0
 
-  const currentCash = data.operatingCash
-  const ratio = minTarget > 0 ? (currentCash / minTarget) * 100 : null
-  const status: 'ok' | 'warn' | 'over' | 'na' =
-    minTarget === 0 ? 'na'
-    : currentCash >= minTarget ? 'ok'
-    : currentCash >= minTarget * 0.8 ? 'warn'
-    : 'over'
+  const { status, current: currentCash, target: minTarget, ratio } = checkLiquidity(data, params)
 
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState({ fixedCost: '', minMonths: '', creditLine: '' })
@@ -233,16 +301,7 @@ function LiquidityCard({
 function FxStatusCard({
   data, params, onNavigate,
 }: { data: PolicyRealData; params: ParamApi; onNavigate?: () => void }) {
-  const targetMin = params.get('fx_target_min')
-  const targetMax = params.get('fx_target_max')
-  const totalWithFx = data.operatingCashWithFx
-  const fxRatio = totalWithFx > 0 ? (data.fxKrw / totalWithFx) * 100 : 0
-
-  const status: 'ok' | 'warn' | 'over' | 'na' =
-    targetMin === null || targetMax === null ? 'na'
-    : fxRatio >= targetMin && fxRatio <= targetMax ? 'ok'
-    : fxRatio < targetMin * 0.9 || fxRatio > targetMax * 1.1 ? 'over'
-    : 'warn'
+  const { status, ratio: fxRatio, min: targetMin, max: targetMax, fxKrw, totalFund: totalWithFx } = checkFx(data, params)
 
   return (
     <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-4 space-y-3">
@@ -257,7 +316,7 @@ function FxStatusCard({
           <p className="font-semibold text-gray-900 dark:text-white mt-0.5 text-base">
             {fxRatio.toFixed(1)}%
           </p>
-          <p className="text-gray-400 mt-0.5">{fmtKRW(data.fxKrw)}</p>
+          <p className="text-gray-400 mt-0.5">{fmtKRW(fxKrw)}</p>
         </div>
         <div className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-2">
           <p className="text-gray-400">Target Band</p>
@@ -277,8 +336,8 @@ function FxStatusCard({
 
       <div className="flex items-center justify-between">
         <span className="text-xs text-gray-400">
-          운전자금 총액: {fmtKRW(totalWithFx)}
-          {data.fxKrw === 0 && <span className="ml-1 text-orange-400">(외화 잔고 없음)</span>}
+          가용 자금 합계: {fmtKRW(totalWithFx)}
+          {fxKrw === 0 && <span className="ml-1 text-orange-400">(외화 잔고 없음)</span>}
         </span>
         {onNavigate && (
           <button onClick={onNavigate} className="text-[10px] text-blue-500 hover:text-blue-700 dark:text-blue-400">
@@ -294,15 +353,7 @@ function FxStatusCard({
 function LoanStatusCard({
   data, params, isMaster, userLabel,
 }: { data: PolicyRealData; params: ParamApi; isMaster: boolean; userLabel: string }) {
-  const totalFund      = params.get('fx_total_fund') ?? data.totalFundEstimate
-  const loanMaxRatio   = params.get('loan_max_total_ratio')
-  const loanRatio      = totalFund > 0 ? (data.totalLoan / totalFund) * 100 : 0
-
-  const status: 'ok' | 'warn' | 'over' | 'na' =
-    loanMaxRatio === null ? 'na'
-    : loanRatio <= loanMaxRatio ? 'ok'
-    : loanRatio <= loanMaxRatio * 1.1 ? 'warn'
-    : 'over'
+  const { status, ratio: loanRatio, max: loanMaxRatio, totalFund } = checkLoan(data, params)
 
   const [editing, setEditing] = useState(false)
   const [val, setVal] = useState('')
@@ -391,16 +442,8 @@ function LoanStatusCard({
 
 // ── 운용자금 집중도 카드 ──────────────────────────────────────────────────
 function InvestConcentrationCard({ data, onNavigate }: { data: PolicyRealData; onNavigate?: () => void }) {
-  const LIMIT_PCT = 30
-  // 은행 기관만 집계 (investByBank는 이미 은행만 포함)
-  const total = data.investByBank.reduce((s, b) => s + b.amount, 0)
-  const over = data.investByBank.filter(b => total > 0 && (b.amount / total) * 100 > LIMIT_PCT)
-
-  const status: 'ok' | 'warn' | 'over' | 'na' =
-    total === 0 ? 'na'
-    : over.length > 0 ? 'over'
-    : data.investByBank.some(b => total > 0 && (b.amount / total) * 100 > LIMIT_PCT * 0.9) ? 'warn'
-    : 'ok'
+  const LIMIT_PCT = CONCENTRATION_LIMIT
+  const { status, total } = checkConcentration(data)
 
   return (
     <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-4 space-y-3">
@@ -461,106 +504,229 @@ function InvestConcentrationCard({ data, onNavigate }: { data: PolicyRealData; o
   )
 }
 
-// ── 전체 법인 요약 행 ─────────────────────────────────────────────────────
+// ── 주의 필요 다이제스트 항목 ─────────────────────────────────────────────
+interface AttentionItem {
+  severity: 'over' | 'warn'
+  company: Company | null
+  label: string
+  detail: string
+  onClick?: () => void
+}
+
+function buildAttentionItems(
+  companies: Company[],
+  dataMap: Record<Company, PolicyRealData>,
+  paramsMap: Record<Company, PolicyParamReader>,
+  decisions: PolicyDecision[],
+  navigateTo: (company: Company, tab: PolicyTab) => void,
+): AttentionItem[] {
+  const items: AttentionItem[] = []
+
+  for (const c of companies) {
+    const d = dataMap[c]; const p = paramsMap[c]
+    if (!d || !p) continue
+
+    const liq = checkLiquidity(d, p)
+    if (liq.status === 'over' || liq.status === 'warn') items.push({
+      severity: liq.status, company: c, label: '유동성 부족',
+      detail: `${fmtKRW(liq.current)} / 최소 ${fmtKRW(liq.target)}`,
+      onClick: () => navigateTo(c, 'decisions'),
+    })
+
+    const fx = checkFx(d, p)
+    if (fx.status === 'over' || fx.status === 'warn') items.push({
+      severity: fx.status, company: c,
+      label: fx.max !== null && fx.ratio > fx.max ? 'FX 비중 초과' : 'FX 비중 미달',
+      detail: `${fx.ratio.toFixed(1)}% (목표 ${fx.min}~${fx.max}%)`,
+      onClick: () => navigateTo(c, 'fx'),
+    })
+
+    const loan = checkLoan(d, p)
+    if (loan.status === 'over' || loan.status === 'warn') items.push({
+      severity: loan.status, company: c, label: '차입비율 초과',
+      detail: `${loan.ratio.toFixed(1)}% (한도 ${loan.max}%)`,
+      onClick: () => navigateTo(c, 'decisions'),
+    })
+
+    const conc = checkConcentration(d)
+    if (conc.status === 'over' || conc.status === 'warn') items.push({
+      severity: conc.status, company: c, label: '운용 집중도 초과',
+      detail: `${conc.bank ?? ''} ${conc.maxPct.toFixed(1)}% (한도 ${CONCENTRATION_LIMIT}%)`,
+      onClick: () => navigateTo(c, 'banks'),
+    })
+  }
+
+  const overdue = decisions.filter(dec =>
+    dec.status !== 'completed' && dec.due_date && new Date(dec.due_date).getTime() < Date.now())
+  if (overdue.length > 0) {
+    items.push({
+      severity: 'over', company: null,
+      label: `의결사항 기한 초과 ${overdue.length}건`,
+      detail: overdue.slice(0, 3).map(o => `${o.company} · ${o.title}`).join(' / '),
+    })
+  }
+
+  return items.sort((a, b) => (a.severity === 'over' ? 0 : 1) - (b.severity === 'over' ? 0 : 1))
+}
+
+function AttentionDigest({ items }: { items: AttentionItem[] }) {
+  if (items.length === 0) {
+    return (
+      <div className="rounded-xl border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/20 px-4 py-3 flex items-center gap-2">
+        <span className="text-green-500 text-base">✓</span>
+        <span className="text-sm font-medium text-green-700 dark:text-green-300">전 법인 정책 지표 정상 범위 내</span>
+      </div>
+    )
+  }
+  return (
+    <div className="rounded-xl border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/20 overflow-hidden">
+      <div className="px-4 py-2.5 border-b border-red-100 dark:border-red-900/50">
+        <h3 className="text-sm font-semibold text-red-700 dark:text-red-300">⚠ 주의 필요 {items.length}건</h3>
+      </div>
+      <div className="divide-y divide-red-100 dark:divide-red-900/40">
+        {items.map((item, i) => (
+          <button key={i} onClick={item.onClick} disabled={!item.onClick}
+            className={`w-full flex items-center justify-between gap-3 px-4 py-2.5 text-left transition-colors
+              ${item.onClick ? 'hover:bg-red-100/60 dark:hover:bg-red-900/20 cursor-pointer' : 'cursor-default'}`}>
+            <div className="flex items-center gap-2 min-w-0">
+              <span className={`text-sm font-bold shrink-0 ${item.severity === 'over' ? 'text-red-500' : 'text-orange-500'}`}>
+                {item.severity === 'over' ? '✕' : '⚠'}
+              </span>
+              <span className="text-xs font-medium text-gray-800 dark:text-white shrink-0">
+                {item.company ? `${item.company} · ${item.label}` : item.label}
+              </span>
+              <span className="text-xs text-gray-500 dark:text-slate-400 truncate">{item.detail}</span>
+            </div>
+            {item.onClick && <span className="text-[10px] text-blue-500 dark:text-blue-400 shrink-0">이동 →</span>}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── 전체 법인 정책 신호등 매트릭스 ────────────────────────────────────────
 function AllCompanySummary({
-  dataMap, paramsMap, companies,
+  dataMap, paramsMap, companies, decisions, onNavigate,
 }: {
   dataMap: Record<Company, PolicyRealData>
   paramsMap: Record<Company, PolicyParamReader>
   companies: Company[]
+  decisions: PolicyDecision[]
+  onNavigate: (company: Company, tab: PolicyTab) => void
 }) {
+  const attentionItems = useMemo(
+    () => buildAttentionItems(companies, dataMap, paramsMap, decisions, onNavigate),
+    [companies, dataMap, paramsMap, decisions, onNavigate],
+  )
+
   return (
-    <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 overflow-hidden">
-      <div className="px-4 py-3 border-b border-gray-100 dark:border-slate-700">
-        <h3 className="text-sm font-semibold text-gray-800 dark:text-white">
-          {companies.length === 3 ? '3사' : `${companies.length}개 법인`} 정책 현황 요약
-        </h3>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-xs">
-          <thead>
-            <tr className="bg-gray-50 dark:bg-slate-700/50 text-gray-500 dark:text-slate-300">
-              <th className="px-4 py-2 text-left font-medium">항목</th>
-              {companies.map(c => (
-                <th key={c} className="px-4 py-2 text-right font-medium">{c}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100 dark:divide-slate-700">
-            {/* 운전자금 */}
-            <tr>
-              <td className="px-4 py-2.5 text-gray-500 dark:text-slate-300">💧 운전자금(원화)</td>
+    <div className="space-y-3">
+      <AttentionDigest items={attentionItems} />
+
+      <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 overflow-hidden">
+        <div className="px-4 py-3 border-b border-gray-100 dark:border-slate-700 flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-gray-800 dark:text-white">
+            {companies.length === 3 ? '3사' : `${companies.length}개 법인`} 정책 적합성
+          </h3>
+          <p className="text-[11px] text-gray-400">셀 위에 마우스를 올리면 근거 수치가 표시됩니다 · 클릭 시 상세 이동</p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="bg-gray-50 dark:bg-slate-700/50 text-gray-500 dark:text-slate-300">
+                <th className="px-4 py-2 text-left font-medium">법인</th>
+                <th className="px-3 py-2 text-center font-medium">💧 유동성</th>
+                <th className="px-3 py-2 text-center font-medium">💱 FX 비중</th>
+                <th className="px-3 py-2 text-center font-medium">🏦 차입비율</th>
+                <th className="px-3 py-2 text-center font-medium">📊 운용집중도</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100 dark:divide-slate-700">
               {companies.map(c => {
                 const d = dataMap[c]; const p = paramsMap[c]
-                const min = (p.get('liquidity_fixed_cost_monthly') ?? 0) * (p.get('liquidity_min_months') ?? 2)
-                const ok = min === 0 ? null : d.operatingCash >= min
+                if (!d || !p) return null
+                const liq  = checkLiquidity(d, p)
+                const fx   = checkFx(d, p)
+                const loan = checkLoan(d, p)
+                const conc = checkConcentration(d)
                 return (
-                  <td key={c} className="px-4 py-2.5 text-right">
-                    <span className="font-medium text-gray-800 dark:text-white">{fmtKRW(d.operatingCash)}</span>
-                    {ok !== null && (
-                      <span className={`ml-1.5 ${ok ? 'text-green-500' : 'text-red-500'}`}>
-                        {ok ? '✓' : '✕'}
-                      </span>
-                    )}
-                  </td>
+                  <tr key={c}>
+                    <td className="px-4 py-2.5 font-medium text-gray-800 dark:text-white whitespace-nowrap">{c}</td>
+                    <td className="px-3 py-2.5 text-center">
+                      <CellTooltip tooltip={
+                        <>
+                          <p className="font-semibold mb-1">💧 유동성 버킷</p>
+                          <p>현재: {fmtKRW(liq.current)}</p>
+                          <p>최소 목표: {liq.target > 0 ? fmtKRW(liq.target) : '미설정'}</p>
+                          {liq.ratio !== null && <p>충족률: {liq.ratio.toFixed(0)}%</p>}
+                        </>
+                      }>
+                        <button onClick={() => onNavigate(c, 'decisions')}
+                          className="inline-flex flex-col items-center gap-0.5 cursor-pointer">
+                          <StatusDot status={liq.status} />
+                          <span className="text-[10px] text-gray-400">
+                            {liq.ratio !== null ? `${liq.ratio.toFixed(0)}%` : '—'}
+                          </span>
+                        </button>
+                      </CellTooltip>
+                    </td>
+                    <td className="px-3 py-2.5 text-center">
+                      <CellTooltip tooltip={
+                        <>
+                          <p className="font-semibold mb-1">💱 외화 비중 (가용자금 기준)</p>
+                          <p>외화 보유: {fmtKRW(fx.fxKrw)}</p>
+                          <p>가용자금 합계: {fmtKRW(fx.totalFund)}</p>
+                          <p>목표 Band: {fx.min !== null ? `${fx.min}~${fx.max}%` : '미설정'}</p>
+                        </>
+                      }>
+                        <button onClick={() => onNavigate(c, 'fx')}
+                          className="inline-flex flex-col items-center gap-0.5 cursor-pointer">
+                          <StatusDot status={fx.status} />
+                          <span className="text-[10px] text-gray-400">{fx.ratio.toFixed(1)}%</span>
+                        </button>
+                      </CellTooltip>
+                    </td>
+                    <td className="px-3 py-2.5 text-center">
+                      <CellTooltip tooltip={
+                        <>
+                          <p className="font-semibold mb-1">🏦 차입비율</p>
+                          <p>총 차입금: {fmtKRW(loan.totalLoan)}</p>
+                          <p>기준 총자금: {fmtKRW(loan.totalFund)}</p>
+                          <p>한도: {loan.max !== null ? `${loan.max}%` : '미설정'}</p>
+                        </>
+                      }>
+                        <button onClick={() => onNavigate(c, 'decisions')}
+                          className="inline-flex flex-col items-center gap-0.5 cursor-pointer">
+                          <StatusDot status={loan.status} />
+                          <span className="text-[10px] text-gray-400">{loan.ratio.toFixed(1)}%</span>
+                        </button>
+                      </CellTooltip>
+                    </td>
+                    <td className="px-3 py-2.5 text-center">
+                      <CellTooltip tooltip={
+                        <>
+                          <p className="font-semibold mb-1">📊 운용자금 집중도</p>
+                          <p>최대 집중 기관: {conc.bank ?? '—'}</p>
+                          <p>은행 운용자금 합계: {fmtKRW(conc.total)}</p>
+                          <p>한도: 기관별 {CONCENTRATION_LIMIT}% 이내</p>
+                        </>
+                      }>
+                        <button onClick={() => onNavigate(c, 'banks')}
+                          className="inline-flex flex-col items-center gap-0.5 cursor-pointer">
+                          <StatusDot status={conc.status} />
+                          <span className="text-[10px] text-gray-400">
+                            {conc.status === 'na' ? '—' : `${conc.maxPct.toFixed(0)}%`}
+                          </span>
+                        </button>
+                      </CellTooltip>
+                    </td>
+                  </tr>
                 )
               })}
-            </tr>
-            {/* 외화 비중 */}
-            <tr>
-              <td className="px-4 py-2.5 text-gray-500 dark:text-slate-300">💱 외화 비중</td>
-              {companies.map(c => {
-                const d = dataMap[c]; const p = paramsMap[c]
-                const total = d.operatingCashWithFx
-                const ratio = total > 0 ? (d.fxKrw / total) * 100 : 0
-                const tMin = p.get('fx_target_min'); const tMax = p.get('fx_target_max')
-                const inBand = tMin !== null && tMax !== null
-                  ? ratio >= tMin && ratio <= tMax : null
-                return (
-                  <td key={c} className="px-4 py-2.5 text-right">
-                    <span className="font-medium text-gray-800 dark:text-white">{ratio.toFixed(1)}%</span>
-                    {inBand !== null && (
-                      <span className={`ml-1.5 ${inBand ? 'text-green-500' : 'text-red-500'}`}>
-                        {inBand ? '✓' : '✕'}
-                      </span>
-                    )}
-                    {tMin !== null && <span className="text-gray-400 ml-1">({tMin}~{tMax}%)</span>}
-                  </td>
-                )
-              })}
-            </tr>
-            {/* 운용자금 */}
-            <tr>
-              <td className="px-4 py-2.5 text-gray-500 dark:text-slate-300">📊 운용자금(가용)</td>
-              {companies.map(c => (
-                <td key={c} className="px-4 py-2.5 text-right font-medium text-gray-800 dark:text-white">
-                  {fmtKRW(dataMap[c].investAvail)}
-                </td>
-              ))}
-            </tr>
-            {/* 차입금 */}
-            <tr>
-              <td className="px-4 py-2.5 text-gray-500 dark:text-slate-300">🏦 차입금</td>
-              {companies.map(c => {
-                const d = dataMap[c]; const p = paramsMap[c]
-                const tf = p.get('fx_total_fund') ?? d.totalFundEstimate
-                const ratio = tf > 0 ? (d.totalLoan / tf) * 100 : 0
-                const maxR = p.get('loan_max_total_ratio')
-                const ok = maxR !== null ? ratio <= maxR : null
-                return (
-                  <td key={c} className="px-4 py-2.5 text-right">
-                    <span className="font-medium text-gray-800 dark:text-white">{fmtKRW(d.totalLoan)}</span>
-                    {ok !== null && (
-                      <span className={`ml-1.5 ${ok ? 'text-green-500' : 'text-red-500'}`}>
-                        {ok ? '✓' : '✕'}
-                      </span>
-                    )}
-                  </td>
-                )
-              })}
-            </tr>
-          </tbody>
-        </table>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   )
@@ -579,12 +745,10 @@ function DecisionPolicyPanel({
   const rows: { label: string; value: string; sub?: string }[] = []
 
   if (isFx) {
-    const tMin = params.get('fx_target_min'); const tMax = params.get('fx_target_max')
-    const total = data.operatingCashWithFx
-    const ratio = total > 0 ? (data.fxKrw / total) * 100 : 0
+    const fx = checkFx(data, params)
     rows.push(
-      { label: 'Target Band', value: tMin !== null && tMax !== null ? `${tMin}% ~ ${tMax}%` : '미설정' },
-      { label: '현재 외화비중', value: `${ratio.toFixed(1)}%`, sub: fmtKRW(data.fxKrw) },
+      { label: 'Target Band', value: fx.min !== null && fx.max !== null ? `${fx.min}% ~ ${fx.max}%` : '미설정' },
+      { label: '현재 외화비중', value: `${fx.ratio.toFixed(1)}%`, sub: fmtKRW(fx.fxKrw) },
     )
   }
 
@@ -656,40 +820,26 @@ function getMobileCards(
   ).length
 
   // FX
-  const fxTotal = d?.operatingCashWithFx ?? 0
-  const fxRatio = fxTotal > 0 ? ((d?.fxKrw ?? 0) / fxTotal) * 100 : 0
-  const fxMin = p?.get('fx_target_min') ?? null
-  const fxMax = p?.get('fx_target_max') ?? null
-  const fxStatus: MobileSummaryCard['status'] =
-    !d ? 'na' : fxMin === null ? 'na'
-    : fxRatio >= fxMin && fxRatio <= (fxMax ?? 999) ? 'ok'
-    : fxRatio <= fxMin * 0.9 || fxRatio >= (fxMax ?? 999) * 1.1 ? 'over'
-    : 'warn'
+  const fxCheck = d && p ? checkFx(d, p) : null
+  const fxRatio = fxCheck?.ratio ?? 0
+  const fxMin = fxCheck?.min ?? null
+  const fxMax = fxCheck?.max ?? null
+  const fxStatus: MobileSummaryCard['status'] = !d ? 'na' : (fxCheck?.status ?? 'na')
 
   // FVPL
   const bonds = d?.bonds.filter(b => b.product === '국채') ?? []
   const bondTotal = bonds.reduce((s, b) => s + (b.bondQty && b.bondPrice ? b.bondQty * (b.bondPrice / 10) : b.amount), 0)
 
   // 기관한도
-  const invTotal = d?.investByBank.reduce((s, b) => s + b.amount, 0) ?? 0
-  const maxConc = d && invTotal > 0
-    ? Math.max(...d.investByBank.map(b => (b.amount / invTotal) * 100), 0)
-    : 0
-  const bankStatus: MobileSummaryCard['status'] =
-    !d || invTotal === 0 ? 'na'
-    : maxConc > 30 ? 'over'
-    : maxConc > 27 ? 'warn'
-    : 'ok'
+  const concCheck = d ? checkConcentration(d) : null
+  const maxConc = concCheck?.maxPct ?? 0
+  const bankStatus: MobileSummaryCard['status'] = !d ? 'na' : (concCheck?.status ?? 'na')
 
   // 차입금
-  const tf = (p?.get('fx_total_fund') ?? null) || (d?.totalFundEstimate ?? 0)
-  const loanRatio = tf > 0 ? ((d?.totalLoan ?? 0) / tf) * 100 : 0
-  const loanMax = p?.get('loan_max_total_ratio') ?? null
-  const loanStatus: MobileSummaryCard['status'] =
-    !d ? 'na' : loanMax === null ? 'na'
-    : loanRatio <= loanMax ? 'ok'
-    : loanRatio <= loanMax * 1.1 ? 'warn'
-    : 'over'
+  const loanCheck = d && p ? checkLoan(d, p) : null
+  const loanRatio = loanCheck?.ratio ?? 0
+  const loanMax = loanCheck?.max ?? null
+  const loanStatus: MobileSummaryCard['status'] = !d ? 'na' : (loanCheck?.status ?? 'na')
 
   void policyTab // suppress unused warning
 
@@ -830,6 +980,14 @@ export default function PolicyPage() {
     if (policyTab !== 'decisions' && company !== 'all') {
       setCurrentCompany(company as Company)
     }
+  }
+
+  // "주의 필요" 다이제스트/매트릭스에서 특정 법인·탭으로 즉시 이동 (stale closure 방지 위해 3개 상태 동시 설정)
+  function navigateToPolicy(company: Company, tab: PolicyTab) {
+    if (!hasCompany(company)) return
+    setCurrentCompany(company)
+    setCompanyTab(company)
+    setPolicyTab(tab)
   }
 
   // ── 접근 가능 법인 전체 실데이터 + 정책 파라미터 (동적 법인 지원) ───────
@@ -1048,7 +1206,8 @@ export default function PolicyPage() {
               <div className="space-y-4">
                 {/* 정책 현황 카드 */}
                 {companyTab === 'all' ? (
-                  <AllCompanySummary dataMap={dataMap} paramsMap={paramsReadMap} companies={accessibleCompanies} />
+                  <AllCompanySummary dataMap={dataMap} paramsMap={paramsReadMap} companies={accessibleCompanies}
+                    decisions={decisions.data} onNavigate={navigateToPolicy} />
                 ) : selectedData && selectedParams && (
                   <div className="grid grid-cols-2 gap-3">
                     <LiquidityCard data={selectedData} params={selectedParams} isMaster={isMaster} userLabel={userLabel} />
@@ -1465,7 +1624,8 @@ export default function PolicyPage() {
 
       {/* 정책 현황 패널 */}
       {companyTab === 'all' ? (
-        <AllCompanySummary dataMap={dataMap} paramsMap={paramsReadMap} companies={accessibleCompanies} />
+        <AllCompanySummary dataMap={dataMap} paramsMap={paramsReadMap} companies={accessibleCompanies}
+          decisions={decisions.data} onNavigate={navigateToPolicy} />
       ) : selectedData && selectedParams && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <LiquidityCard data={selectedData} params={selectedParams} isMaster={isMaster} userLabel={userLabel} />

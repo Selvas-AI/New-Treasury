@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
-import type { Company, DailyRecord, InvestmentRecord, LoanRecord } from '../types'
+import type { Company, DailyRecord, InvestmentRecord, LoanRecord, EquityRecord } from '../types'
 import { calcBondValue } from '../lib/format'
 import { normBank } from '../lib/bankUtils'
 import { useFx } from './useFx'
+import { getLatestEquities } from './useEquities'
 import { toKRWAmount, type FxCode } from '../lib/treasuryCalc'
 
 // ── DB row → InvestmentRecord (간소화 버전) ───────────────────────────────
@@ -47,6 +48,9 @@ export interface PolicyRealData {
   bonds: InvestmentRecord[]
   bondAvail: number
 
+  // 지분/장기투자 (가용)
+  equityAvail: number
+
   // 차입금
   loans: LoanRecord[]
   totalLoan: number
@@ -55,6 +59,14 @@ export interface PolicyRealData {
   // 총 자금 규모
   totalFundEstimate: number   // 운전자금+운용자금+국채 (정책 파라미터 없을 때 추정)
 
+  // ── FX 정책 비교용 SSOT (FxPolicyTab과 동일 공식 — 세션18차 통일) ──
+  // fxTotalHoldings = 운전자금 외화(fxKrw) + 운용자금 외화(가용, non-bond) 원화환산
+  // totalFundAvail  = 운전자금 + 가용운용 + 가용국채 + 가용지분 (= 대시보드 "가용자금 합계"와 동일)
+  // fxRatio         = fxTotalHoldings / totalFundAvail × 100
+  fxTotalHoldings: number
+  totalFundAvail: number
+  fxRatio: number
+
   loading: boolean
 }
 
@@ -62,20 +74,23 @@ interface RawCompanyData {
   daily: DailyRecord[]
   invest: InvestmentRecord[]
   loan: LoanRecord[]
+  equity: EquityRecord[]
 }
 
-/** 한 법인의 raw 데이터 fetch (daily 최신1 + active 운용 + active 차입) */
+/** 한 법인의 raw 데이터 fetch (daily 최신1 + active 운용 + active 차입 + 지분 이력) */
 async function fetchCompanyRaw(company: Company): Promise<RawCompanyData> {
-  const [d, i, l] = await Promise.all([
+  const [d, i, l, e] = await Promise.all([
     supabase.from('daily').select('*').eq('company', company)
       .order('date', { ascending: false }).limit(1),
     supabase.from('investments').select('*').eq('company', company).eq('active', true),
     supabase.from('loans').select('*').eq('company', company).eq('active', true),
+    supabase.from('equities').select('*').eq('company', company).order('date', { ascending: false }),
   ])
   return {
     daily:  (d.data ?? []) as DailyRecord[],
     invest: (i.data ?? []).map(r => investFromDb(r as DbRow)),
     loan:   (l.data ?? []) as LoanRecord[],
+    equity: (e.data ?? []) as EquityRecord[],
   }
 }
 
@@ -84,7 +99,7 @@ const identityKRW: ToKRWFn = (a) => a   // fallback when rates not loaded
 
 /** raw 데이터 → PolicyRealData 집계 (단일/멀티 훅 공용) */
 function computePolicyData(raw: RawCompanyData, loading: boolean, toKRW: ToKRWFn = identityKRW): PolicyRealData {
-  const { daily: dailyData, invest: investData, loan: loanData } = raw
+  const { daily: dailyData, invest: investData, loan: loanData, equity: equityData } = raw
   const latestDaily = dailyData[0] ?? null
 
   const operatingCash = latestDaily
@@ -129,15 +144,29 @@ function computePolicyData(raw: RawCompanyData, loading: boolean, toKRW: ToKRWFn
 
   const totalFundEstimate = operatingCashWithFx + investAvail + investUnavail + bondAvail
 
+  // 지분/장기투자 (가용) — 종목별 최신 1건만
+  const equityAvail = getLatestEquities(equityData)
+    .filter(e => e.available === '가용')
+    .reduce((s, e) => s + (e.total_value || 0), 0)
+
+  // FX 정책 SSOT — FxPolicyTab과 동일 공식(세션18차 통일)
+  // 운용자금 외화(가용, non-bond)의 원화환산 = investAvail 산출 시 이미 toKRWAmt 적용된 값 중
+  // 외화(KRW 아님) 통화분만 별도 추출
+  const investFxKrw = nonBonds.filter(i => i.available === '가용' && i.currency && i.currency !== 'KRW')
+    .reduce((s, i) => s + toKRWAmt(i.amount || 0, i.currency || 'KRW'), 0)
+  const fxTotalHoldings = fxKrw + investFxKrw
+  const totalFundAvail  = operatingCashWithFx + investAvail + bondAvail + equityAvail
+  const fxRatio = totalFundAvail > 0 ? (fxTotalHoldings / totalFundAvail) * 100 : 0
+
   return {
     latestDaily, operatingCash, operatingCashWithFx, fxKrw,
     investments: nonBonds, investAvail, investUnavail, investByBank,
-    bonds, bondAvail, loans: loanData, totalLoan, loanByBank,
-    totalFundEstimate, loading,
+    bonds, bondAvail, equityAvail, loans: loanData, totalLoan, loanByBank,
+    totalFundEstimate, fxTotalHoldings, totalFundAvail, fxRatio, loading,
   }
 }
 
-const EMPTY_RAW: RawCompanyData = { daily: [], invest: [], loan: [] }
+const EMPTY_RAW: RawCompanyData = { daily: [], invest: [], loan: [], equity: [] }
 
 /** 특정 법인의 실데이터를 직접 fetching — auth company와 독립적 */
 export function usePolicyDashboard(company: Company | null): PolicyRealData {
