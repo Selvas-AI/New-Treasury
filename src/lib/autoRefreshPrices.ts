@@ -13,7 +13,7 @@
  */
 
 import { restSelect, restInsert, restUpdate } from './supabase'
-import { fetchStockPrice, fetchBondPrice } from '../hooks/useGas'
+import { fetchStockPrice, fetchBondPrice, isGasBlocked } from '../hooks/useGas'
 import { calcBondValue, normDate, generateUUID } from './format'
 import type { EquityRecord, InvestmentRecord } from '../types'
 
@@ -74,6 +74,10 @@ export async function autoRefreshAllPrices(
   }
 
   for (const company of companies) {
+    // GAS 서킷브레이커(할당량 초과) 활성 중이면 전체 중단 — 오늘분은 마킹하지 않아
+    // 할당량 리셋 후 다음 마운트에서 재시도되도록 함 (자가복구)
+    if (isGasBlocked()) break
+
     // ── 지분 시세 갱신 ─────────────────────────────────────
     if (log.equity[company] !== today) {
       try {
@@ -131,8 +135,11 @@ export async function autoRefreshAllPrices(
       } catch {
         // 법인 전체 조회 실패 → 다음 법인으로
       }
-      log.equity[company] = today
-      saveLog(log)
+      // 할당량 초과로 차단된 상태면 마킹하지 않음(오늘 리셋 후 재시도 허용)
+      if (!isGasBlocked()) {
+        log.equity[company] = today
+        saveLog(log)
+      }
     }
 
     // ── 국채 기준가 갱신 (T+1, 오후 12시 이후) ─────────────
@@ -171,8 +178,10 @@ export async function autoRefreshAllPrices(
       } catch {
         // 법인 전체 조회 실패 → 다음 법인으로
       }
-      log.bond[company] = prevBiz
-      saveLog(log)
+      if (!isGasBlocked()) {
+        log.bond[company] = prevBiz
+        saveLog(log)
+      }
     }
   }
 

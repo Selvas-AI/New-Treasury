@@ -115,7 +115,7 @@ function TradeForm({
               <select value={form.currency}
                 onChange={e => setForm(f => ({ ...f, currency: e.target.value }))}
                 className="w-full border border-gray-300 dark:border-slate-600 rounded-lg px-2 py-1.5 dark:bg-slate-700 dark:text-gray-100">
-                {FX_CODES.map(c => <option key={c} value={c}>{FX_META[c].flag} {c}</option>)}
+                {FX_CODES.map(c => <option key={c} value={c}>{c} – {FX_META[c].name}</option>)}
               </select>
             </div>
             <div>

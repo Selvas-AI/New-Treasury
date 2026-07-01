@@ -1,6 +1,6 @@
 # CLAUDE.md — Selvas Treasury (New-Treasury)
 > 신규 세션 시작 시 이 파일을 먼저 읽어 컨텍스트를 복원하세요.
-> 최종 업데이트: 2026-06-25 (세션16차 — 법인 권한 누수 fix + 지분 데이터 복구 + DB 직접조작 금지 지침)
+> 최종 업데이트: 2026-07-01 (세션17차 — GAS UrlFetch 할당량 폭발 근본해결: 공유 FX 캐시 + 서킷브레이커)
 
 ---
 
@@ -1099,6 +1099,37 @@ const columns: ColumnDef<MyRecord, unknown>[] = [
   5. 이 규칙은 "실수 수정" "데이터 정리" "오류 조치" 어떤 명목으로도 우회 불가.
 
 위반 시 영향: 복구 불가 데이터 손실 → 수십~수백 건 수작업 재입력 필요.
+```
+
+### [CRITICAL] GAS UrlFetch 일일 할당량 폭발 → 전 시세/환율 조회 불가 ⭐ (세션17차)
+```
+증상(2026-07-01 실장애): 실시간 환율·주가 티커 전부 조회 안 됨. Sidebar "환율 연결 끊김",
+      상단 티커 "시세 연결 끊김". FxPage에 GAS 응답 그대로 노출:
+      { "success":false, "error":"Exception: 하루에 urlfetch 서비스를 너무 많이 호출했습니다." }
+      → GAS 무료계정 UrlFetchApp 일일 할당량(2만회) 소진. 태평양 자정(≈KST 16~17시) 리셋.
+      네트워크 로그에 동일 GAS 요청 수백 건 ERR_ABORTED/ERR_FAILED (호출 빈도만 증가).
+
+원인:
+  1) [근본] useFx()가 11곳+ 에서 각각 독립 GAS ?type=fx 호출 — 공유 캐시·중복제거 없음.
+     자금정책 페이지(PolicyKpiTab + usePolicyDashboard가 법인별 useFx 인스턴스 생성) 진입 시
+     동시 다발 호출. + 5분 폴링(FxPage/StockTicker) + Tier1 자동갱신(4법인×종목/국채) 중첩.
+  2) [증폭] 할당량 초과 시 GAS 응답이 ~12s로 느려짐 → TIMEOUT(당시 30s) 근처 → 1회 재시도로 배가.
+  3) 날짜/기준일 미갱신·"2026-06-30 기준" 표시는 모두 이 장애의 *증상* (별도 버그 아님).
+
+해결(3겹):
+  ① 공유 FX 캐시 + in-flight 중복제거 (src/hooks/useFx.ts) — 모듈레벨 sharedRates/sharedAt/
+     inflight + listeners. TTL 4분 내 재사용(네트워크 0), 동시 요청은 단일 프로미스 공유.
+     → 11+ 인스턴스가 4분당 GAS 1건으로 수렴. ⚠ toKRW/반환객체 메모이즈 유지(무한루프 회귀 방지).
+  ② 클라이언트 서킷브레이커 (src/hooks/useGas.ts) — 응답 success:false && error가 quota 문구면
+     gasBlockedUntil = now + 10분 설정(localStorage 'treasury_gas_blocked_until' 영속, 리로드에도 유지).
+     차단 중 gasGetOnce는 fetch 전 즉시 throw → 폭주·추가 소모 차단. 10분 쿨다운 후 1회 프로브로 자가복구.
+     export isGasBlocked()/gasBlockedRemainingMs().
+  ③ 재시도 억제 — TIMEOUT_MS 30s→20s. Tier1 자동갱신은 isGasBlocked() 시 break + 오늘분 미마킹
+     (할당량 리셋 후 다음 마운트에서 재시도되도록).
+
+검증: 서킷브레이커 활성 상태에서 정책 페이지 이동 → 신규 GAS 요청 0건(performance API resource 카운트).
+금지: useFx를 인스턴스별 독립 호출로 되돌리지 말 것(공유 캐시 필수). 서킷브레이커 제거 금지.
+근본대책(추후): GAS 계정을 Workspace로 전환(할당량 10만회) 또는 환율은 별도 무료 API 직접 호출 검토.
 ```
 
 ### [CRITICAL] supabase-js Web Locks 데드락 → 로그인 '처리 중...' 무한 행
