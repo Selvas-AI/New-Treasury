@@ -917,9 +917,12 @@ const EMPTY_DECISION = {
 }
 
 export default function PolicyPage() {
-  const { user, setCurrentCompany, currentCompany, hasCompany } = useAuth()
+  const { user, setCurrentCompany, currentCompany, hasCompany, canAction } = useAuth()
   const { names: companyNames } = useCompanies()
-  const isMaster  = user?.role === 'master'
+  // 자금정책 편집 권한 — master는 항상 가능, 그 외 역할은 UsersPage에서 사용자별로
+  // action_permissions['policy'].write 부여 시 가능 (기존엔 master 고정이라 admin에게도
+  // 위험포션·손실허용기준 등 정책 파라미터 편집을 위임할 방법이 없었음)
+  const canEditPolicy = canAction('policy', 'write')
   const userLabel = user?.label ?? '알 수 없음'
 
   // ── 모바일 감지 ──────────────────────────────────────────────────────────
@@ -1120,7 +1123,7 @@ export default function PolicyPage() {
                 : '자금정책 관리'}
             </h1>
           </div>
-          {isMaster && !mobileDetailOpen && (
+          {canEditPolicy && !mobileDetailOpen && (
             <button onClick={() => setShowMeetingForm(true)}
               className="text-sm px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg">
               + 새 회의
@@ -1164,7 +1167,7 @@ export default function PolicyPage() {
                 <FvplRiskTab
                   bonds={fvplBonds}
                   params={selectedParams}
-                  isMaster={isMaster}
+                  isMaster={canEditPolicy}
                   userLabel={userLabel}
                 />
               </div>
@@ -1175,7 +1178,7 @@ export default function PolicyPage() {
               <BankLimitsTab
                 company={companyTab as Company}
                 investments={selectedData.investments}
-                isMaster={isMaster}
+                isMaster={canEditPolicy}
                 userLabel={userLabel}
               />
             )}
@@ -1185,7 +1188,7 @@ export default function PolicyPage() {
               <CashflowForecastTab
                 company={companyTab as Company}
                 openingBalance={selectedData.operatingCash}
-                isMaster={isMaster}
+                isMaster={canEditPolicy}
                 userLabel={userLabel}
               />
             )}
@@ -1195,7 +1198,7 @@ export default function PolicyPage() {
               <PolicyCTab
                 investments={selectedData.investments}
                 loans={selectedData.loans}
-                isMaster={isMaster}
+                isMaster={canEditPolicy}
                 company={companyTab as string}
                 userLabel={userLabel}
               />
@@ -1210,7 +1213,7 @@ export default function PolicyPage() {
                     decisions={decisions.data} onNavigate={navigateToPolicy} />
                 ) : selectedData && selectedParams && (
                   <div className="grid grid-cols-2 gap-3">
-                    <LiquidityCard data={selectedData} params={selectedParams} isMaster={isMaster} userLabel={userLabel} />
+                    <LiquidityCard data={selectedData} params={selectedParams} isMaster={canEditPolicy} userLabel={userLabel} />
                     <FxStatusCard data={selectedData} params={selectedParams}
                       onNavigate={() => { setPolicyTab('fx'); setCompanyTab(companyTab as Company) }} />
                     <LoanStatusCard data={selectedData} params={selectedParams} isMaster={false} userLabel={userLabel} />
@@ -1230,7 +1233,7 @@ export default function PolicyPage() {
                       <option key={m.id} value={m.id}>{m.title} ({m.held_at})</option>
                     ))}
                   </select>
-                  {isMaster && activeMeetingId && (
+                  {canEditPolicy && activeMeetingId && (
                     <button onClick={() => setShowDecisionForm(true)}
                       className="text-sm px-3 py-2 bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-slate-100 rounded-lg">
                       + 안건
@@ -1268,7 +1271,7 @@ export default function PolicyPage() {
                                 {dday < 0 ? `D+${Math.abs(dday)}` : dday === 0 ? 'D-day' : `D-${dday}`}
                               </span>
                             )}
-                            {isMaster && (
+                            {canEditPolicy && (
                               <select value={d.status}
                                 onChange={e => handleStatusChange(d, e.target.value as DecisionStatus)}
                                 className="ml-auto text-xs border border-gray-200 dark:border-slate-600 rounded px-1.5 py-0.5
@@ -1472,7 +1475,7 @@ export default function PolicyPage() {
             회사별 정책 현황 · FX 정책 · 변동성 리스크 · 위원회 의결사항
           </p>
         </div>
-        {isMaster && policyTab === 'decisions' && (
+        {canEditPolicy && policyTab === 'decisions' && (
           <button onClick={() => setShowMeetingForm(true)}
             className="text-sm px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg">
             + 새 회의
@@ -1548,7 +1551,7 @@ export default function PolicyPage() {
             <FvplRiskTab
               bonds={fvplBonds}
               params={selectedParams}
-              isMaster={isMaster}
+              isMaster={canEditPolicy}
               userLabel={userLabel}
             />
           </div>
@@ -1566,7 +1569,7 @@ export default function PolicyPage() {
           <BankLimitsTab
             company={companyTab as Company}
             investments={selectedData.investments}
-            isMaster={isMaster}
+            isMaster={canEditPolicy}
             userLabel={userLabel}
           />
         ) : null
@@ -1583,7 +1586,7 @@ export default function PolicyPage() {
           <CashflowForecastTab
             company={companyTab as Company}
             openingBalance={selectedData.operatingCash}
-            isMaster={isMaster}
+            isMaster={canEditPolicy}
             userLabel={userLabel}
           />
         ) : null
@@ -1600,7 +1603,7 @@ export default function PolicyPage() {
           <PolicyCTab
             investments={selectedData.investments}
             loans={selectedData.loans}
-            isMaster={isMaster}
+            isMaster={canEditPolicy}
             company={companyTab !== 'all' ? companyTab as string : ''}
             userLabel={userLabel}
           />
@@ -1615,7 +1618,7 @@ export default function PolicyPage() {
             <p className="text-xs text-amber-600 dark:text-amber-400">정책 성과 분석은 법인별로 제공됩니다.</p>
           </div>
         ) : (
-          <PolicyKpiTab company={companyTab as string} isMaster={isMaster} />
+          <PolicyKpiTab company={companyTab as string} isMaster={canEditPolicy} />
         )
       )}
 
@@ -1628,10 +1631,10 @@ export default function PolicyPage() {
           decisions={decisions.data} onNavigate={navigateToPolicy} />
       ) : selectedData && selectedParams && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          <LiquidityCard data={selectedData} params={selectedParams} isMaster={isMaster} userLabel={userLabel} />
+          <LiquidityCard data={selectedData} params={selectedParams} isMaster={canEditPolicy} userLabel={userLabel} />
           <FxStatusCard  data={selectedData} params={selectedParams}
             onNavigate={() => { setPolicyTab('fx'); setCompanyTab(companyTab as Company) }} />
-          <LoanStatusCard data={selectedData} params={selectedParams} isMaster={isMaster} userLabel={userLabel} />
+          <LoanStatusCard data={selectedData} params={selectedParams} isMaster={canEditPolicy} userLabel={userLabel} />
           <InvestConcentrationCard data={selectedData}
             onNavigate={() => { setPolicyTab('banks'); setCompanyTab(companyTab as Company) }} />
         </div>
@@ -1655,7 +1658,7 @@ export default function PolicyPage() {
               ))}
             </select>
             {/* 선택된 회의 수정/삭제 버튼 */}
-            {isMaster && activeMeetingId && (
+            {canEditPolicy && activeMeetingId && (
               <div className="flex items-center gap-1">
                 <button onClick={openEditMeeting}
                   title="회의 수정"
@@ -1679,7 +1682,7 @@ export default function PolicyPage() {
               </span>
             )}
           </div>
-          {isMaster && activeMeetingId && (
+          {canEditPolicy && activeMeetingId && (
             <button onClick={() => setShowDecisionForm(true)}
               className="text-sm px-3 py-1 bg-gray-100 dark:bg-slate-700 hover:bg-gray-200 dark:hover:bg-gray-600
                          text-gray-700 dark:text-slate-100 rounded-full">
@@ -1706,7 +1709,7 @@ export default function PolicyPage() {
         <div className="text-center py-12 text-gray-400 dark:text-gray-500">
           <div className="text-4xl mb-3">📋</div>
           <p className="text-sm">등록된 회의가 없습니다.</p>
-          {isMaster && <p className="text-xs mt-1">상단 "+ 새 회의" 버튼으로 추가하세요.</p>}
+          {canEditPolicy && <p className="text-xs mt-1">상단 "+ 새 회의" 버튼으로 추가하세요.</p>}
         </div>
       )}
 
@@ -1751,7 +1754,7 @@ export default function PolicyPage() {
                     </div>
                     <p className="font-semibold text-gray-900 dark:text-white text-sm">{d.title}</p>
                   </div>
-                  {isMaster && (
+                  {canEditPolicy && (
                     <div className="flex items-center gap-1.5 shrink-0">
                       <select value={d.status} disabled={updatingId === d.id}
                         onChange={e => handleStatusChange(d, e.target.value as DecisionStatus)}
@@ -1818,7 +1821,7 @@ export default function PolicyPage() {
                         <div className="flex items-center gap-2">
                           <span className="text-xs font-medium text-gray-700 dark:text-slate-100">{c.user_label}</span>
                           <span className="text-xs text-gray-400">{c.created_at.slice(0, 10)}</span>
-                          {isMaster && (
+                          {canEditPolicy && (
                             <button onClick={() => threads.removeMemo(c.id)}
                               className="text-xs text-gray-300 hover:text-red-500 ml-auto">✕</button>
                           )}

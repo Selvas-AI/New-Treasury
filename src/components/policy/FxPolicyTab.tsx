@@ -32,8 +32,11 @@ function fmtAmt(v: number, code: FxCode): string {
 interface TradeModal { code: FxCode | 'total'; excessKrw: number }
 
 export default function FxPolicyTab({ company }: { company: Company }) {
-  const { user } = useAuth()
+  const { user, canAction } = useAuth()
   const isMaster = user?.role === 'master'
+  // 자금정책 편집 권한 — master는 항상 가능, 그 외 역할은 UsersPage에서 개별 부여된
+  // action_permissions['policy'].write 로 허용(기존엔 master 고정이라 admin에게도 부여 불가했음)
+  const canEditPolicy = canAction('policy', 'write')
   const daily    = useDaily()
   const invest   = useInvestments(true)
   const equities = useEquities()
@@ -475,7 +478,7 @@ export default function FxPolicyTab({ company }: { company: Company }) {
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">FX Target Band 모니터링</h3>
           <div className="flex items-center gap-2">
-            {isMaster && (
+            {canEditPolicy && (
               <button onClick={previewAutoBand} disabled={effectiveLimit <= 0}
                 className="text-xs px-2.5 py-1 rounded-lg border border-blue-300 dark:border-blue-700
                            text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30
@@ -581,7 +584,7 @@ export default function FxPolicyTab({ company }: { company: Company }) {
               <p className="text-xs text-gray-400">경영 판단 — 연 1회 이상 검토</p>
               <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">손실 허용 기준</h3>
             </div>
-            {isMaster && (
+            {canEditPolicy && (
               <button onClick={() => setEditingParams(!editingParams)}
                 className="text-xs px-2.5 py-1 border border-blue-200 dark:border-blue-700 text-blue-600 dark:text-blue-400 rounded-lg">
                 {editingParams ? '취소' : '✏️ 편집'}
@@ -638,7 +641,7 @@ export default function FxPolicyTab({ company }: { company: Company }) {
                 <span className="text-gray-500 dark:text-slate-300">위험포션 (Risk Appetite)</span>
                 <span className="font-bold text-blue-600 dark:text-blue-400">{localRiskPct.toFixed(0)}%</span>
               </div>
-              {isMaster ? (
+              {canEditPolicy ? (
                 <input type="range" className="range-fill" min="10" max="100" step="5"
                   value={localRiskPct}
                   style={riskSliderStyle()}
@@ -698,7 +701,7 @@ export default function FxPolicyTab({ company }: { company: Company }) {
               <span className="text-gray-500 dark:text-slate-300">최대 외화 보유 허용 비율</span>
               <span className="font-bold text-blue-600 dark:text-blue-400">{localMaxFxPct.toFixed(0)}%</span>
             </div>
-            {isMaster ? (
+            {canEditPolicy ? (
               <input type="range" className="range-fill" min="5" max="50" step="5"
                 value={localMaxFxPct}
                 style={maxFxSliderStyle()}
@@ -897,7 +900,7 @@ export default function FxPolicyTab({ company }: { company: Company }) {
                     <div className="flex items-center gap-1">
                       <input type="number" min="0" max="100" step="1"
                         value={localWeights[c.code] ?? Math.round(row.wgt * 100)}
-                        disabled={!isMaster}
+                        disabled={!canEditPolicy}
                         onChange={e => setLocalWeights(p => ({ ...p, [c.code]: Number(e.target.value) }))}
                         onBlur={async e => {
                           const v = Number(e.target.value) / 100
@@ -929,7 +932,7 @@ export default function FxPolicyTab({ company }: { company: Company }) {
               <p className="text-xs text-gray-400">분기 업데이트 — 한국은행 ECOS API</p>
               <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">환율 변동폭 설정</h3>
             </div>
-            {isMaster && (
+            {canEditPolicy && (
               <div className="flex items-center gap-2">
                 <button onClick={handleAutoCalcStdDev} disabled={autoCalcState === 'loading'}
                   title="한국은행 ECOS API에서 4개 통화 1년치 데이터를 조회합니다. 정상적으로도 2~3분 이상 걸릴 수 있습니다."
@@ -996,8 +999,8 @@ export default function FxPolicyTab({ company }: { company: Company }) {
                   <button key={lv}
                     onClick={async () => {
                       setLocalConfLevel(lv)
-                      // master만 sim값 저장; 나머지는 로컬 시뮬레이션만
-                      if (isMaster) await params.set('fx_confidence_level', lv, null, user?.label ?? '')
+                      // 편집 권한자만 sim값 저장; 나머지는 로컬 시뮬레이션만
+                      if (canEditPolicy) await params.set('fx_confidence_level', lv, null, user?.label ?? '')
                     }}
                     className={`flex-1 py-2 px-1 rounded-lg border-2 text-center transition-all cursor-pointer
                       ${isDecided && isActive

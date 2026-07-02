@@ -6,7 +6,7 @@ export type UserRole = 'master' | 'admin' | 'editor' | 'viewer' | 'ceo' | 'compa
 // 섹션별 작업 권한 (action_permissions 키)
 export type SectionKey =
   'operating' | 'invest' | 'loans' | 'equity' |
-  'daily_write' | 'daily_submit' | 'history' | 'issue_history'
+  'daily_write' | 'daily_submit' | 'history' | 'issue_history' | 'policy'
 
 export type ActionKey = 'view' | 'write' | 'delete'
 

@@ -17,22 +17,27 @@ export const ACTION_DEFAULTS: Record<string, Partial<Record<SectionKey, SectionP
   master: {
     operating: _all(true,true), invest: _all(true,true), loans: _all(true,true), equity: _all(true,true),
     daily_write: _all(true,true), daily_submit: _all(true,true), history: _all(true,false), issue_history: _all(true,false),
+    policy: _all(true,true),
   },
   admin: {
     operating: _all(true,false), invest: _all(true,false), loans: _all(true,false), equity: _all(true,false),
     daily_write: _all(true,false), daily_submit: _all(true,false), history: _ro(), issue_history: _all(true,false),
+    // 기본은 조회만(기존 동작 유지) — master가 사용자별로 입력·수정 권한을 개별 부여 가능(action_permissions)
+    policy: _ro(),
   },
   editor: {
     operating: _all(true,false), invest: _all(true,false), loans: _ro(), equity: _all(true,false),
     daily_write: _all(true,false), daily_submit: _all(true,false), history: _ro(), issue_history: _ro(),
+    policy: _ro(),
   },
   viewer: {
     operating: _ro(), invest: _ro(), loans: _ro(), equity: _ro(),
     daily_write: _ro(), daily_submit: _ro(), history: _ro(), issue_history: _ro(),
+    policy: _ro(),
   },
   // 레거시 역할 fallback
-  ceo:     { operating: _ro(), invest: _ro(), loans: _ro(), equity: _ro(), daily_write: _ro(), daily_submit: _ro(), history: _ro(), issue_history: _ro() },
-  company: { operating: _ro(), invest: _ro(), loans: _ro(), equity: _ro(), daily_write: _ro(), daily_submit: _ro(), history: _ro(), issue_history: _ro() },
+  ceo:     { operating: _ro(), invest: _ro(), loans: _ro(), equity: _ro(), daily_write: _ro(), daily_submit: _ro(), history: _ro(), issue_history: _ro(), policy: _ro() },
+  company: { operating: _ro(), invest: _ro(), loans: _ro(), equity: _ro(), daily_write: _ro(), daily_submit: _ro(), history: _ro(), issue_history: _ro(), policy: _ro() },
 }
 
 export interface AuthContextValue {

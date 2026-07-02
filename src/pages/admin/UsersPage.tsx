@@ -111,6 +111,7 @@ const SECTIONS: SectionDef[] = [
   { key: 'daily_submit', label: '결재 상신', group: '자금일보',  disabled: ['delete'] },
   { key: 'history',      label: '자금 이력', group: '이력 관리', disabled: ['write','delete'] },
   { key: 'issue_history',label: '이슈 이력', group: '이력 관리', disabled: ['delete'] },
+  { key: 'policy',       label: '자금정책',  group: '자금정책',  disabled: ['delete'] },
 ]
 
 // IN_CATEGORIES / OUT_CATEGORIES (ItemsSection과 동기화)
