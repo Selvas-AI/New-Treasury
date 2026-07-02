@@ -9,6 +9,7 @@ import { fetchFxStdDev } from '../../hooks/useGas'
 import { fmtKRW, fmtNumber } from '../../lib/format'
 import { restInsert } from '../../lib/supabase'
 import { generateUUID } from '../../lib/format'
+import { NumInput } from '../common/NumInput'
 import { useFxTradeHistory } from '../../hooks/useFxTradeHistory'
 import type { Company, FxCode } from '../../types'
 
@@ -43,8 +44,15 @@ export default function FxPolicyTab({ company }: { company: Company }) {
   const riskPortion      = params.get('fx_risk_portion')      ?? 0.5
   const targetMin        = params.get('fx_target_min')        ?? 20
   const targetMax        = params.get('fx_target_max')        ?? 25
-  const operatingProfit  = params.get('fx_operating_profit')  ?? 4_300_000_000
-  const interestIncome   = params.get('fx_interest_income')   ?? 2_300_000_000
+  // 영업이익/이자수익 — 실적(확정)과 예상(계획)을 구분 입력받아 합산한 값을 위험포션 기준금액으로 사용.
+  // 하위호환: 기존 fx_operating_profit/fx_interest_income(단일값)은 예상란 초기값으로 승계.
+  const operatingProfitActual   = params.get('fx_operating_profit_actual')   ?? 0
+  const operatingProfitForecast = params.get('fx_operating_profit_forecast') ?? params.get('fx_operating_profit') ?? 4_300_000_000
+  const operatingProfit = operatingProfitActual + operatingProfitForecast
+
+  const interestIncomeActual   = params.get('fx_interest_income_actual')   ?? 0
+  const interestIncomeForecast = params.get('fx_interest_income_forecast') ?? params.get('fx_interest_income') ?? 2_300_000_000
+  const interestIncome = interestIncomeActual + interestIncomeForecast
   const maxFxRatio       = params.get('fx_max_fx_ratio')      ?? 0.30
   const confidenceLevel  = Number(params.get('fx_confidence_level') ?? 95) as ConfLevel
   // 의결 확정값 — master가 🔒 확정 버튼으로 승격; null = 미의결
@@ -231,8 +239,10 @@ export default function FxPolicyTab({ company }: { company: Company }) {
 
   useEffect(() => {
     if (editingParams) setDraftParams({
-      fx_operating_profit: operatingProfit,
-      fx_interest_income:  interestIncome,
+      fx_operating_profit_actual:   operatingProfitActual,
+      fx_operating_profit_forecast: operatingProfitForecast,
+      fx_interest_income_actual:    interestIncomeActual,
+      fx_interest_income_forecast:  interestIncomeForecast,
     })
   }, [editingParams]) // eslint-disable-line
 
@@ -581,17 +591,19 @@ export default function FxPolicyTab({ company }: { company: Company }) {
 
           {editingParams && (
             <div className="mb-4 p-4 bg-blue-50 dark:bg-blue-950/30 rounded-xl border border-blue-200 dark:border-blue-800 space-y-3">
-              <p className="text-xs text-blue-700 dark:text-blue-300">※ 자금정책위원회 의결에 따라 조정</p>
-              <div className="grid grid-cols-1 gap-3">
+              <p className="text-xs text-blue-700 dark:text-blue-300">※ 자금정책위원회 의결에 따라 조정 — 실적+예상 합계가 위험포션 기준금액이 됩니다</p>
+              <div className="grid grid-cols-2 gap-3">
                 {[
-                  { key: 'fx_operating_profit', label: '사업계획 영업이익 (원)', step: 100_000_000 },
-                  { key: 'fx_interest_income',  label: '예상 이자수익 (원)',     step: 100_000_000 },
-                ].map(({ key, label, step }) => (
+                  { key: 'fx_operating_profit_actual',   label: '영업이익 (실적, 원)' },
+                  { key: 'fx_operating_profit_forecast', label: '영업이익 (예상, 원)' },
+                  { key: 'fx_interest_income_actual',    label: '이자수익 (실적, 원)' },
+                  { key: 'fx_interest_income_forecast',  label: '이자수익 (예상, 원)' },
+                ].map(({ key, label }) => (
                   <div key={key}>
                     <label className="text-xs text-gray-500 dark:text-slate-300">{label}</label>
-                    <input type="number" step={step} value={draftParams[key] ?? 0}
-                      onChange={e => setDraftParams(p => ({ ...p, [key]: Number(e.target.value) }))}
-                      className="mt-0.5 w-full text-sm border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-1.5
+                    <NumInput value={draftParams[key] ?? 0}
+                      onChange={raw => setDraftParams(p => ({ ...p, [key]: Number(raw) || 0 }))}
+                      className="mt-0.5 w-full text-sm text-right border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-1.5
                                  bg-white dark:bg-slate-700 text-gray-900 dark:text-white" />
                   </div>
                 ))}
@@ -609,12 +621,14 @@ export default function FxPolicyTab({ company }: { company: Company }) {
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-2">
               <div className="bg-gray-50 dark:bg-slate-700/50 rounded-xl p-3">
-                <p className="text-xs text-gray-400">영업이익</p>
+                <p className="text-xs text-gray-400">영업이익 (실적+예상)</p>
                 <p className="text-sm font-medium text-gray-700 dark:text-gray-200">{fmtKRW(operatingProfit)}</p>
+                <p className="text-[10px] text-gray-400 mt-0.5">실적 {fmtKRW(operatingProfitActual)} · 예상 {fmtKRW(operatingProfitForecast)}</p>
               </div>
               <div className="bg-gray-50 dark:bg-slate-700/50 rounded-xl p-3">
-                <p className="text-xs text-gray-400">이자수익</p>
+                <p className="text-xs text-gray-400">이자수익 (실적+예상)</p>
                 <p className="text-sm font-medium text-gray-700 dark:text-gray-200">{fmtKRW(interestIncome)}</p>
+                <p className="text-[10px] text-gray-400 mt-0.5">실적 {fmtKRW(interestIncomeActual)} · 예상 {fmtKRW(interestIncomeForecast)}</p>
               </div>
             </div>
 
@@ -658,7 +672,7 @@ export default function FxPolicyTab({ company }: { company: Company }) {
         <div className={card}>
           <div className="flex items-start justify-between mb-3">
             <div>
-              <p className="text-xs text-gray-400">신규 — 자금 규모 안전장치</p>
+              <p className="text-xs text-gray-400">보유 자금 규모대비 상한</p>
               <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">자금 규모 기반 상한</h3>
             </div>
             <span className="text-xs px-2 py-0.5 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded-full font-medium whitespace-nowrap">이중 안전장치</span>
