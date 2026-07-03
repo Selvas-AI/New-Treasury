@@ -108,6 +108,25 @@ export default function EquityPage() {
   // ─── 국채 ────────────────────────────────────────────────
   const bonds     = useMemo(() => getLatestBonds(inv.bonds), [inv.bonds])
 
+  // 가용/불가용 모달 아이템 — 국채(종목별 최신 1건, bondTicker/bondName/bank 키 기준)
+  const availBondItems = useMemo<AvailItem[]>(() =>
+    bonds.map(b => ({
+      key:      b.bondTicker ?? b.bondName ?? b.bank,
+      label:    b.bondName ?? b.bank,
+      sublabel: b.bondTicker,
+      detail:   b.bondQty ? `${b.bondQty.toLocaleString()}좌` : undefined,
+      current:  b.available ?? '가용',
+    })),
+  [bonds])
+
+  async function handleAvailBondSave(changes: { key: string; available: '가용' | '불가용' }[]) {
+    for (const ch of changes) {
+      const err = await inv.updateAvailableByBondKey(ch.key, ch.available)
+      if (err) toast.error(`${ch.key}: ${err}`)
+    }
+    toast.success(`${changes.length}건 가용현황 변경 완료`)
+  }
+
   // ─── KPI 계산 ────────────────────────────────────────────
   const stockTotal    = useMemo(() => stocks.reduce((s, e) => s + e.total_value, 0), [stocks])
   const unlistedTotal = useMemo(() => unlisted.reduce((s, e) => s + e.total_value, 0), [unlisted])
@@ -195,7 +214,7 @@ export default function EquityPage() {
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100">지분/장기투자</h2>
         <div className="flex items-center gap-2">
-          {isEditable && tab !== 'bond' && (
+          {isEditable && (
             <button
               onClick={() => setAvailModalOpen(true)}
               className="text-sm border border-indigo-200 text-indigo-600 px-3 py-1.5 rounded-lg hover:bg-indigo-50 transition-colors dark:border-indigo-700 dark:text-indigo-400 dark:hover:bg-indigo-950/30"
@@ -583,9 +602,9 @@ export default function EquityPage() {
       <AvailabilityModal
         open={availModalOpen}
         onClose={() => setAvailModalOpen(false)}
-        title={`가용현황 변경 — ${tab === 'stock' ? '지분(상장)' : '비상장/기타'}`}
-        items={availEquityItems}
-        onSave={handleAvailEquitySave}
+        title={`가용현황 변경 — ${tab === 'stock' ? '지분(상장)' : tab === 'bond' ? '국채/채권' : '비상장/기타'}`}
+        items={tab === 'bond' ? availBondItems : availEquityItems}
+        onSave={tab === 'bond' ? handleAvailBondSave : handleAvailEquitySave}
       />
     </div>
   )

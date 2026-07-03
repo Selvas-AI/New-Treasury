@@ -81,6 +81,7 @@ export function useInvestments(activeOnly = false, companyOverride?: string): Us
   setActive: (id: string, active: boolean) => Promise<string | null>
   updateAcquisitionCost: (ids: string[], cost: number) => Promise<string | null>
   updateAvailableById: (id: string, available: '가용' | '불가용') => Promise<string | null>
+  updateAvailableByBondKey: (bondKey: string, available: '가용' | '불가용') => Promise<string | null>
 } {
   const { user, currentCompany } = useAuth()
   const { logAction } = useAuditLog()
@@ -180,5 +181,18 @@ export function useInvestments(activeOnly = false, companyOverride?: string): Us
     return null
   }
 
-  return { data, loading, error, refetch: fetch, bonds, nonBonds, save, remove, setActive, updateAcquisitionCost, updateAvailableById }
+  /** 국채 종목(bondTicker/bondName/bank 기준) 전체 이력 일괄 가용/불가용 변경 — 지분의 updateAvailableByName과 동일 패턴 */
+  async function updateAvailableByBondKey(bondKey: string, available: '가용' | '불가용'): Promise<string | null> {
+    const ids = data
+      .filter(r => r.product === '국채' && (r.bondTicker ?? r.bondName ?? r.bank) === bondKey)
+      .map(r => r.id)
+    if (ids.length === 0) return null
+    const { error: err } = await restUpdateIn('investments', { available }, 'id', ids)
+    if (err) return err.message
+    setData(prev => prev.map(r => ids.includes(r.id) ? { ...r, available } : r))
+    void logAction({ table: 'investments', action: 'UPDATE', company: fetchCompany || '', recordId: bondKey, summary: `${bondKey} 가용현황 → ${available}` })
+    return null
+  }
+
+  return { data, loading, error, refetch: fetch, bonds, nonBonds, save, remove, setActive, updateAcquisitionCost, updateAvailableById, updateAvailableByBondKey }
 }
