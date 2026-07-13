@@ -85,9 +85,9 @@ export default function FlowDetailDrawer({ itemKey, kpi, fxKrw: fxKrwProp, lates
         {/* 콘텐츠 */}
         <div className="overflow-y-auto flex-1 min-h-0 px-4 py-3">
           {itemKey === 'operating'  && <OperatingDetail daily={latestDaily} kpi={kpi} />}
-          {itemKey === 'invest'     && <InvestDetail items={latestInvests.filter(i => i.product !== '국채')} />}
+          {itemKey === 'invest'     && <InvestDetail items={latestInvests.filter(i => i.product !== '국채' && i.available === '가용')} kpi={kpi} toKRWAmt={toKRWAmt} />}
           {itemKey === 'loan'       && <LoanDetail loans={loans.filter(l => l.active)} kpi={kpi} toKRWAmt={toKRWAmt} />}
-          {itemKey === 'fx'         && <FxDetail daily={latestDaily} />}
+          {itemKey === 'fx'         && <FxDetail daily={latestDaily} latestInvests={latestInvests} kpi={kpi} />}
           {itemKey === 'net'        && <NetDetail kpi={kpi} />}
           {itemKey === 'unavailable' && <UnavailableDetail kpi={kpi} latestInvests={latestInvests} equities={equities} />}
           {itemKey === 'available'  && <AvailableDetail kpi={kpi} daily={latestDaily} latestInvests={latestInvests} equities={equities} toKRWAmt={toKRWAmt} />}
@@ -146,17 +146,32 @@ function OperatingDetail({ daily, kpi }: { daily: DailyRecord | null; kpi: KpiDa
   )
 }
 
-// ── 운용자금 상세 ────────────────────────────────────────────
-function InvestDetail({ items }: { items: InvestmentRecord[] }) {
-  if (items.length === 0) return <p className="text-xs text-gray-400 py-4 text-center">운용 중인 자금이 없습니다</p>
+// ── 운용자금 상세 (대시보드 "가용 운용" 항목과 동일하게 가용분만 표시) ──
+function InvestDetail({ items, kpi, toKRWAmt }: {
+  items: InvestmentRecord[]
+  kpi: KpiData
+  toKRWAmt: (amount: number, currency: string) => number
+}) {
+  if (items.length === 0) return <p className="text-xs text-gray-400 py-4 text-center">가용 운용자금이 없습니다</p>
   return (
     <div className="divide-y divide-gray-50 dark:divide-slate-700">
-      {items.map(inv => (
-        <div key={inv.id} className="flex justify-between items-center py-2">
-          <span className="text-[11px] text-gray-400 truncate mr-2">{inv.bank}</span>
-          <span className="text-xs tabular-nums font-semibold text-gray-700 dark:text-gray-200 shrink-0">{fmtKRW(inv.amount)}</span>
-        </div>
-      ))}
+      {items.map(inv => {
+        const krw  = toKRWAmt(inv.amount || 0, inv.currency || 'KRW')
+        const isFx = inv.currency && inv.currency !== 'KRW'
+        return (
+          <div key={inv.id} className="flex justify-between items-center py-2">
+            <span className="text-[11px] text-gray-400 truncate mr-2">
+              {inv.bank}
+              {isFx && <span className="ml-1 text-[10px] text-amber-500">{inv.currency}</span>}
+            </span>
+            <span className="text-xs tabular-nums font-semibold text-gray-700 dark:text-gray-200 shrink-0">{fmtKRW(krw)}</span>
+          </div>
+        )
+      })}
+      <div className="flex justify-between items-center py-2">
+        <span className="text-xs font-semibold text-gray-600 dark:text-slate-100">합계 (가용)</span>
+        <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">{fmtKRW(kpi.investCash)}</span>
+      </div>
     </div>
   )
 }
@@ -223,28 +238,52 @@ function EquityAvailDetail({ equities, total }: { equities: EquityItem[]; total:
   )
 }
 
-// ── 외화 상세 ────────────────────────────────────────────────
-function FxDetail({ daily }: { daily: DailyRecord | null }) {
-  if (!daily) return <p className="text-xs text-gray-400 py-4 text-center">외화 데이터가 없습니다</p>
-  const rows = [
-    { label: 'USD', value: daily.fx_usd },
-    { label: 'EUR', value: daily.fx_eur },
-    { label: 'JPY', value: daily.fx_jpy },
-    { label: 'GBP', value: daily.fx_gbp },
-    { label: 'CNY', value: daily.fx_cny },
-  ].filter(r => r.value > 0)
+// ── 외화 상세 (운전자금 외화 + 가용 운용자금 외화 — 대시보드 "외화(환산)"과 동일 범위) ──
+function FxDetail({ daily, latestInvests, kpi }: {
+  daily: DailyRecord | null
+  latestInvests: InvestmentRecord[]
+  kpi: KpiData
+}) {
+  const CODES = ['USD', 'EUR', 'JPY', 'GBP', 'CNY'] as const
+  const operatingNative: Record<string, number> = {
+    USD: daily?.fx_usd ?? 0, EUR: daily?.fx_eur ?? 0, JPY: daily?.fx_jpy ?? 0,
+    GBP: daily?.fx_gbp ?? 0, CNY: daily?.fx_cny ?? 0,
+  }
+  const investNative: Record<string, number> = {}
+  latestInvests
+    .filter(i => i.product !== '국채' && i.available === '가용' && i.currency && i.currency !== 'KRW')
+    .forEach(i => { investNative[i.currency!] = (investNative[i.currency!] ?? 0) + (i.amount || 0) })
+
+  const rows = CODES.map(code => ({
+    code,
+    opNative:  operatingNative[code] ?? 0,
+    invNative: investNative[code] ?? 0,
+  })).filter(r => r.opNative > 0 || r.invNative > 0)
+
+  // 원화환산 합계 = 운전자금(저장값 fx_krw, SSOT) + 가용 운용자금 외화(현재 환율, kpi.investFxKrw)
+  const totalKrw = (daily?.fx_krw ?? 0) + kpi.investFxKrw
+
   if (rows.length === 0) return <p className="text-xs text-gray-400 py-4 text-center">외화 보유 없음</p>
   return (
     <div className="divide-y divide-gray-50 dark:divide-slate-700">
       {rows.map(r => (
-        <div key={r.label} className="flex justify-between items-center py-2">
-          <span className="text-[11px] text-gray-400">{r.label}</span>
-          <span className="text-xs tabular-nums font-semibold text-gray-700 dark:text-gray-200">{r.value.toLocaleString()}</span>
+        <div key={r.code} className="py-2">
+          <div className="flex justify-between items-center">
+            <span className="text-[11px] text-gray-400">{r.code}</span>
+            <span className="text-xs tabular-nums font-semibold text-gray-700 dark:text-gray-200">
+              {(r.opNative + r.invNative).toLocaleString()}
+            </span>
+          </div>
+          {r.invNative > 0 && (
+            <p className="text-[10px] text-gray-400 mt-0.5">
+              운전 {r.opNative.toLocaleString()} + 운용 {r.invNative.toLocaleString()}
+            </p>
+          )}
         </div>
       ))}
       <div className="flex justify-between items-center py-2">
         <span className="text-xs text-gray-400">원화환산 합계</span>
-        <span className="text-xs font-bold text-amber-600 dark:text-amber-400 tabular-nums">{fmtKRW(daily.fx_krw)}</span>
+        <span className="text-xs font-bold text-amber-600 dark:text-amber-400 tabular-nums">{fmtKRW(totalKrw)}</span>
       </div>
     </div>
   )
