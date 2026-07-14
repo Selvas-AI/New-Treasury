@@ -5,6 +5,7 @@ import { calcBondValue } from '../lib/format'
 import { normBank } from '../lib/bankUtils'
 import { useFx } from './useFx'
 import { getLatestEquities } from './useEquities'
+import { getLatestBonds } from './useInvestments'
 import { toKRWAmount, type FxCode } from '../lib/treasuryCalc'
 
 // ── DB row → InvestmentRecord (간소화 버전) ───────────────────────────────
@@ -109,7 +110,9 @@ function computePolicyData(raw: RawCompanyData, loading: boolean, toKRW: ToKRWFn
   const operatingCashWithFx = operatingCash + fxKrw
 
   const nonBonds = investData.filter(i => i.product !== '국채')
-  const bonds    = investData.filter(i => i.product === '국채')
+  // 국채는 가격 갱신 시마다 날짜별 이력 row가 쌓이고 모두 active=true로 남음
+  // → 종목(bondTicker/bondName)별 최신 priceDate 1건만 남겨야 중복 합산 방지 (FxPolicyTab과 동일 로직)
+  const bonds    = getLatestBonds(investData)
 
   const toKRWAmt = (amount: number, currency: string) =>
     toKRWAmount(amount, currency, toKRW as (a: number, c: FxCode) => number)
