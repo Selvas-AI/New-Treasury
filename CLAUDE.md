@@ -1,6 +1,6 @@
 # CLAUDE.md — Selvas Treasury (New-Treasury)
 > 신규 세션 시작 시 이 파일을 먼저 읽어 컨텍스트를 복원하세요.
-> 최종 업데이트: 2026-07-01 (세션17차 — GAS 할당량 서킷브레이커/공유 FX 캐시 + 정책파라미터 저장 fix + 커스텀 도메인 treasury.selvas.com 루트 서빙 전환)
+> 최종 업데이트: 2026-07-16 (세션19차 — 주간예측 항목별 입력+엑셀 임포트, 대시보드 자금흐름 팝업 SSOT 불일치 3건 수정, 자금정책 외화비중 카드 국채 중복합산 버그 수정)
 
 ---
 
@@ -957,6 +957,67 @@ VITE_GAS_API_URL=https://script.google.com/macros/s/AKfycbwZ.../exec
 
 ---
 
+### 2026-07-16 세션 19차 (주간예측 항목별 입력+엑셀 임포트 + 대시보드/정책 SSOT 불일치 3건 수정)
+
+#### Task 1: 주간예측(CashflowForecastTab) 항목별 입력 + 엑셀 임포트/템플릿
+- **`docs/db/cashflow_plan_items.sql`** (신규) — 12주 롤링 포캐스트를 주 단위 합계(`cashflow_plan`)가 아닌
+  카테고리별 항목 단위(`cashflow_plan_items`)로 세분화 입력할 수 있도록 하는 마이그레이션.
+  **⚠ 미실행 상태 — Supabase SQL Editor에서 반드시 실행 필요** (미실행 시 "+ 추가" 클릭하면
+  `Could not find the table 'public.cashflow_plan_items'` 에러, 앱은 크래시 없이 안내만 표시).
+- `src/hooks/useCashflowPlan.ts` — REST 헬퍼 기반으로 재작성. `items`/`addItem`/`updateItem`/
+  `removeItem`/`bulkSyncFromImport` 추가.
+- `src/lib/dailyReportCategories.ts` (신규) — 기존 `ItemsSection.tsx`(컴포넌트 파일)에서
+  `IN_CATEGORIES`/`OUT_CATEGORIES`/`CategoryDef`를 독립 모듈로 추출.
+  **이유**: 컴포넌트 파일이 컴포넌트+상수를 동시에 export하면 `react-refresh/only-export-components`
+  ESLint 에러 발생 (Fast Refresh 제약) → 상수 전용 모듈 분리로 해결.
+  `ItemsSection.tsx`/`CashflowForecastTab.tsx`/`WeekCashflowModal.tsx` 모두 여기서 import.
+- `src/lib/cashflowExcel.ts` (신규) — `downloadCashflowTemplate()`(엑셀 템플릿 다운로드),
+  `parseCashflowExcel()`(업로드 파싱 + 법인/주차/카테고리/금액 검증, 행별 오류 메시지 반환).
+  `xlsx`(SheetJS) 의존성 추가.
+- `src/components/policy/WeekCashflowModal.tsx` (신규) — 특정 주×방향(입금/출금) 클릭 시
+  카테고리+금액+메모 단위 CRUD 모달. 평가손익(`invest_eval_*`)은 자금일보 자동생성 전용이라
+  계획 입력 대상에서 제외.
+- `src/components/policy/CashflowForecastTab.tsx` — 주별 셀 클릭 → `WeekCashflowModal` 오픈,
+  엑셀 임포트/템플릿 다운로드 버튼 추가.
+  **버그 수정**: `isPast` 판정이 `row.week(월요일) < today` 로 계산되어 "이번 주"가 월요일이
+  아닌 모든 요일에 과거로 오판되어 입력 폼이 숨겨짐 → `isWeekPast(weekStart, today)` 헬퍼로
+  주의 **일요일(종료일)** 을 기준으로 비교하도록 수정.
+
+#### Task 2: 대시보드 자금흐름 팝업 3건 — SSOT 불일치 수정 (`FlowDetailDrawer.tsx`)
+사용자 리포트: "운용자금 상세" 팝업이 대시보드 메인 화면과 다른 금액을 보여줘 혼동됨.
+- **가용운용 팝업에 불가용 항목 혼입**: `InvestDetail` 호출부에 `available === '가용'` 필터
+  누락 → 가용+불가용이 섞여 표시됨. 호출부 필터 추가 + footer 합계를 `kpi.investCash`
+  (대시보드가 쓰는 것과 동일 SSOT 값)로 고정해 구조적으로 항상 일치하도록 함.
+- **가용운용 외화 미표시**: `InvestDetail`이 외화 항목을 `toKRWAmt`로 환산하지 않고 원 통화
+  그대로 노출 → `AvailableDetail`과 동일한 통화 배지(`{inv.currency}`) 패턴 적용.
+- **외화(환산) 총액 불일치**: `FxDetail`이 운전자금 외화(`daily.fx_*`)만 표시하고 운용자금
+  외화는 누락 → 대시보드의 "외화(환산)"(운전+운용 합산)보다 항상 작게 표시됨.
+  `latestInvests`를 받아 운용자금 가용 외화(통화별)를 합산, "운전 X + 운용 Y" 형태로 병기.
+  합계도 대시보드와 동일한 `(daily.fx_krw ?? 0) + kpi.investFxKrw` 공식으로 통일.
+- 검증(브라우저, 셀바스헬스케어 계정): 운용자금 상세 합계(가용) 30.0억원 = 대시보드
+  가용 운용 30.0억원 일치 / 외화 상세 합계 41.8억원 = 대시보드 외화(환산) 41.8억원 일치.
+
+#### Task 3: 자금정책 "외화 비중" 카드 — FX정책 탭과 수치 불일치 수정 (`usePolicyDashboard.ts`)
+사용자 리포트: 회의·의결 탭 외화비중 카드가 6.2%, FX정책 탭은 27.9% — 서로 다르게 표시됨.
+- **원인**: `computePolicyData()`가 국채(bonds)를 `product === '국채'` 필터만 적용해 합산.
+  국채는 기준가 갱신 시마다 날짜별 이력 row가 쌓이고 전부 `active=true`로 남는데,
+  종목(bondTicker/bondName)별 최신 1건만 남겨야 할 것을 dedup 없이 전부 합산 →
+  가용 자금 합계(분모)가 실제보다 수배(4076억 vs 911억) 부풀려짐 → 외화비중이 실제보다
+  훨씬 낮게 계산됨. `FxPolicyTab.tsx`는 이미 `getLatestBonds()`로 dedup 하고 있어 정상.
+- **해결**: `usePolicyDashboard.ts`에서 `useInvestments.ts`의 `getLatestBonds()` 재사용 —
+  `investData.filter(i => i.product === '국채')` → `getLatestBonds(investData)`로 교체.
+- 검증(브라우저, 메디아나 법인): 회의·의결 탭 27.9%/254.4억원, FX정책 탭 27.9%/253.8억원,
+  가용 자금 합계 양쪽 모두 911.2억원 — 완전 일치 (기존 6.2%/4076.7억원에서 정상화).
+
+#### 커밋 이력 (이번 세션)
+```
+74afb25 feat: 주간예측 카테고리별 입출금 상세 입력 + 엑셀 임포트
+b4911ed fix: 대시보드 자금흐름 팝업이 요약 수치와 불일치하던 3건 수정
+b58a3a4 fix: 자금정책 페이지 외화비중 카드가 FX정책 탭과 다른 값 표시하던 버그 수정
+```
+
+---
+
 ## 8. 미완료 / 추후 작업
 
 ### GAS 스크립트 현황
@@ -990,6 +1051,7 @@ VITE_GAS_API_URL=https://script.google.com/macros/s/AKfycbwZ.../exec
 - **`docs/db/user_permissions_migration.sql`** — `treasury_users.allowed_categories` / `action_permissions` 컬럼 (세션13차 세분화 권한). 미실행 시 카테고리/작업 권한 탭 저장이 컬럼 부재로 실패. 읽기는 `null` fallback이라 앱은 정상.
 - **`docs/db/fx_trade_history.sql`** — 외화매매거래 이력 (이전 세션)
 - **`docs/db/user_password_policy.sql`** ⭐ — `treasury_users.must_change_password` 컬럼 (세션18차 비밀번호 정책). **실행 필요**. 미실행 시 마스터의 "비번초기화" 버튼은 Auth 비밀번호는 바꾸지만 강제변경 플래그 갱신이 실패(컬럼 없음) — Edge Function은 500 반환.
+- **`docs/db/cashflow_plan_items.sql`** ⭐ — `cashflow_plan_items` 테이블 (세션19차 주간예측 항목별 입력). **실행 필요**. 미실행 시 주간예측 탭 "+ 추가"가 `Could not find the table 'public.cashflow_plan_items'` 에러로 실패 (앱 크래시는 없음, 안내 메시지만 표시).
 
 ### ⚠️ 비밀번호 찾기/초기화 — 배포 전 필수 수동 작업 3건 (세션18차)
 ```
