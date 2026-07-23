@@ -85,6 +85,9 @@ export interface InvestmentRecord {
   priceDate?: string
   // 취득가액
   acquisition_cost: number
+  // 만기처리(active=false) 시점의 날짜 — 자금 이력(CashflowChart) 재구성 시
+  // "이 날짜 이전에는 활성 상태였음"을 판별하기 위한 값. null=계속 활성
+  closed_date?: string | null
 }
 
 // ─── 외화 환전 이력 (fx_trade_history) ──────────────────
@@ -125,6 +128,9 @@ export interface LoanRecord {
   start_date: string    // YYYY-MM-DD
   maturity: string      // YYYY-MM-DD
   active: boolean
+  // 상환처리(active=false) 시점의 날짜 — 자금 이력(CashflowChart) 재구성 시
+  // "이 날짜 이전에는 활성 상태였음"을 판별하기 위한 값. null=계속 활성
+  closed_date?: string | null
 }
 
 // ─── 지분투자 (equities) ─────────────────────────────────

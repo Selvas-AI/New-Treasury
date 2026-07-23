@@ -159,7 +159,8 @@ export default function InvestPage() {
 
   async function handleSetActive(id: string, active: boolean) {
     if (!confirm(active ? '복원하시겠습니까?' : '만기 처리하시겠습니까?')) return
-    await invest.setActive(id, active)
+    const err = await invest.setActive(id, active)
+    if (err) toast.error(`처리 실패: ${err}`)
   }
 
   async function handleDelete(id: string) {

@@ -2,6 +2,8 @@
 import { useAuth } from '../hooks/useAuth'
 import { usePageCompany } from '../hooks/usePageCompany'
 import { useDashboard } from '../hooks/useDashboard'
+import { useLoans } from '../hooks/useLoans'
+import { useInvestments } from '../hooks/useInvestments'
 
 import { fmtKRW } from '../lib/format'
 import KpiCard from '../components/dashboard/KpiCard'
@@ -18,6 +20,10 @@ export default function DashboardPage() {
   const { user } = useAuth()
   const { company } = usePageCompany()
   const db = useDashboard(company)
+  // 현금흐름 추이 차트 전용 — 상환/만기처리된 항목도 포함한 전체 이력 (KPI는 db.loans/db.allInvestData의
+  // activeOnly=true 값을 그대로 사용, 이 훅은 과거 시점 재구성(point-in-time)에만 사용)
+  const chartLoans  = useLoans(false, company)
+  const chartInvest = useInvestments(false, company)
 
   const [hoverKey, setHoverKey] = useState<string | null>(null)
   const [fixedKey, setFixedKey] = useState<string | null>(null)
@@ -153,8 +159,8 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <CashflowChart
             dailyRecords={db.allDailyData}
-            investments={db.allInvestData}
-            loans={db.loans}
+            investments={chartInvest.data}
+            loans={chartLoans.data}
           />
           <EquityCard
             equities={db.equityReturns}

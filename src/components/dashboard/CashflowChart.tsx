@@ -5,7 +5,7 @@ import {
   Tooltip, ResponsiveContainer, ReferenceLine,
 } from 'recharts'
 import { fmtKRW, fmtDateShort, calcBondValue } from '../../lib/format'
-import { getLatestInvestments } from '../../hooks/useInvestments'
+import { getLatestBonds } from '../../hooks/useInvestments'
 import { useFx } from '../../hooks/useFx'
 import { toKRWAmount } from '../../lib/treasuryCalc'
 import type { DailyRecord, InvestmentRecord, LoanRecord } from '../../types'
@@ -75,6 +75,11 @@ export default function CashflowChart({ dailyRecords, investments, loans }: Prop
         ? calcBondValue(i.bondQty, i.bondPrice)
         : toKRWAmt(i.amount || 0, i.currency || 'KRW')
 
+    // 특정 시점(date)에 아직 열려 있었는지 — closed_date 가 있고 그 날짜가 date 이전(<=)이면
+    // 이미 닫힌 것. closed_date 가 없으면(계속 활성 또는 과거 데이터라 기록이 없으면) 열려있다고 간주.
+    const wasOpenOn = (closedDate: string | null | undefined, date: string) =>
+      !closedDate || closedDate > date
+
     return inRange.map(d => {
       const operating =
         (d.krw_demand || 0) + (d.krw_govt || 0) + (d.krw_mmda || 0) + (d.fx_krw || 0)
@@ -82,12 +87,23 @@ export default function CashflowChart({ dailyRecords, investments, loans }: Prop
       const investsUpTo = investments.filter(
         i => (i.start || i.priceDate || '') <= d.date,
       )
-      const latest = getLatestInvestments(investsUpTo)
+      // getLatestInvestments()는 현재 active 플래그로 비국채를 걸러내 "지금 시점" 전용이므로
+      // 여기서는 point-in-time(closed_date 기준)으로 직접 재구성한다 — 그래야 상환/만기처리
+      // 이후에도 그 이전 날짜의 잔액이 소급 변경되지 않는다.
+      const nonBondOpenAsOf = investsUpTo.filter(
+        i => i.product !== '국채' && wasOpenOn(i.closed_date, d.date),
+      )
+      const latest = [...nonBondOpenAsOf, ...getLatestBonds(investsUpTo)]
       // 가용/불가용 분리 집계
       const investAvail   = latest.filter(i => i.available === '가용').reduce((s, i) => s + valueOf(i), 0)
       const investUnavail = latest.filter(i => i.available === '불가용').reduce((s, i) => s + valueOf(i), 0)
 
-      const loan = loans.reduce((s, l) => s + toKRWAmt(l.amount || 0, l.currency || 'KRW'), 0)
+      // 차입금도 동일하게 point-in-time 재구성 — 상환(active=false) 후에도 상환 이전 날짜엔
+      // 여전히 잔액에 포함되어야 함 (closed_date 기준, start_date 이후 & 아직 안 닫힌 건만)
+      const loanOpenAsOf = loans.filter(
+        l => l.start_date <= d.date && wasOpenOn(l.closed_date, d.date),
+      )
+      const loan = loanOpenAsOf.reduce((s, l) => s + toKRWAmt(l.amount || 0, l.currency || 'KRW'), 0)
 
       return {
         dateLabel: fmtDateShort(d.date),

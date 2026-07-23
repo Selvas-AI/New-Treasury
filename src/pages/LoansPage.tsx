@@ -143,7 +143,8 @@ export default function LoansPage() {
 
   async function handleSetActive(id: string, active: boolean) {
     if (!confirm(active ? '차입금을 복원하시겠습니까?' : '상환 완료 처리하시겠습니까?')) return
-    await loans.setActive(id, active)
+    const err = await loans.setActive(id, active)
+    if (err) toast.error(`처리 실패: ${err}`)
   }
 
   async function handleDelete(id: string) {

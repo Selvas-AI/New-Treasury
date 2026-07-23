@@ -24,6 +24,7 @@ function fromDb(row: DbRow): InvestmentRecord {
                       ?? (row.start_date    as string)  ?? '',
     maturity:         (row.maturity         as string)  ?? '',
     active:           row.active            as boolean,
+    closed_date:      (row.closed_date      as string | null) ?? null,
     bondName:         row.bond_name         as string  | undefined,
     bondTicker:       row.bond_ticker       as string  | undefined,
     bondQty:          row.bond_qty          as number  | undefined,
@@ -150,7 +151,11 @@ export function useInvestments(activeOnly = false, companyOverride?: string): Us
 
   async function setActive(id: string, active: boolean): Promise<string | null> {
     const target = data.find(r => r.id === id)
-    const { error: err } = await restUpdate('investments', { active }, { id })
+    // 만기처리(active=false) 시 closed_date 를 오늘로 고정 기록 — 재활성화 시 NULL로 복원.
+    // loans.setActive와 동일한 이유: CashflowChart 가 과거 날짜 시점의 활성 여부를
+    // 정확히 재구성하려면 "언제 닫혔는지"가 필요함.
+    const closed_date = active ? null : new Date().toISOString().slice(0, 10)
+    const { error: err } = await restUpdate('investments', { active, closed_date }, { id })
     if (err) return err.message
     if (target) {
       const amountLabel = target.amount ? `${target.amount.toLocaleString()}${target.currency && target.currency !== 'KRW' ? target.currency : '원'}` : ''
@@ -161,10 +166,10 @@ export function useInvestments(activeOnly = false, companyOverride?: string): Us
         table: 'investments', action: 'SETACTIVE', company: target.company, recordId: id,
         summary: active ? `${label} 재활성화` : `${label} 만기처리`,
         before: target as unknown as Record<string, unknown>,
-        after: { ...target, active } as unknown as Record<string, unknown>,
+        after: { ...target, active, closed_date } as unknown as Record<string, unknown>,
       })
     }
-    setData(prev => prev.map(r => r.id === id ? { ...r, active } : r))
+    setData(prev => prev.map(r => r.id === id ? { ...r, active, closed_date } : r))
     return null
   }
 
