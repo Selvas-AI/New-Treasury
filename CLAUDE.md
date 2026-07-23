@@ -1020,12 +1020,45 @@ VITE_GAS_API_URL=https://script.google.com/macros/s/AKfycbwZ.../exec
   레코드)/`after`(active만 바뀐 레코드) 스냅샷 추가 → `audit_logs.before_data/after_data`에
   시점별 금액이 고정 기록되어 AuditLogPage "상세" 토글로 정확한 금액 확인 가능.
 
+#### Task 5: 차입금/운용자금 상환 후 과거 이력 잔액이 소급 변경되던 근본 버그 수정 ⭐[CRITICAL]
+```
+증상: 2026-07-14에 차입금 10억을 상환처리하면, 대시보드 "현금흐름 추이" 차트의
+  7/13 이전 날짜 잔액에도 이미 10억이 차감된 상태로 표시됨. 사용자 지적:
+  "과거 이력은 그 시점 당시의 실제 잔액(상환 전 금액 포함)으로 고정되어야 한다."
+
+원인: loans/investments 테이블은 상환·만기처리 시 새 row를 추가하지 않고 기존
+  row의 active 플래그만 바꿔 재사용하는 구조라, "언제 닫혔는지" 기록이 전혀 없었음.
+  게다가 대시보드가 쓰는 useLoans(true)/useInvestments(true)는 DB 조회 자체를
+  active=true 로 필터링해 상환된 항목은 애초에 데이터에 포함되지도 않음.
+  CashflowChart.tsx는 이 "현재 활성 상태"만 담긴 배열을 모든 과거 날짜에 동일하게
+  적용해 합산하고 있었음 → 상환 즉시 전체 과거 이력에서 사라져 보임.
+
+해결:
+  1. loans/investments 에 closed_date 컬럼 추가 (docs/db/closed_date_migration.sql,
+     ⚠ Supabase 실행 필요). setActive(false) 시 오늘 날짜 기록, 재활성화 시 NULL.
+  2. DashboardPage.tsx — CashflowChart 전용 activeOnly=false 별도 훅 인스턴스
+     (chartLoans/chartInvest) 추가, 상환/만기처리 항목도 포함한 전체 이력 전달.
+     기존 db.loans/db.allInvestData(KPI용, activeOnly=true)는 그대로 유지.
+  3. CashflowChart.tsx — 날짜별로 start_date<=d.date && (closed_date 없거나
+     d.date 이후)인 항목만 point-in-time 필터링해 합산하도록 재작성.
+     closed_date 없는 기존 데이터는 항상 "열려있음"으로 안전 폴백(마이그레이션
+     실행 전에도 크래시 없이 기존 동작 유지).
+  4. LoansPage.tsx/InvestPage.tsx — handleSetActive가 setActive() 에러를 무시하던
+     버그도 함께 수정, 실패 시 toast 표시.
+
+금지: closed_date 없이 "현재 active 배열을 모든 날짜에 동일 적용"하는 패턴으로
+  되돌리지 말 것 — 상환/만기처리 즉시 과거 이력이 소급 변경되는 근본 원인.
+검증: tsc/build/lint(0 errors) 통과. 마이그레이션 미실행 상태 브라우저 로드 확인 —
+  콘솔 에러 없이 기존과 동일하게 정상 렌더(안전 폴백 확인).
+```
+
 #### 커밋 이력 (이번 세션)
 ```
 74afb25 feat: 주간예측 카테고리별 입출금 상세 입력 + 엑셀 임포트
 b4911ed fix: 대시보드 자금흐름 팝업이 요약 수치와 불일치하던 3건 수정
 b58a3a4 fix: 자금정책 페이지 외화비중 카드가 FX정책 탭과 다른 값 표시하던 버그 수정
 c4f2f48 fix: 차입금/운용자금 만기처리(상환) 로그에 금액 스냅샷 기록
+744f311 fix: 차입금/운용자금 상환 후 과거 이력 잔액이 소급 변경되던 근본 버그 수정
 ```
 
 ---
@@ -1064,6 +1097,7 @@ c4f2f48 fix: 차입금/운용자금 만기처리(상환) 로그에 금액 스냅
 - **`docs/db/fx_trade_history.sql`** — 외화매매거래 이력 (이전 세션)
 - **`docs/db/user_password_policy.sql`** ⭐ — `treasury_users.must_change_password` 컬럼 (세션18차 비밀번호 정책). **실행 필요**. 미실행 시 마스터의 "비번초기화" 버튼은 Auth 비밀번호는 바꾸지만 강제변경 플래그 갱신이 실패(컬럼 없음) — Edge Function은 500 반환.
 - **`docs/db/cashflow_plan_items.sql`** ⭐ — `cashflow_plan_items` 테이블 (세션19차 주간예측 항목별 입력). **실행 필요**. 미실행 시 주간예측 탭 "+ 추가"가 `Could not find the table 'public.cashflow_plan_items'` 에러로 실패 (앱 크래시는 없음, 안내 메시지만 표시).
+- **`docs/db/closed_date_migration.sql`** ⭐⭐ — `loans`/`investments.closed_date` 컬럼 (세션19차 상환 후 과거 이력 소급변경 버그 fix). **실행 필요**. 미실행 시 차입금/운용자금 상환처리·만기처리 버튼 클릭 시 컬럼 없음 에러로 실패(toast로 표시, 앱 크래시는 없음) — 상환처리 자체가 안 됨.
 
 ### ⚠️ 비밀번호 찾기/초기화 — 배포 전 필수 수동 작업 3건 (세션18차)
 ```
