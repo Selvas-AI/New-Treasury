@@ -74,8 +74,17 @@ export function useLoans(activeOnly = false, companyOverride?: string): UseQuery
     const { error: err } = await restUpdate('loans', { active }, { id })
     if (err) return err.message
     if (target) {
-      const label = `${target.lender} ${target.type}`.trim()
-      void logAction({ table: 'loans', action: 'SETACTIVE', company: target.company, recordId: id, summary: active ? `${label} 재활성화` : `${label} 만기처리` })
+      const amountLabel = target.amount ? `${target.amount.toLocaleString()}원` : ''
+      const label = `${target.lender} ${target.type} ${amountLabel}`.trim()
+      // 상환처리 시점의 금액을 before/after 스냅샷으로 고정 기록 — loans 테이블은 단일 row를
+      // active 플래그만 바꿔 재사용하므로, 스냅샷 없이는 이후 다른 차입금의 만기처리 로그와
+      // 구분이 안 되고 "금액을 알 수 없다"는 혼동이 생김 (금액 자체는 변하지 않음, 표시만 보강)
+      void logAction({
+        table: 'loans', action: 'SETACTIVE', company: target.company, recordId: id,
+        summary: active ? `${label} 재활성화` : `${label} 만기처리`,
+        before: target as unknown as Record<string, unknown>,
+        after: { ...target, active } as unknown as Record<string, unknown>,
+      })
     }
     setData(prev => prev.map(r => r.id === id ? { ...r, active } : r))
     return null

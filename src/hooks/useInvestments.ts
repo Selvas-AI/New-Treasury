@@ -153,8 +153,16 @@ export function useInvestments(activeOnly = false, companyOverride?: string): Us
     const { error: err } = await restUpdate('investments', { active }, { id })
     if (err) return err.message
     if (target) {
-      const label = `${target.product ?? ''} ${target.bank ?? ''}`.trim()
-      void logAction({ table: 'investments', action: 'SETACTIVE', company: target.company, recordId: id, summary: active ? `${label} 재활성화` : `${label} 만기처리` })
+      const amountLabel = target.amount ? `${target.amount.toLocaleString()}${target.currency && target.currency !== 'KRW' ? target.currency : '원'}` : ''
+      const label = `${target.product ?? ''} ${target.bank ?? ''} ${amountLabel}`.trim()
+      // 만기처리 시점의 금액을 before/after 스냅샷으로 고정 기록 — loans와 동일한 이유
+      // (investments 도 단일 row를 active 플래그만 바꿔 재사용)
+      void logAction({
+        table: 'investments', action: 'SETACTIVE', company: target.company, recordId: id,
+        summary: active ? `${label} 재활성화` : `${label} 만기처리`,
+        before: target as unknown as Record<string, unknown>,
+        after: { ...target, active } as unknown as Record<string, unknown>,
+      })
     }
     setData(prev => prev.map(r => r.id === id ? { ...r, active } : r))
     return null
