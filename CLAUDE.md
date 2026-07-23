@@ -1009,11 +1009,23 @@ VITE_GAS_API_URL=https://script.google.com/macros/s/AKfycbwZ.../exec
 - 검증(브라우저, 메디아나 법인): 회의·의결 탭 27.9%/254.4억원, FX정책 탭 27.9%/253.8억원,
   가용 자금 합계 양쪽 모두 911.2억원 — 완전 일치 (기존 6.2%/4076.7억원에서 정상화).
 
+#### Task 4: 차입금/운용자금 만기처리(상환) 로그에 금액 스냅샷 기록
+사용자 리포트: 차입금 상환처리 후 변경 이력 로그가 "신한은행 한도대출 만기처리"처럼
+금액 없이 동일 문구만 반복 표시돼, 어떤 건이 얼마를 상환한 것인지 알 수 없음.
+- **원인**: `loans`/`investments` 테이블은 상환 시 새 row를 만들지 않고 기존 row의
+  `active` 플래그만 바꿔 재사용. `useLoans.ts`/`useInvestments.ts`의 `setActive()`는
+  CREATE/UPDATE/DELETE와 달리 summary에 금액을 넣지 않고 `logAction`에 before/after도
+  전달하지 않았음(SETACTIVE 액션만 금액 정보 없이 로그됨).
+- **해결**: summary 라벨에 금액(원/외화) 추가 + `logAction` 호출에 `before`(변경 전
+  레코드)/`after`(active만 바뀐 레코드) 스냅샷 추가 → `audit_logs.before_data/after_data`에
+  시점별 금액이 고정 기록되어 AuditLogPage "상세" 토글로 정확한 금액 확인 가능.
+
 #### 커밋 이력 (이번 세션)
 ```
 74afb25 feat: 주간예측 카테고리별 입출금 상세 입력 + 엑셀 임포트
 b4911ed fix: 대시보드 자금흐름 팝업이 요약 수치와 불일치하던 3건 수정
 b58a3a4 fix: 자금정책 페이지 외화비중 카드가 FX정책 탭과 다른 값 표시하던 버그 수정
+c4f2f48 fix: 차입금/운용자금 만기처리(상환) 로그에 금액 스냅샷 기록
 ```
 
 ---
