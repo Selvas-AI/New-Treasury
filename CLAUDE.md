@@ -1160,10 +1160,12 @@ end-to-end 확인 후 테스트 데이터 삭제(사용자 승인). tsc/build/li
   매핑, `DashboardPage.tsx`/`DailyReportPage.tsx`(`PendingSellOrdersBanner`)에
   기한 임박·초과 매각 지시 노출.
 
-검증: 메디아나 법인 재량 매각지시 모달 — 통화선택 UI 정상, +3영업일 자동계산
-(2026-08-04 화→2026-08-07 금, 주말 skip) 확인. 마이그레이션 미실행 상태 제출 →
-이제 에러가 toast로 명확히 표시되고 모달이 안 닫히는 것까지 확인(기존엔 조용히
-실패). tsc/build/lint(0 errors) 통과.
+검증(마이그레이션 실행 후 최종 확인 완료): 메디아나 법인에 재량 매각 지시
+실제 등록(USD 1,000,000) → "🔴 외화 매각 지시 이행 관리" 목록에 D-3 뱃지와 함께
+정상 노출 → "매각 완료" 클릭 → DB 직접 조회로 completed_rate/completed_pnl/
+completed_at 정상 기록 확인. 이 과정에서 추가 버그 발견·수정: complete() 호출 후
+화면 목록이 갱신되지 않던 문제 — onQuickComplete에 tradeHist.load() 재호출 추가
+(커밋 60cccac). 테스트 데이터는 삭제(사용자 승인). tsc/build/lint(0 errors) 통과.
 
 #### 커밋 이력 (이번 세션)
 ```
@@ -1177,6 +1179,7 @@ a0f135f fix: 현금흐름 추이 차트 운용(가용) 과대표시 회귀 수�
 362fb64 fix: 의결사항 신규 등록 시 기한 미입력이면 저장 실패하던 버그 수정
 38faac3 feat: 정책 이행 통제 Phase 2 — 정량 규칙 이행률 실시간 표시 + 완료 제안
 3b7d8dd feat: 정책 이행 통제 Phase 3 — 외화 매각 지시(Sell Order) 3영업일 이행 강제
+60cccac fix: 매각 완료 처리 후 화면 목록이 갱신 안 되던 버그 수정
 ```
 
 ---
@@ -1217,7 +1220,7 @@ a0f135f fix: 현금흐름 추이 차트 운용(가용) 과대표시 회귀 수�
 - **`docs/db/cashflow_plan_items.sql`** ⭐ — `cashflow_plan_items` 테이블 (세션19차 주간예측 항목별 입력). **실행 필요**. 미실행 시 주간예측 탭 "+ 추가"가 `Could not find the table 'public.cashflow_plan_items'` 에러로 실패 (앱 크래시는 없음, 안내 메시지만 표시).
 - **`docs/db/closed_date_migration.sql`** ⭐⭐ — `loans`/`investments.closed_date` 컬럼 (세션19차 상환 후 과거 이력 소급변경 버그 fix). **실행 완료** (세션19차 중 사용자 확인).
 - **`docs/db/policy_decision_rules_migration.sql`** ⭐ — `policy_decisions.linked_metric`/`target_operator`/`target_value` 컬럼 (세션19차 정책 이행 통제 Phase 1). **실행 완료** (세션19차 중 사용자 확인, 대시보드/자금일보 자동 노출까지 end-to-end 검증 완료).
-- **`docs/db/fx_sell_order_deadline_migration.sql`** ⭐ — `fx_trade_history.due_date`/`order_type` 컬럼 (세션19차 정책 이행 통제 Phase 3, 외화 매각 지시). **실행 필요**. 미실행 시 "매도 발의"/"재량 매각 지시 등록" 제출이 실패(toast로 에러 표시, 모달 유지 — 크래시 없음).
+- **`docs/db/fx_sell_order_deadline_migration.sql`** ⭐ — `fx_trade_history.due_date`/`order_type` 컬럼 (세션19차 정책 이행 통제 Phase 3, 외화 매각 지시). **실행 완료** (세션19차 중 사용자 확인, 재량 매각 지시 등록→완료 처리까지 end-to-end 검증 완료).
 
 ### ⚠️ 비밀번호 찾기/초기화 — 배포 전 필수 수동 작업 3건 (세션18차)
 ```
