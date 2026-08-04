@@ -1073,6 +1073,39 @@ VITE_GAS_API_URL=https://script.google.com/macros/s/AKfycbwZ.../exec
 검증: REST 직접 조회로 활성 14건 vs 전체 17건 합계 차이 확인, tsc/build/lint 통과.
 ```
 
+#### Task 7: 정책 이행 통제(Policy Compliance Enforcement) Phase 1 ⭐ 신규 기능
+사용자 사례: 정책회의에서 "외화 매도 후 비중 30%까지 관리(상한)"를 의결했으나
+실무진이 "30%까지 보유해도 된다"로 오독해 고환율 구간에 매도를 놓친 사고 발생.
+의결사항이 회의록 텍스트로만 존재해 시스템이 이행 여부를 감지할 방법이 없었음.
+
+**설계**: `docs/기획/정책이행통제.md` 없음(채팅 리포트로만 전달) — 3단계 로드맵 중
+Phase 1(즉시 적용) 구현 완료. Phase 2(fx_trade_history 자동 매칭)/Phase 3(소프트
+블로킹+에스컬레이션)은 향후 세션에서 착수 예정.
+
+**Phase 1 구현 내역**:
+1. `docs/db/policy_decision_rules_migration.sql` ⭐ (**실행 필요**) — `policy_decisions`
+   에 `linked_metric`(fx_ratio/loan_ratio/liquidity) + `target_operator`(lte/gte)
+   + `target_value` 컬럼 추가. 셋 다 채워진 의결만 자동 위반 감지 대상.
+2. `src/lib/policyChecks.ts` (신규) — `PolicyPage.tsx`에 갇혀있던
+   `checkLiquidity/checkFx/checkLoan/checkConcentration`을 공용 모듈로 분리 +
+   `checkDecisionRule()` 신규(의결 규칙 vs 현재 실측값 비교). 대시보드와 정책
+   페이지가 동일 SSOT 기준을 공유하도록 통일.
+3. `PolicyPage.tsx` — 의결사항 추가/수정 폼(3곳: 신규 2 + 수정 1)에 공용
+   `DecisionRuleFields` 컴포넌트로 "정량 규칙(선택)" 입력 추가.
+4. `usePolicyDecisions.ts` — `usePolicyDecisionsByCompany(company)` 신규.
+   기존 `usePolicyDecisions(meetingId)`는 회의 단위라 "이 법인이 지금 이행해야
+   할 의결 전체"를 못 가져옴 — company 기준 미완료 의결 조회용 별도 훅.
+5. `DashboardPage.tsx` — 미이행 의결사항(정량 규칙 위반 또는 기한 초과)을 대시보드
+   이슈 티커/IssueDrawer에 자동 병합. 이슈 key = `makeIssueKey('policy', decision.id)`
+   — 기존 `issue_comments` 기반 미조치/검토중/완료 상태추적 인프라 그대로 재사용
+   (`useIssues.ts`의 `makeIssueKey` 타입에 `'policy'` 추가).
+6. `DailyReportPage.tsx` — `PendingDecisionsBanner` 신규. 자금일보 작성 화면(실무진이
+   매일 반드시 거치는 화면) 상단에 해당 법인 미완료 의결사항을 항상 노출.
+
+검증: tsc/build/lint(0 errors) 통과. 브라우저에서 마이그레이션 미실행 상태로 정량
+규칙 필드 포함 의결사항 폼 제출 → "컬럼 없음" 에러가 폼 안에 안전하게 표시(크래시 없음)
+확인. 마이그레이션 실행 후 대시보드/자금일보 노출까지는 다음 세션에서 재검증 필요.
+
 #### 커밋 이력 (이번 세션)
 ```
 74afb25 feat: 주간예측 카테고리별 입출금 상세 입력 + 엑셀 임포트
@@ -1081,6 +1114,7 @@ b58a3a4 fix: 자금정책 페이지 외화비중 카드가 FX정책 탭과 다�
 c4f2f48 fix: 차입금/운용자금 만기처리(상환) 로그에 금액 스냅샷 기록
 744f311 fix: 차입금/운용자금 상환 후 과거 이력 잔액이 소급 변경되던 근본 버그 수정
 a0f135f fix: 현금흐름 추이 차트 운용(가용) 과대표시 회귀 수정 (closed_date 마이그레이션 후속)
+297f35e feat: 정책 이행 통제(Policy Compliance Enforcement) Phase 1
 ```
 
 ---
@@ -1119,7 +1153,8 @@ a0f135f fix: 현금흐름 추이 차트 운용(가용) 과대표시 회귀 수�
 - **`docs/db/fx_trade_history.sql`** — 외화매매거래 이력 (이전 세션)
 - **`docs/db/user_password_policy.sql`** ⭐ — `treasury_users.must_change_password` 컬럼 (세션18차 비밀번호 정책). **실행 필요**. 미실행 시 마스터의 "비번초기화" 버튼은 Auth 비밀번호는 바꾸지만 강제변경 플래그 갱신이 실패(컬럼 없음) — Edge Function은 500 반환.
 - **`docs/db/cashflow_plan_items.sql`** ⭐ — `cashflow_plan_items` 테이블 (세션19차 주간예측 항목별 입력). **실행 필요**. 미실행 시 주간예측 탭 "+ 추가"가 `Could not find the table 'public.cashflow_plan_items'` 에러로 실패 (앱 크래시는 없음, 안내 메시지만 표시).
-- **`docs/db/closed_date_migration.sql`** ⭐⭐ — `loans`/`investments.closed_date` 컬럼 (세션19차 상환 후 과거 이력 소급변경 버그 fix). **실행 필요**. 미실행 시 차입금/운용자금 상환처리·만기처리 버튼 클릭 시 컬럼 없음 에러로 실패(toast로 표시, 앱 크래시는 없음) — 상환처리 자체가 안 됨.
+- **`docs/db/closed_date_migration.sql`** ⭐⭐ — `loans`/`investments.closed_date` 컬럼 (세션19차 상환 후 과거 이력 소급변경 버그 fix). **실행 완료** (세션19차 중 사용자 확인).
+- **`docs/db/policy_decision_rules_migration.sql`** ⭐ — `policy_decisions.linked_metric`/`target_operator`/`target_value` 컬럼 (세션19차 정책 이행 통제 Phase 1). **실행 필요**. 미실행 시 정량 규칙(연동 지표) 필드를 채운 의결사항 저장이 실패(폼 내 에러 표시, 크래시 없음) — 규칙 없는 일반 의결사항 등록/수정은 영향 없음.
 
 ### ⚠️ 비밀번호 찾기/초기화 — 배포 전 필수 수동 작업 3건 (세션18차)
 ```
