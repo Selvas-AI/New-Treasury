@@ -1135,7 +1135,35 @@ Phase 1(정량 규칙 등록 + 대시보드/자금일보 자동 노출)에 이�
 → 초록 패널+완료 버튼 노출 → 클릭 → 상태 실제 '완료' 전환 + 버튼 소멸까지
 end-to-end 확인 후 테스트 데이터 삭제(사용자 승인). tsc/build/lint(0 errors) 통과.
 
-Phase 3(소프트 블로킹 + 기한 경과 에스컬레이션)은 다음 세션 착수 예정.
+#### Task 9: 정책 이행 통제 Phase 3 — 외화 매각 지시(Sell Order) 3영업일 이행 강제 ⭐
+사용자 사례: 정책회의에서 "환율 고점 판단 → 일부 환차익 실현" 재량 매각을 결정해도,
+또는 보유비중 초과로 매각이 필요해도, "언제까지 실행해야 하는지"가 시스템에 없어
+실무진이 판단으로 미루는 사고가 반복됨. 두 케이스 원칙은 동일: **등록일로부터
+3영업일 내, 환율과 무관하게 실행**.
+- **재사용 설계**: 별도 테이블 신설 대신 이미 있던 `fx_trade_history`의 "매도
+  발의→승인→완료" 워크플로우 위에 이행 기한 추적을 얹음.
+- `src/lib/bizDay.ts` — `addBizDays(date,n)`/`bizDaysBetween(date1,date2)` 신규.
+- `docs/db/fx_sell_order_deadline_migration.sql` ⭐ (**실행 필요**) —
+  `fx_trade_history`에 `due_date`(매각 실행 기한) + `order_type`
+  ('threshold'=한도초과 매각 | 'discretionary'=재량 매각) 컬럼 추가.
+- `FxPolicyTab.tsx`:
+  - 기존 "매도 발의"(한도초과 시) 제출 시 `due_date`/`order_type='threshold'`
+    자동 설정. 희망 집행일 기본값도 +3 **영업일**로 수정(기존엔 +3 달력일).
+  - 신규 "🟡 재량 매각 지시 등록" 버튼 — 한도초과 여부 무관 항상 노출, 통화
+    선택 가능한 발의 모달(`order_type='discretionary'`).
+  - "🔴 외화 매각 지시 이행 관리" 섹션 — 미완료 매각 지시 D-day 강조 목록 +
+    "매각 완료" 1클릭 처리.
+  - **버그 수정**: `propose()` 실패 시 조용히 모달이 닫히던 기존 버그 —
+    에러를 확인해 toast 표시 + 모달 유지하도록 수정.
+- 대시보드/자금일보 자동 노출(Phase1과 동일 패턴): `makeIssueKey`에 `'fx_sell'`
+  타입 추가, `issueLink.ts`에 `fx_sell_{id}` → `/fx-trade-history/{company}`
+  매핑, `DashboardPage.tsx`/`DailyReportPage.tsx`(`PendingSellOrdersBanner`)에
+  기한 임박·초과 매각 지시 노출.
+
+검증: 메디아나 법인 재량 매각지시 모달 — 통화선택 UI 정상, +3영업일 자동계산
+(2026-08-04 화→2026-08-07 금, 주말 skip) 확인. 마이그레이션 미실행 상태 제출 →
+이제 에러가 toast로 명확히 표시되고 모달이 안 닫히는 것까지 확인(기존엔 조용히
+실패). tsc/build/lint(0 errors) 통과.
 
 #### 커밋 이력 (이번 세션)
 ```
@@ -1148,6 +1176,7 @@ a0f135f fix: 현금흐름 추이 차트 운용(가용) 과대표시 회귀 수�
 297f35e feat: 정책 이행 통제(Policy Compliance Enforcement) Phase 1
 362fb64 fix: 의결사항 신규 등록 시 기한 미입력이면 저장 실패하던 버그 수정
 38faac3 feat: 정책 이행 통제 Phase 2 — 정량 규칙 이행률 실시간 표시 + 완료 제안
+3b7d8dd feat: 정책 이행 통제 Phase 3 — 외화 매각 지시(Sell Order) 3영업일 이행 강제
 ```
 
 ---
@@ -1188,6 +1217,7 @@ a0f135f fix: 현금흐름 추이 차트 운용(가용) 과대표시 회귀 수�
 - **`docs/db/cashflow_plan_items.sql`** ⭐ — `cashflow_plan_items` 테이블 (세션19차 주간예측 항목별 입력). **실행 필요**. 미실행 시 주간예측 탭 "+ 추가"가 `Could not find the table 'public.cashflow_plan_items'` 에러로 실패 (앱 크래시는 없음, 안내 메시지만 표시).
 - **`docs/db/closed_date_migration.sql`** ⭐⭐ — `loans`/`investments.closed_date` 컬럼 (세션19차 상환 후 과거 이력 소급변경 버그 fix). **실행 완료** (세션19차 중 사용자 확인).
 - **`docs/db/policy_decision_rules_migration.sql`** ⭐ — `policy_decisions.linked_metric`/`target_operator`/`target_value` 컬럼 (세션19차 정책 이행 통제 Phase 1). **실행 완료** (세션19차 중 사용자 확인, 대시보드/자금일보 자동 노출까지 end-to-end 검증 완료).
+- **`docs/db/fx_sell_order_deadline_migration.sql`** ⭐ — `fx_trade_history.due_date`/`order_type` 컬럼 (세션19차 정책 이행 통제 Phase 3, 외화 매각 지시). **실행 필요**. 미실행 시 "매도 발의"/"재량 매각 지시 등록" 제출이 실패(toast로 에러 표시, 모달 유지 — 크래시 없음).
 
 ### ⚠️ 비밀번호 찾기/초기화 — 배포 전 필수 수동 작업 3건 (세션18차)
 ```
