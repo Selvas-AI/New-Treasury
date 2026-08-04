@@ -1186,6 +1186,17 @@ a0f135f fix: 현금흐름 추이 차트 운용(가용) 과대표시 회귀 수�
 
 ## 8. 미완료 / 추후 작업
 
+### ⚠️ [CRITICAL] ECOS_API_KEY 로테이션 필요 (세션20차)
+```
+사용자가 "🔄 ECOS 자동" 버튼 클릭 시 ECOS 서버 네트워크 예외로 실패했는데,
+그 에러 메시지에 실제 ECOS_API_KEY 값이 포함된 요청 URL이 그대로 노출되어
+브라우저 화면(및 사용자가 Claude에 공유한 스크린샷)에 노출됨.
+코드는 수정 완료(Code.gs — fetchEcosRates_/calcFxStdDevFromEcos_ 에서 키 마스킹,
+커밋 b072ba1)했지만, 이미 노출된 키 자체는 무효화해야 안전함.
+→ https://ecos.bok.or.kr/api/#/ 에서 기존 키를 폐기하고 새 키 발급 후,
+  GAS 스크립트 속성의 ECOS_API_KEY를 새 값으로 교체 필요 (사용자 조치 필요).
+```
+
 ### GAS 스크립트 현황
 
 | 기능 | GAS 파라미터 | 상태 |
