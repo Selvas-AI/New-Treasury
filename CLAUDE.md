@@ -1110,6 +1110,33 @@ Phase 1(즉시 적용) 구현 완료. Phase 2(fx_trade_history 자동 매칭)/Ph
 발견된 버그 하나 수정: 의결사항 신규 등록 시 기한(due_date)을 비워두면 Postgres
 date 컬럼에 빈 문자열이 전달되어 저장이 실패하던 문제 — null로 보정.
 
+#### Task 8: 정책 이행 통제 Phase 2 — 정량 규칙 이행률 실시간 표시 + 완료 제안
+Phase 1(정량 규칙 등록 + 대시보드/자금일보 자동 노출)에 이어, 의결사항 카드에서
+정량 규칙의 실제 이행 현황을 바로 확인하고 목표 달성 시 1클릭으로 완료 처리.
+
+**설계 노트** — 애초 3단계 로드맵의 "fx_trade_history 완료 처리와 자동 매칭"을
+그대로 구현하지 않은 이유: `fx_trade_history`의 "완료" 처리는 매매 워크플로우
+기록일 뿐, 실제 보유잔액은 별도로 운전자금(`daily.fx_*`)/운용자금(`investments`)
+입력에서 갱신된다 — 두 이벤트가 항상 동시에 일어난다는 보장이 없어 트레이드 완료
+시점에 검사하면 오탐(아직 잔액 미반영)이 날 수 있음. 대신 항상 최신 실측값
+(`policyChecks` SSOT)으로 이행률을 계산해 "제안"하고, 최종 완료는 담당자가
+1클릭으로 승인하는 방식을 택함 — 더 정직하고 항상 정확함.
+
+- `PolicyPage.tsx` — `DecisionRuleProgress` 신규 컴포넌트.
+  `decision.linked_metric/target_operator/target_value`가 있으면 `checkDecisionRule()`
+  로 실측값 대비 달성/미달성 표시(초록=달성, 빨강=미달성). FX비중 초과(lte 위반)
+  케이스는 "약 N억원 추가 매도 시 목표 달성" 참고치 표시(`totalFundAvail × target%`
+  로 역산한 목표 보유액과 현재 `fxTotalHoldings`의 차). 달성 + 미완료 + 편집권한
+  있음 → "✓ 목표 달성 — 완료 처리" 버튼 → 기존 `handleStatusChange(d,'completed')`
+  재사용(신규 API 없음). 기존 키워드 매칭 `DecisionPolicyPanel`은 `linked_metric`
+  있는 의결에서는 중복 방지를 위해 렌더 생략.
+
+검증: 메디아나 법인에 "FX비중 35% 이하"(달성 케이스, 실제 28.4%) 테스트 의결 등록
+→ 초록 패널+완료 버튼 노출 → 클릭 → 상태 실제 '완료' 전환 + 버튼 소멸까지
+end-to-end 확인 후 테스트 데이터 삭제(사용자 승인). tsc/build/lint(0 errors) 통과.
+
+Phase 3(소프트 블로킹 + 기한 경과 에스컬레이션)은 다음 세션 착수 예정.
+
 #### 커밋 이력 (이번 세션)
 ```
 74afb25 feat: 주간예측 카테고리별 입출금 상세 입력 + 엑셀 임포트
@@ -1120,6 +1147,7 @@ c4f2f48 fix: 차입금/운용자금 만기처리(상환) 로그에 금액 스냅
 a0f135f fix: 현금흐름 추이 차트 운용(가용) 과대표시 회귀 수정 (closed_date 마이그레이션 후속)
 297f35e feat: 정책 이행 통제(Policy Compliance Enforcement) Phase 1
 362fb64 fix: 의결사항 신규 등록 시 기한 미입력이면 저장 실패하던 버그 수정
+38faac3 feat: 정책 이행 통제 Phase 2 — 정량 규칙 이행률 실시간 표시 + 완료 제안
 ```
 
 ---
