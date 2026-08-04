@@ -1067,6 +1067,8 @@ export default function PolicyPage() {
     setDecisionErr(null)
     const err = await decisions.addDecision({
       ...decisionForm, meeting_id: activeMeetingId,
+      // 빈 문자열은 Postgres date 컬럼에서 "invalid input syntax" 오류 → null로 보정
+      due_date: decisionForm.due_date || (null as unknown as string),
       target_value: decisionForm.linked_metric ? Number(decisionForm.target_value) : null,
     })
     if (err) setDecisionErr(err)
