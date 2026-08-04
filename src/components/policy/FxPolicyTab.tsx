@@ -556,7 +556,9 @@ export default function FxPolicyTab({ company }: { company: Company }) {
           orders={tradeHist.data.filter(t => t.direction === 'sell' && (t.status === '발의' || t.status === '승인') && t.due_date)}
           onQuickComplete={async (id, curr) => {
             const rate = fx.toKRW(1, curr as FxCode)
-            await tradeHist.complete(id, rate, user?.label ?? '')
+            const { error } = await tradeHist.complete(id, rate, user?.label ?? '')
+            if (error) toast.error(`완료 처리 실패: ${error.message ?? error}`)
+            else await tradeHist.load()
           }}
           canEdit={canEditPolicy}
         />
