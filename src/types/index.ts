@@ -187,6 +187,10 @@ export interface PolicyMeeting {
 // ─── 의결사항 (policy_decisions) ────────────────────────
 export type DecisionStatus = 'pending' | 'in_progress' | 'completed'
 
+// 의결사항이 통제하는 실시간 지표 — 대시보드 자동 위반 감지 대상 (세션20차 정책 이행 통제 Phase 1)
+export type PolicyLinkedMetric = 'fx_ratio' | 'loan_ratio' | 'liquidity'
+export type PolicyTargetOperator = 'lte' | 'gte'   // lte=이 값 이하 유지, gte=이 값 이상 유지
+
 export interface PolicyDecision {
   id: string
   meeting_id: string
@@ -197,6 +201,10 @@ export interface PolicyDecision {
   due_date: string      // YYYY-MM-DD
   status: DecisionStatus
   created_at: string
+  // 정량 규칙 (선택) — 셋 다 있어야 자동 위반 감지 대상이 됨. null=일반 의결(기한 감지만)
+  linked_metric?: PolicyLinkedMetric | null
+  target_operator?: PolicyTargetOperator | null
+  target_value?: number | null
 }
 
 // ─── 정책 파라미터 (policy_params) ──────────────────────

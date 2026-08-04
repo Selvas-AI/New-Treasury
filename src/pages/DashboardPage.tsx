@@ -1,9 +1,14 @@
-﻿import { useState, useCallback } from 'react'
+﻿import { useState, useCallback, useMemo } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { usePageCompany } from '../hooks/usePageCompany'
 import { useDashboard } from '../hooks/useDashboard'
 import { useLoans } from '../hooks/useLoans'
 import { useInvestments } from '../hooks/useInvestments'
+import { usePolicyDashboard } from '../hooks/usePolicyDashboard'
+import { usePolicyParams } from '../hooks/usePolicyParams'
+import { usePolicyDecisionsByCompany } from '../hooks/usePolicyDecisions'
+import { checkDecisionRule } from '../lib/policyChecks'
+import { makeIssueKey } from '../hooks/useIssues'
 
 import { fmtKRW } from '../lib/format'
 import KpiCard from '../components/dashboard/KpiCard'
@@ -14,6 +19,7 @@ import IssueDrawer from '../components/dashboard/IssueDrawer'
 import CashflowChart from '../components/dashboard/CashflowChart'
 import EquityCard from '../components/dashboard/EquityCard'
 import type { FlowItemKey } from '../components/dashboard/WaterfallCard'
+import type { IssueItem } from '../hooks/useDashboard'
 import type { IssueStatus } from '../types'
 
 export default function DashboardPage() {
@@ -24,6 +30,48 @@ export default function DashboardPage() {
   // activeOnly=true 값을 그대로 사용, 이 훅은 과거 시점 재구성(point-in-time)에만 사용)
   const chartLoans  = useLoans(false, company)
   const chartInvest = useInvestments(false, company)
+
+  // ── 정책 이행 통제 (세션20차 Phase 1) — 미이행 의결사항을 대시보드 이슈로 승격 ──
+  const policyData      = usePolicyDashboard(company ?? null)
+  const policyParams    = usePolicyParams(company)
+  const companyDecisions = usePolicyDecisionsByCompany(company ?? null)
+  const policyIssues = useMemo<IssueItem[]>(() => {
+    const today = new Date().toISOString().slice(0, 10)
+    const result: IssueItem[] = []
+    for (const dec of companyDecisions.data) {
+      const key = makeIssueKey('policy', dec.id)
+      const thread = db.issues.threadOf(key)
+      const lastStatus = thread[thread.length - 1]?.status ?? 'open'
+      if (lastStatus === 'done') continue
+
+      const overdue = !!dec.due_date && dec.due_date < today
+      let violated = false, violDesc = ''
+      if (dec.linked_metric && dec.target_operator && dec.target_value != null) {
+        const r = checkDecisionRule(dec.linked_metric, dec.target_operator, dec.target_value, policyData, policyParams)
+        violated = r.violated
+        if (violated) {
+          const cond = dec.target_operator === 'lte' ? `${dec.target_value} 이하` : `${dec.target_value} 이상`
+          violDesc = `${r.label} 현재 ${r.current.toFixed(1)} (목표: ${cond})`
+        }
+      }
+      if (!overdue && !violated) continue
+
+      const descParts: string[] = []
+      if (violated) descParts.push(`정책 위반 — ${violDesc}`)
+      if (overdue)  descParts.push(`기한(${dec.due_date}) 초과`)
+      result.push({
+        key,
+        title: `의결 미이행: ${dec.title}`,
+        desc: descParts.join(' · '),
+        status: lastStatus,
+        commentCount: thread.length,
+      })
+    }
+    return result
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companyDecisions.data, policyData, policyParams, db.issues])
+
+  const allIssues = useMemo(() => [...db.detectedIssues, ...policyIssues], [db.detectedIssues, policyIssues])
 
   const [hoverKey, setHoverKey] = useState<string | null>(null)
   const [fixedKey, setFixedKey] = useState<string | null>(null)
@@ -38,7 +86,7 @@ export default function DashboardPage() {
   }, [])
 
   async function handleStatusChange(_key: string, _id: string, status: IssueStatus) {
-    const issue = db.detectedIssues.find(i => i.key === _key)
+    const issue = allIssues.find(i => i.key === _key)
     if (!issue || !company || !user) return
     await db.issues.addComment({
       issue_key:   _key,
@@ -70,7 +118,7 @@ export default function DashboardPage() {
         </h2>
 
         {/* 이슈 전광판: 우→좌 스크롤 ticker — 클릭 시 IssueDrawer 열기 */}
-        {db.detectedIssues.filter(i => i.status !== 'done').length > 0 ? (
+        {allIssues.filter(i => i.status !== 'done').length > 0 ? (
           <div
             className="flex-1 min-w-0 overflow-hidden relative cursor-pointer"
             onClick={e => { e.stopPropagation(); setIssueOpen(prev => !prev) }}
@@ -79,7 +127,7 @@ export default function DashboardPage() {
             <div className="absolute inset-y-0 left-0 w-8 z-10 pointer-events-none bg-gradient-to-r from-gray-50 dark:from-gray-900 to-transparent" />
             <div className="absolute inset-y-0 right-0 w-8 z-10 pointer-events-none bg-gradient-to-l from-gray-50 dark:from-gray-900 to-transparent" />
             <div className="issue-ticker-track">
-              {db.detectedIssues
+              {allIssues
                 .filter(i => i.status !== 'done')
                 .map(issue => (
                   <span key={issue.key} className="inline-flex items-center gap-1.5 mr-12 text-xs">
@@ -187,7 +235,7 @@ export default function DashboardPage() {
       {/* 이슈 ticker 클릭 시 이슈 목록 팝업 */}
       <IssueDrawer
         open={issueOpen}
-        issues={db.detectedIssues}
+        issues={allIssues}
         activeKey={activeKey}
         onStatusChange={handleStatusChange}
         onHover={handleHover}

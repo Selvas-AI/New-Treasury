@@ -1,4 +1,4 @@
-﻿import { useState, useMemo, useEffect, type ReactNode } from 'react'
+﻿import { useState, useMemo, useEffect, type ReactNode, type Dispatch, type SetStateAction } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { usePolicyMeetings } from '../hooks/usePolicyMeetings'
 import { usePolicyDecisions } from '../hooks/usePolicyDecisions'
@@ -6,6 +6,7 @@ import { usePolicyThreads } from '../hooks/usePolicyThreads'
 import { usePolicyParams, usePolicyParamsReadMap, type PolicyParamReader } from '../hooks/usePolicyParams'
 import { usePolicyDashboards, type PolicyRealData } from '../hooks/usePolicyDashboard'
 import { useCompanies } from '../hooks/useCompanies'
+import { checkLiquidity, checkFx, checkLoan, checkConcentration, CONCENTRATION_LIMIT } from '../lib/policyChecks'
 import { getLatestBonds } from '../hooks/useInvestments'
 import FxPolicyTab from '../components/policy/FxPolicyTab'
 import FvplRiskTab from '../components/policy/FvplRiskTab'
@@ -15,7 +16,7 @@ import PolicyCTab from '../components/policy/PolicyCTab'
 import PolicyKpiTab from '../components/policy/PolicyKpiTab'
 import { fmtKRW } from '../lib/format'
 import { NumInput } from '../components/common/NumInput'
-import type { Company, DecisionStatus, PolicyDecision } from '../types'
+import type { Company, DecisionStatus, PolicyDecision, PolicyLinkedMetric, PolicyTargetOperator } from '../types'
 
 type PolicyTab = 'decisions' | 'fx' | 'fvpl' | 'banks' | 'forecast' | 'plan_c' | 'kpi'
 
@@ -122,56 +123,7 @@ function CellTooltip({ children, tooltip }: { children: ReactNode; tooltip: Reac
   )
 }
 
-// ── 정책 적합성 판정 (SSOT — 카드/매트릭스/다이제스트 공용) ──────────────
-type StatusLevel = 'ok' | 'warn' | 'over' | 'na'
-const CONCENTRATION_LIMIT = 30
-
-function checkLiquidity(data: PolicyRealData, params: PolicyParamReader) {
-  const fixedCost = params.get('liquidity_fixed_cost_monthly') ?? 0
-  const minMonths = params.get('liquidity_min_months') ?? 2
-  const target = fixedCost * minMonths
-  const current = data.operatingCash
-  const status: StatusLevel = target === 0 ? 'na'
-    : current >= target ? 'ok'
-    : current >= target * 0.8 ? 'warn'
-    : 'over'
-  return { status, current, target, ratio: target > 0 ? (current / target) * 100 : null }
-}
-
-function checkFx(data: PolicyRealData, params: PolicyParamReader) {
-  const min = params.get('fx_target_min')
-  const max = params.get('fx_target_max')
-  const ratio = data.fxRatio
-  const status: StatusLevel = min === null || max === null ? 'na'
-    : ratio >= min && ratio <= max ? 'ok'
-    : ratio < min * 0.9 || ratio > max * 1.1 ? 'over'
-    : 'warn'
-  return { status, ratio, min, max, fxKrw: data.fxTotalHoldings, totalFund: data.totalFundAvail }
-}
-
-function checkLoan(data: PolicyRealData, params: PolicyParamReader) {
-  const totalFund = params.get('fx_total_fund') ?? data.totalFundEstimate
-  const max = params.get('loan_max_total_ratio')
-  const ratio = totalFund > 0 ? (data.totalLoan / totalFund) * 100 : 0
-  const status: StatusLevel = max === null ? 'na'
-    : ratio <= max ? 'ok'
-    : ratio <= max * 1.1 ? 'warn'
-    : 'over'
-  return { status, ratio, max, totalLoan: data.totalLoan, totalFund }
-}
-
-function checkConcentration(data: PolicyRealData) {
-  const total = data.investByBank.reduce((s, b) => s + b.amount, 0)
-  if (total === 0) return { status: 'na' as StatusLevel, maxPct: 0, bank: null as string | null, total: 0 }
-  let maxPct = 0, bank: string | null = null
-  for (const b of data.investByBank) {
-    const pct = (b.amount / total) * 100
-    if (pct > maxPct) { maxPct = pct; bank = b.bank }
-  }
-  const status: StatusLevel = maxPct > CONCENTRATION_LIMIT ? 'over'
-    : maxPct > CONCENTRATION_LIMIT * 0.9 ? 'warn' : 'ok'
-  return { status, maxPct, bank, total }
-}
+// ── 정책 적합성 판정 (SSOT — src/lib/policyChecks.ts 로 분리, 대시보드와 공용) ──
 
 // ── 유동성 버킷 카드 ──────────────────────────────────────────────────────
 function LiquidityCard({
@@ -914,6 +866,49 @@ const EMPTY_MEETING  = { title: '', meeting_type: '정책회의' as '정책회�
 const EMPTY_DECISION = {
   company: '셀바스에이아이' as Company,
   title: '', decision: '', owner: '', due_date: '', status: 'pending' as DecisionStatus,
+  linked_metric: null as PolicyLinkedMetric | null,
+  target_operator: 'lte' as PolicyTargetOperator,
+  target_value: '',
+}
+
+const LINKED_METRIC_LABELS: Record<PolicyLinkedMetric, string> = {
+  fx_ratio: 'FX 비중(%)', loan_ratio: '차입 비율(%)', liquidity: '유동성(원화 현금성, 원)',
+}
+
+// 의결사항 폼의 "정량 규칙(선택)" 입력 — 3개 폼(신규 2곳 + 수정 1곳)에서 공용
+function DecisionRuleFields<F extends { linked_metric: PolicyLinkedMetric | null; target_operator: PolicyTargetOperator; target_value: string }>({ form, setForm }: {
+  form: F
+  setForm: Dispatch<SetStateAction<F>>
+}) {
+  return (
+    <div className="border border-dashed border-gray-300 dark:border-slate-600 rounded-lg p-2.5 space-y-2">
+      <p className="text-[11px] text-gray-500 dark:text-slate-400 font-medium">
+        📐 정량 규칙 (선택) — 지정 시 대시보드에서 실시간 위반을 자동 감지합니다
+      </p>
+      <div className="flex gap-2">
+        <select value={form.linked_metric ?? ''}
+          onChange={e => setForm(f => ({ ...f, linked_metric: (e.target.value || null) as PolicyLinkedMetric | null }))}
+          className="flex-1 text-xs border border-gray-300 dark:border-slate-600 rounded-lg px-2 py-1.5 bg-white dark:bg-slate-700 text-gray-800 dark:text-white">
+          <option value="">연동 지표 없음</option>
+          {(Object.keys(LINKED_METRIC_LABELS) as PolicyLinkedMetric[]).map(k =>
+            <option key={k} value={k}>{LINKED_METRIC_LABELS[k]}</option>)}
+        </select>
+        {form.linked_metric && (
+          <>
+            <select value={form.target_operator}
+              onChange={e => setForm(f => ({ ...f, target_operator: e.target.value as PolicyTargetOperator }))}
+              className="text-xs border border-gray-300 dark:border-slate-600 rounded-lg px-2 py-1.5 bg-white dark:bg-slate-700 text-gray-800 dark:text-white">
+              <option value="lte">이하 유지</option>
+              <option value="gte">이상 유지</option>
+            </select>
+            <input type="number" value={form.target_value} placeholder="목표값"
+              onChange={e => setForm(f => ({ ...f, target_value: e.target.value }))}
+              className="w-24 text-xs border border-gray-300 dark:border-slate-600 rounded-lg px-2 py-1.5 bg-white dark:bg-slate-700 text-gray-800 dark:text-white" />
+          </>
+        )}
+      </div>
+    </div>
+  )
 }
 
 export default function PolicyPage() {
@@ -1068,8 +1063,12 @@ export default function PolicyPage() {
   async function handleAddDecision() {
     if (!activeMeetingId) return
     if (!decisionForm.title || !decisionForm.decision) { setDecisionErr('안건명과 결정내용을 입력하세요.'); return }
+    if (decisionForm.linked_metric && !decisionForm.target_value) { setDecisionErr('정량 규칙의 목표값을 입력하세요.'); return }
     setDecisionErr(null)
-    const err = await decisions.addDecision({ ...decisionForm, meeting_id: activeMeetingId })
+    const err = await decisions.addDecision({
+      ...decisionForm, meeting_id: activeMeetingId,
+      target_value: decisionForm.linked_metric ? Number(decisionForm.target_value) : null,
+    })
     if (err) setDecisionErr(err)
     else { setShowDecisionForm(false); setDecisionForm(EMPTY_DECISION) }
   }
@@ -1449,6 +1448,7 @@ export default function PolicyPage() {
                       className="mt-1 w-full border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm dark:bg-slate-700 dark:text-gray-100" />
                   </div>
                 </div>
+                <DecisionRuleFields form={decisionForm} setForm={setDecisionForm} />
                 {decisionErr && <p className="text-xs text-red-500">{decisionErr}</p>}
               </div>
               <div className="flex gap-2 mt-5">
@@ -1765,7 +1765,7 @@ export default function PolicyPage() {
                         <option value="completed">완료</option>
                       </select>
                       <button
-                        onClick={() => { setEditDecisionId(d.id); setEditDecisionForm({ company: d.company, title: d.title, decision: d.decision, owner: d.owner || '', due_date: d.due_date || '', status: d.status }); setEditDecisionErr(null) }}
+                        onClick={() => { setEditDecisionId(d.id); setEditDecisionForm({ company: d.company, title: d.title, decision: d.decision, owner: d.owner || '', due_date: d.due_date || '', status: d.status, linked_metric: d.linked_metric ?? null, target_operator: d.target_operator ?? 'lte', target_value: d.target_value != null ? String(d.target_value) : '' }); setEditDecisionErr(null) }}
                         className="text-xs text-blue-400 hover:text-blue-600 dark:hover:text-blue-300 px-1.5 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-950/30">
                         수정
                       </button>
@@ -1892,6 +1892,7 @@ export default function PolicyPage() {
                     className="w-full border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm dark:bg-slate-700 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-400" />
                 </div>
               </div>
+              <DecisionRuleFields form={editDecisionForm} setForm={setEditDecisionForm} />
             </div>
             {editDecisionErr && <p className="text-xs text-red-500">{editDecisionErr}</p>}
             <div className="flex gap-2">
@@ -1901,12 +1902,16 @@ export default function PolicyPage() {
               </button>
               <button onClick={async () => {
                 if (!editDecisionForm.title || !editDecisionForm.decision) { setEditDecisionErr('안건명과 결정내용을 입력하세요.'); return }
+                if (editDecisionForm.linked_metric && !editDecisionForm.target_value) { setEditDecisionErr('정량 규칙의 목표값을 입력하세요.'); return }
                 const err = await decisions.updateDecision(editDecisionId, {
                   title: editDecisionForm.title,
                   decision: editDecisionForm.decision,
                   owner: editDecisionForm.owner,
                   due_date: editDecisionForm.due_date || undefined,
                   status: editDecisionForm.status,
+                  linked_metric: editDecisionForm.linked_metric,
+                  target_operator: editDecisionForm.linked_metric ? editDecisionForm.target_operator : null,
+                  target_value: editDecisionForm.linked_metric ? Number(editDecisionForm.target_value) : null,
                 })
                 if (err) { setEditDecisionErr(err); return }
                 setEditDecisionId(null)
@@ -2085,6 +2090,7 @@ export default function PolicyPage() {
                                bg-white dark:bg-slate-700 text-gray-900 dark:text-white" />
                 </div>
               </div>
+              <DecisionRuleFields form={decisionForm} setForm={setDecisionForm} />
               {decisionErr && <p className="text-xs text-red-500">{decisionErr}</p>}
             </div>
             <div className="flex gap-2 mt-5">

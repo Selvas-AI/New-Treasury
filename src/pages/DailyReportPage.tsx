@@ -25,6 +25,7 @@ import UserPicker from '../components/common/UserPicker'
 import { useDailyReportAttachments } from '../hooks/useDailyReportAttachments'
 import { useCompanies } from '../hooks/useCompanies'
 import { usePageCompany } from '../hooks/usePageCompany'
+import { usePolicyDecisionsByCompany } from '../hooks/usePolicyDecisions'
 import type { Company, DailyRecord } from '../types'
 
 
@@ -226,6 +227,35 @@ function BusinessDatePicker({
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// ── 정책 이행 통제(세션20차 Phase 1) ─────────────────────────────────────
+// 자금일보 작성은 실무진이 매일 반드시 거치는 화면이라, 여기에 미이행 의결사항을
+// 노출해 "정책회의에서 결정됐는데 실무진이 모르고 지나가는" 상황을 구조적으로 차단한다.
+function PendingDecisionsBanner({ company }: { company: string }) {
+  const decisions = usePolicyDecisionsByCompany(company || null)
+  const inProgress = decisions.data.filter(d => d.status !== 'completed')
+  if (inProgress.length === 0) return null
+
+  return (
+    <div className="no-print mx-6 mt-3 px-4 py-2.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg shrink-0">
+      <p className="text-xs font-semibold text-blue-700 dark:text-blue-300 mb-1.5">
+        📋 이행해야 할 정책 의결사항 {inProgress.length}건
+      </p>
+      <ul className="space-y-1">
+        {inProgress.map(d => (
+          <li key={d.id} className="text-xs text-blue-700 dark:text-blue-300 flex items-start gap-1.5">
+            <span className="shrink-0">·</span>
+            <span>
+              <span className="font-medium">{d.title}</span>
+              {d.due_date && <span className="text-blue-500 dark:text-blue-400"> (기한 {d.due_date})</span>}
+              {d.owner && <span className="text-blue-400 dark:text-blue-500"> — 담당 {d.owner}</span>}
+            </span>
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }
@@ -874,6 +904,9 @@ export default function DailyReportPage() {
           </span>
         </div>
       )}
+
+      {/* ── 정책 이행 통제(세션20차 Phase 1): 미이행 의결사항 확인 배너 ─────── */}
+      <PendingDecisionsBanner company={resolvedCompany} />
 
       {/* ── 메인 콘텐츠 ─────────────────────────────────────── */}
       <div className="no-print flex-1 overflow-y-auto px-6 py-4 space-y-4">
