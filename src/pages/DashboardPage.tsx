@@ -7,7 +7,9 @@ import { useInvestments } from '../hooks/useInvestments'
 import { usePolicyDashboard } from '../hooks/usePolicyDashboard'
 import { usePolicyParams } from '../hooks/usePolicyParams'
 import { usePolicyDecisionsByCompany } from '../hooks/usePolicyDecisions'
+import { useFxTradeHistory } from '../hooks/useFxTradeHistory'
 import { checkDecisionRule } from '../lib/policyChecks'
+import { bizDaysBetween, todayStr } from '../lib/bizDay'
 import { makeIssueKey } from '../hooks/useIssues'
 
 import { fmtKRW } from '../lib/format'
@@ -71,7 +73,34 @@ export default function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [companyDecisions.data, policyData, policyParams, db.issues])
 
-  const allIssues = useMemo(() => [...db.detectedIssues, ...policyIssues], [db.detectedIssues, policyIssues])
+  // ── 정책 이행 통제 (세션20차 Phase 3) — 기한(등록일+3영업일) 임박/초과 매각 지시 ──
+  const sellOrders = useFxTradeHistory(company)
+  const sellOrderIssues = useMemo<IssueItem[]>(() => {
+    const today = todayStr()
+    const result: IssueItem[] = []
+    for (const o of sellOrders.data) {
+      if (o.direction !== 'sell' || !o.due_date) continue
+      if (o.status !== '발의' && o.status !== '승인') continue
+      const key = makeIssueKey('fx_sell', o.id)
+      const thread = db.issues.threadOf(key)
+      const lastStatus = thread[thread.length - 1]?.status ?? 'open'
+      if (lastStatus === 'done') continue
+      const dday = bizDaysBetween(today, o.due_date)
+      if (dday > 0) continue   // 아직 기한 여유 있음
+      const typeLabel = o.order_type === 'discretionary' ? '재량 매각' : '한도초과 매각'
+      result.push({
+        key,
+        title: `외화 매각 지시 ${dday < 0 ? '기한초과' : '오늘 마감'}: ${o.currency} ${typeLabel}`,
+        desc: `${typeLabel} 지시 — 기한 ${o.due_date}${dday < 0 ? ` (D+${Math.abs(dday)} 초과, 환율 무관 즉시 실행 필요)` : ' (오늘까지)'}`,
+        status: lastStatus,
+        commentCount: thread.length,
+      })
+    }
+    return result
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sellOrders.data, db.issues])
+
+  const allIssues = useMemo(() => [...db.detectedIssues, ...policyIssues, ...sellOrderIssues], [db.detectedIssues, policyIssues, sellOrderIssues])
 
   const [hoverKey, setHoverKey] = useState<string | null>(null)
   const [fixedKey, setFixedKey] = useState<string | null>(null)

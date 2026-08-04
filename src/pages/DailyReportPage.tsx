@@ -26,6 +26,8 @@ import { useDailyReportAttachments } from '../hooks/useDailyReportAttachments'
 import { useCompanies } from '../hooks/useCompanies'
 import { usePageCompany } from '../hooks/usePageCompany'
 import { usePolicyDecisionsByCompany } from '../hooks/usePolicyDecisions'
+import { useFxTradeHistory } from '../hooks/useFxTradeHistory'
+import { bizDaysBetween } from '../lib/bizDay'
 import type { Company, DailyRecord } from '../types'
 
 
@@ -255,6 +257,43 @@ function PendingDecisionsBanner({ company }: { company: string }) {
             </span>
           </li>
         ))}
+      </ul>
+    </div>
+  )
+}
+
+// ── 정책 이행 통제(세션20차 Phase 3) — 외화 매각 지시 이행 기한 배너 ─────────
+// 재량 매각(정책회의 판단)/한도초과 매각 모두 "등록일+3영업일, 환율 무관 실행"이
+// 원칙이므로, 기한이 임박·초과한 매각 지시를 자금일보 작성 화면에도 노출한다.
+function PendingSellOrdersBanner({ company }: { company: string }) {
+  const trades = useFxTradeHistory(company || null)
+  const today = todayStr()
+  const pending = trades.data
+    .filter(t => t.direction === 'sell' && (t.status === '발의' || t.status === '승인') && t.due_date)
+    .filter(t => bizDaysBetween(today, t.due_date!) <= 1)   // 내일까지 포함해 미리 경고
+    .sort((a, b) => (a.due_date ?? '').localeCompare(b.due_date ?? ''))
+  if (pending.length === 0) return null
+
+  return (
+    <div className="no-print mx-6 mt-3 px-4 py-2.5 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-lg shrink-0">
+      <p className="text-xs font-semibold text-red-700 dark:text-red-300 mb-1.5">
+        🔴 이행 기한 임박 · 초과 외화 매각 지시 {pending.length}건 — 환율과 무관하게 즉시 실행 필요
+      </p>
+      <ul className="space-y-1">
+        {pending.map(t => {
+          const dday = bizDaysBetween(today, t.due_date!)
+          const typeLabel = t.order_type === 'discretionary' ? '재량 매각' : '한도초과 매각'
+          return (
+            <li key={t.id} className="text-xs text-red-700 dark:text-red-300 flex items-start gap-1.5">
+              <span className="shrink-0">·</span>
+              <span>
+                <span className="font-medium">{t.currency} {typeLabel}</span>
+                <span className="text-red-500 dark:text-red-400"> — 기한 {t.due_date}</span>
+                <span className="text-red-500 dark:text-red-400"> ({dday < 0 ? `D+${Math.abs(dday)} 초과` : dday === 0 ? 'D-day' : 'D-1'})</span>
+              </span>
+            </li>
+          )
+        })}
       </ul>
     </div>
   )
@@ -905,8 +944,9 @@ export default function DailyReportPage() {
         </div>
       )}
 
-      {/* ── 정책 이행 통제(세션20차 Phase 1): 미이행 의결사항 확인 배너 ─────── */}
+      {/* ── 정책 이행 통제(세션20차 Phase 1/3): 미이행 의결사항·매각 지시 확인 배너 ─────── */}
       <PendingDecisionsBanner company={resolvedCompany} />
+      <PendingSellOrdersBanner company={resolvedCompany} />
 
       {/* ── 메인 콘텐츠 ─────────────────────────────────────── */}
       <div className="no-print flex-1 overflow-y-auto px-6 py-4 space-y-4">

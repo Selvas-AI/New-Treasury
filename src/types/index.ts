@@ -114,6 +114,9 @@ export interface FxTradeRecord {
   completed_pnl: number | null    // 확정 환차손익
   completed_at: string | null
   completed_by: string | null
+  // 매각 지시 이행 기한 (세션20차 정책 이행 통제 — 등록일+3영업일, 환율 무관 실행 강제)
+  due_date: string | null
+  order_type: 'threshold' | 'discretionary' | null   // threshold=보유비중 초과 매각, discretionary=정책회의 재량 매각
 }
 
 // ─── 차입금 (loans) ──────────────────────────────────────

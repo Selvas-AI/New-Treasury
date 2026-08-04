@@ -150,6 +150,8 @@ export function useFxTradeHistory(company?: Company | null) {
     amount_krw: number | null
     memo: string
     created_by: string
+    due_date?: string | null
+    order_type?: 'threshold' | 'discretionary' | null
   }) => {
     return restInsert('fx_trade_history', {
       id: generateUUID(),

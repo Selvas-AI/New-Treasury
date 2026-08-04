@@ -179,6 +179,26 @@ export function nextBizDay(date: string, max?: string): string {
   return result
 }
 
+/** n 영업일 뒤 날짜 (주말·공휴일 건너뜀) — 예: 매각 지시 등록일 + 3영업일 기한 계산 */
+export function addBizDays(date: string, n: number): string {
+  let result = date
+  for (let i = 0; i < n; i++) result = nextBizDay(result)
+  return result
+}
+
+/** date1 → date2 사이에 남은 영업일 수 (date2가 과거면 음수) — D-day 표시용 */
+export function bizDaysBetween(date1: string, date2: string): number {
+  if (date1 === date2) return 0
+  const sign = date2 > date1 ? 1 : -1
+  let cur = date1
+  let count = 0
+  while (cur !== date2) {
+    cur = sign > 0 ? nextBizDay(cur) : prevBizDay(cur)
+    count += sign
+  }
+  return count
+}
+
 /** 오늘 날짜 YYYY-MM-DD (로컬) */
 export function todayStr(): string {
   return toLocal(new Date())
