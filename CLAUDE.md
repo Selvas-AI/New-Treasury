@@ -1102,9 +1102,13 @@ Phase 1(즉시 적용) 구현 완료. Phase 2(fx_trade_history 자동 매칭)/Ph
 6. `DailyReportPage.tsx` — `PendingDecisionsBanner` 신규. 자금일보 작성 화면(실무진이
    매일 반드시 거치는 화면) 상단에 해당 법인 미완료 의결사항을 항상 노출.
 
-검증: tsc/build/lint(0 errors) 통과. 브라우저에서 마이그레이션 미실행 상태로 정량
-규칙 필드 포함 의결사항 폼 제출 → "컬럼 없음" 에러가 폼 안에 안전하게 표시(크래시 없음)
-확인. 마이그레이션 실행 후 대시보드/자금일보 노출까지는 다음 세션에서 재검증 필요.
+검증(마이그레이션 실행 후 최종 확인 완료): 브라우저에서 메디아나 법인에 정량 규칙
+(FX비중 ≤20%, 실제 28.4%)을 가진 테스트 의결사항을 실제 등록 → ①대시보드 이슈
+티커에 "⚠ 의결 미이행: {제목}" 자동 노출 ②IssueDrawer 상세에 "정책 위반 — FX 비중
+현재 28.4 (목표: 20 이하)" 정확히 표시 ③자금일보 작성 화면 상단 배너에도 동일 건
+노출 — 3곳 모두 정상 확인 후 테스트 데이터 삭제(사용자 승인 하에 진행). 부가로
+발견된 버그 하나 수정: 의결사항 신규 등록 시 기한(due_date)을 비워두면 Postgres
+date 컬럼에 빈 문자열이 전달되어 저장이 실패하던 문제 — null로 보정.
 
 #### 커밋 이력 (이번 세션)
 ```
@@ -1115,6 +1119,7 @@ c4f2f48 fix: 차입금/운용자금 만기처리(상환) 로그에 금액 스냅
 744f311 fix: 차입금/운용자금 상환 후 과거 이력 잔액이 소급 변경되던 근본 버그 수정
 a0f135f fix: 현금흐름 추이 차트 운용(가용) 과대표시 회귀 수정 (closed_date 마이그레이션 후속)
 297f35e feat: 정책 이행 통제(Policy Compliance Enforcement) Phase 1
+362fb64 fix: 의결사항 신규 등록 시 기한 미입력이면 저장 실패하던 버그 수정
 ```
 
 ---
@@ -1154,7 +1159,7 @@ a0f135f fix: 현금흐름 추이 차트 운용(가용) 과대표시 회귀 수�
 - **`docs/db/user_password_policy.sql`** ⭐ — `treasury_users.must_change_password` 컬럼 (세션18차 비밀번호 정책). **실행 필요**. 미실행 시 마스터의 "비번초기화" 버튼은 Auth 비밀번호는 바꾸지만 강제변경 플래그 갱신이 실패(컬럼 없음) — Edge Function은 500 반환.
 - **`docs/db/cashflow_plan_items.sql`** ⭐ — `cashflow_plan_items` 테이블 (세션19차 주간예측 항목별 입력). **실행 필요**. 미실행 시 주간예측 탭 "+ 추가"가 `Could not find the table 'public.cashflow_plan_items'` 에러로 실패 (앱 크래시는 없음, 안내 메시지만 표시).
 - **`docs/db/closed_date_migration.sql`** ⭐⭐ — `loans`/`investments.closed_date` 컬럼 (세션19차 상환 후 과거 이력 소급변경 버그 fix). **실행 완료** (세션19차 중 사용자 확인).
-- **`docs/db/policy_decision_rules_migration.sql`** ⭐ — `policy_decisions.linked_metric`/`target_operator`/`target_value` 컬럼 (세션19차 정책 이행 통제 Phase 1). **실행 필요**. 미실행 시 정량 규칙(연동 지표) 필드를 채운 의결사항 저장이 실패(폼 내 에러 표시, 크래시 없음) — 규칙 없는 일반 의결사항 등록/수정은 영향 없음.
+- **`docs/db/policy_decision_rules_migration.sql`** ⭐ — `policy_decisions.linked_metric`/`target_operator`/`target_value` 컬럼 (세션19차 정책 이행 통제 Phase 1). **실행 완료** (세션19차 중 사용자 확인, 대시보드/자금일보 자동 노출까지 end-to-end 검증 완료).
 
 ### ⚠️ 비밀번호 찾기/초기화 — 배포 전 필수 수동 작업 3건 (세션18차)
 ```
