@@ -6,7 +6,7 @@ import { usePolicyThreads } from '../hooks/usePolicyThreads'
 import { usePolicyParams, usePolicyParamsReadMap, type PolicyParamReader } from '../hooks/usePolicyParams'
 import { usePolicyDashboards, type PolicyRealData } from '../hooks/usePolicyDashboard'
 import { useCompanies } from '../hooks/useCompanies'
-import { checkLiquidity, checkFx, checkLoan, checkConcentration, CONCENTRATION_LIMIT } from '../lib/policyChecks'
+import { checkLiquidity, checkFx, checkLoan, checkConcentration, checkDecisionRule, CONCENTRATION_LIMIT } from '../lib/policyChecks'
 import { getLatestBonds } from '../hooks/useInvestments'
 import FxPolicyTab from '../components/policy/FxPolicyTab'
 import FvplRiskTab from '../components/policy/FvplRiskTab'
@@ -685,9 +685,56 @@ function AllCompanySummary({
 }
 
 // ── 의결사항 관련 정책 지표 패널 (인라인) ────────────────────────────────
+// 세션20차 정책 이행 통제 Phase 2 — 정량 규칙(linked_metric)이 있는 의결의 이행률을
+// 실측값으로 정확히 계산해 보여주고, 목표 달성 시 완료 처리를 제안한다.
+// (자동으로 상태를 바꾸지 않는 이유: fx_trade_history "완료" 처리는 매매 워크플로우
+//  기록일 뿐, 실제 보유잔액은 별도로 운전자금/운용자금 입력에서 갱신되므로 두 이벤트가
+//  항상 동시에 일어난다는 보장이 없다 — 그래서 "제안 + 1클릭 승인" 방식을 택함)
+function DecisionRuleProgress({
+  decision, params, data, canEdit, onMarkComplete,
+}: { decision: PolicyDecision; params: PolicyParamReader; data: PolicyRealData; canEdit: boolean; onMarkComplete: () => void }) {
+  if (!decision.linked_metric || !decision.target_operator || decision.target_value == null) return null
+  const r = checkDecisionRule(decision.linked_metric, decision.target_operator, decision.target_value, data, params)
+  const cond = decision.target_operator === 'lte' ? `${decision.target_value} 이하` : `${decision.target_value} 이상`
+  const achieved = !r.violated
+
+  // FX비중 초과분을 매도해야 하는 경우, 참고용 추가 매도 필요액 계산
+  let extraNote: string | null = null
+  if (decision.linked_metric === 'fx_ratio' && decision.target_operator === 'lte' && r.violated) {
+    const targetKrw = data.totalFundAvail * (decision.target_value / 100)
+    const excessKrw = data.fxTotalHoldings - targetKrw
+    if (excessKrw > 0) extraNote = `약 ${fmtKRW(excessKrw)} 추가 매도 시 목표 달성`
+  }
+
+  return (
+    <div className={`mt-2 rounded-lg p-3 border ${achieved
+      ? 'bg-green-50 dark:bg-green-950/20 border-green-100 dark:border-green-900/40'
+      : 'bg-red-50 dark:bg-red-950/20 border-red-100 dark:border-red-900/40'}`}>
+      <div className="flex items-center justify-between">
+        <p className={`text-xs font-medium ${achieved ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+          {achieved ? '✓ 정량 목표 달성' : '✕ 정량 목표 미달성'} — {r.label} 목표 {cond}
+        </p>
+      </div>
+      <p className="text-xs text-gray-600 dark:text-slate-300 mt-1">
+        현재 {r.current.toFixed(1)} {decision.linked_metric === 'liquidity' ? '' : '%'}
+        {extraNote && <span className="text-gray-400 dark:text-gray-500"> · {extraNote}</span>}
+      </p>
+      {achieved && decision.status !== 'completed' && canEdit && (
+        <button onClick={onMarkComplete}
+          className="mt-2 text-xs px-2.5 py-1 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium">
+          ✓ 목표 달성 — 완료 처리
+        </button>
+      )}
+    </div>
+  )
+}
+
 function DecisionPolicyPanel({
   decision, params, data,
 }: { decision: PolicyDecision; params: PolicyParamReader; data: PolicyRealData }) {
+  // 정량 규칙이 있으면 DecisionRuleProgress(정확한 실측 이행률)가 대신 표시되므로
+  // 아래 키워드 추측 기반 패널은 중복 방지를 위해 생략
+  if (decision.linked_metric) return null
   const title = decision.title.toLowerCase()
   const isFx       = /fx|외화|환율|헤지|헷지|band/.test(title)
   const isLiquidity = /유동성|현금|버킷|cash/.test(title)
@@ -1288,7 +1335,11 @@ export default function PolicyPage() {
                             <p className="text-sm text-gray-700 dark:text-slate-100 leading-relaxed">{d.decision}</p>
                           </div>
                           {cardData && cardParams && (
-                            <DecisionPolicyPanel decision={d} params={cardParams} data={cardData} />
+                            <>
+                              <DecisionPolicyPanel decision={d} params={cardParams} data={cardData} />
+                              <DecisionRuleProgress decision={d} params={cardParams} data={cardData}
+                                canEdit={canEditPolicy} onMarkComplete={() => handleStatusChange(d, 'completed')} />
+                            </>
                           )}
                           {(d.owner || d.due_date) && (
                             <div className="flex gap-4 text-xs text-gray-400">
@@ -1784,13 +1835,17 @@ export default function PolicyPage() {
                   <p className="text-sm text-gray-700 dark:text-slate-100 leading-relaxed">{d.decision}</p>
                 </div>
 
-                {/* 관련 정책 지표 (키워드 매칭) — 접근 가능 법인만 */}
+                {/* 관련 정책 지표 (키워드 매칭 / 정량 규칙 이행률) — 접근 가능 법인만 */}
                 {cardData && cardParams && (
-                  <DecisionPolicyPanel
-                    decision={d}
-                    params={cardParams}
-                    data={cardData}
-                  />
+                  <>
+                    <DecisionPolicyPanel
+                      decision={d}
+                      params={cardParams}
+                      data={cardData}
+                    />
+                    <DecisionRuleProgress decision={d} params={cardParams} data={cardData}
+                      canEdit={canEditPolicy} onMarkComplete={() => handleStatusChange(d, 'completed')} />
+                  </>
                 )}
 
                 <div className="mt-2 flex items-center gap-4 text-xs text-gray-400 dark:text-gray-500">
