@@ -886,7 +886,11 @@ function calcFxStdDevFromEcos_(e) {
   const from  = new Date(today);
   from.setMonth(from.getMonth() - months);
 
-  const toStr   = formatDateEcos_(today);
+  // 당일 데이터는 아직 게재되지 않는 경우가 많아 전일 기준으로 조회
+  // (기존엔 주석으로만 의도가 남아있고 실제 반영이 안 돼 있었음 — 세션20차 수정)
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const toStr   = formatDateEcos_(yesterday);
   const fromStr = formatDateEcos_(from);
 
   Logger.log('ECOS FX 표준편차 계산: ' + fromStr + ' ~ ' + toStr);
@@ -922,7 +926,9 @@ function calcFxStdDevFromEcos_(e) {
       Logger.log(currency + ': ' + prices.length + '건, 일별=' + dailyStd.toFixed(6) +
                  ', 연환산=' + annualStd.toFixed(6));
     } catch (err) {
-      const msg = err.toString();
+      // err.toString()에 UrlFetchApp의 원본 예외 메시지(요청 URL 그대로 포함 — API 키 노출)가
+      // 담길 수 있어, 클라이언트로 내려가기 전에 반드시 키를 마스킹한다.
+      const msg = err.toString().split(apiKey).join('***');
       Logger.log(currency + ' 오류: ' + msg);
       stddevMap[currency] = null;
       errorDetails[currency] = msg;
@@ -957,7 +963,7 @@ function calcFxStdDevFromEcos_(e) {
  * (testEcosItemList 로 전체 53개 코드 확인 후 업데이트)
  */
 function fetchEcosRates_(apiKey, itemCode, fromDate, toDate) {
-  // toDate가 오늘이면 어제 날짜로 조정 (당일 데이터 미게재 대비)
+  // toDate는 호출부(calcFxStdDevFromEcos_)에서 이미 전일로 보정해 전달함
   // 주기 코드: 일별 = 'D' (명세서 확인: 년A/반년S/분기Q/월M/반월SM/일D)
   const url = [
     'https://ecos.bok.or.kr/api/StatisticSearch',
@@ -969,11 +975,19 @@ function fetchEcosRates_(apiKey, itemCode, fromDate, toDate) {
 
   Logger.log('ECOS 요청: ' + url.replace(apiKey, 'API_KEY'));
 
-  const resp = UrlFetchApp.fetch(url, {
-    method: 'GET',
-    muteHttpExceptions: true,
-    headers: { 'Accept': 'application/json' }
-  });
+  let resp;
+  try {
+    resp = UrlFetchApp.fetch(url, {
+      method: 'GET',
+      muteHttpExceptions: true,
+      headers: { 'Accept': 'application/json' }
+    });
+  } catch (fetchErr) {
+    // UrlFetchApp이 던지는 원본 예외는 요청 URL(=API 키 포함)을 그대로 담고 있어
+    // 호출부까지 그대로 전파하면 클라이언트 응답(errorDetails)에 키가 노출된다.
+    // 여기서 즉시 키를 제거한 안전한 메시지로 치환해 던진다.
+    throw new Error('ECOS 요청 실패(네트워크): ' + fetchErr.toString().split(apiKey).join('***'));
+  }
 
   const code = resp.getResponseCode();
   if (code !== 200) throw new Error('ECOS HTTP ' + code);

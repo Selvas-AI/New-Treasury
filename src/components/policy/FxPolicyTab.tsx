@@ -339,7 +339,8 @@ export default function FxPolicyTab({ company }: { company: Company }) {
       setAutoCalcMsg(`✅ ${period.from.slice(0,4)}-${period.from.slice(4,6)} ~ ${period.to.slice(0,4)}-${period.to.slice(4,6)} (${dataCount}일) 갱신됨`)
     } catch (err) {
       setAutoCalcState('error')
-      setAutoCalcMsg(err instanceof Error ? err.message : '오류')
+      const base = err instanceof Error ? err.message : '오류'
+      setAutoCalcMsg(`${base} — ECOS 서버 일시 장애일 수 있습니다. 잠시 후 재시도하거나 아래 "✏️ 수동"으로 직접 입력하세요.`)
     }
   }
 
