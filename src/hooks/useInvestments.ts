@@ -37,6 +37,11 @@ function fromDb(row: DbRow): InvestmentRecord {
 }
 
 // TypeScript camelCase → DB snake_case (insert / update 페이로드용)
+// ⚠ investments 의 실제 DB 컬럼은 start_date 다(start 아님). 이 매핑을 거치지 않고
+//   restInsert('investments', { start }) 를 직접 호출하면
+//   "Could not find the 'start' column of 'investments'" 오류가 난다.
+//   외부에서 직접 insert 할 일이 있으면 반드시 investToDb() 를 거칠 것.
+export { toDb as investToDb }
 function toDb(record: Partial<InvestmentRecord>): DbRow {
   const row: DbRow = { ...record }
   // insert 시 id가 undefined/null이면 DB auto-generate를 위해 제거

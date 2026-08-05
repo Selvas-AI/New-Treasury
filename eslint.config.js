@@ -9,7 +9,9 @@ export default tseslint.config(
   // dist(빌드산출) + .claude/worktrees(에이전트 작업 사본)는 lint 대상 제외.
   // worktree 사본이 남아있으면 typescript-eslint가 tsconfigRootDir 후보를 다중 감지해
   // "No tsconfigRootDir was set" 파싱 에러로 lint 전체가 실패함.
-  globalIgnores(['dist', '.claude/**']),
+  // sites-mockup: UI/UX 참조용 목업(별도 Next/vinext 프로젝트, 자체 tsconfig·빌드산출 포함).
+  // 앱 소스가 아니고 자체 규칙을 따르므로 lint 대상에서 제외한다.
+  globalIgnores(['dist', '.claude/**', 'sites-mockup/**']),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [

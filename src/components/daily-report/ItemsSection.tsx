@@ -67,7 +67,9 @@ interface Props {
   onEnsureReport:  () => Promise<string | null>
   onAdd:    (input: {
     direction: 'in'|'out'; category: string; amount: number; currency: string;
-    amount_krw?: number|null; memo?: string|null; account_type?: string|null
+    amount_krw?: number|null; memo?: string|null; account_type?: string|null;
+    // 연동 팝업으로 생성된 원천 레코드 역참조 (investment | equity | loan)
+    linked_type?: string|null; linked_id?: string|null
   }) => Promise<string | null>
   onUpdate:        (id: string, patch: Partial<ReportItem>) => Promise<void>
   onRemove:        (id: string) => Promise<void>
@@ -115,6 +117,7 @@ export default function ItemsSection({
   // ── 연동 팝업 저장 콜백 ──────────────────────────────────────
   async function handleLinkedSaved(
     amount: number, currency: string, memo: string,
+    linkedType?: string, linkedId?: string,
   ) {
     if (!reportId) {
       const newId = await onEnsureReport()
@@ -130,6 +133,10 @@ export default function ItemsSection({
       amount_krw:   krw,
       memo:         memo || null,
       account_type: draft?.accountType || null,
+      // 팝업이 방금 생성한 원천 레코드(운용자금/지분/차입금) 역참조 —
+      // 이 값이 없으면 일보 항목에서 어떤 자산이 만들어졌는지 추적할 수 없다
+      linked_type:  linkedType ?? null,
+      linked_id:    linkedId ?? null,
     })
     setDraft(null)
     setLinkedPopup(null)
@@ -524,28 +531,28 @@ export default function ItemsSection({
       {linkedPopup === 'invest_return' && (
         <InvestReturnPopup
           company={company} reportDate={reportDate}
-          onSaved={(amt, cur, memo) => handleLinkedSaved(amt, cur, memo)}
+          onSaved={(amt, cur, memo, lt, li) => handleLinkedSaved(amt, cur, memo, lt, li)}
           onClose={() => setLinkedPopup(null)}
         />
       )}
       {linkedPopup === 'loan_drawdown' && (
         <LoanDrawdownPopup
           company={company}
-          onSaved={(amt, cur, memo) => handleLinkedSaved(amt, cur, memo)}
+          onSaved={(amt, cur, memo, lt, li) => handleLinkedSaved(amt, cur, memo, lt, li)}
           onClose={() => setLinkedPopup(null)}
         />
       )}
       {linkedPopup === 'invest_execute' && (
         <InvestExecutePopup
-          company={company}
-          onSaved={(amt, cur, memo) => handleLinkedSaved(amt, cur, memo)}
+          company={company} reportDate={reportDate}
+          onSaved={(amt, cur, memo, lt, li) => handleLinkedSaved(amt, cur, memo, lt, li)}
           onClose={() => setLinkedPopup(null)}
         />
       )}
       {linkedPopup === 'loan_repayment' && (
         <LoanRepaymentPopup
           company={company}
-          onSaved={(amt, cur, memo) => handleLinkedSaved(amt, cur, memo)}
+          onSaved={(amt, cur, memo, lt, li) => handleLinkedSaved(amt, cur, memo, lt, li)}
           onClose={() => setLinkedPopup(null)}
         />
       )}
