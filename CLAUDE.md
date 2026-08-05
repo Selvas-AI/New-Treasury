@@ -1,6 +1,6 @@
 # CLAUDE.md — Selvas Treasury (New-Treasury)
 > 신규 세션 시작 시 이 파일을 먼저 읽어 컨텍스트를 복원하세요.
-> 최종 업데이트: 2026-07-16 (세션19차 — 주간예측 항목별 입력+엑셀 임포트, 대시보드 자금흐름 팝업 SSOT 불일치 3건 수정, 자금정책 외화비중 카드 국채 중복합산 버그 수정)
+> 최종 업데이트: 2026-08-05 (세션20차 — 투자 집행 연동 저장 실패 수정, 자산 구분(운용/국채/상장/비상장) 라우팅 추가, linked_id 유실 버그 수정)
 
 ---
 
@@ -1180,6 +1180,70 @@ a0f135f fix: 현금흐름 추이 차트 운용(가용) 과대표시 회귀 수�
 38faac3 feat: 정책 이행 통제 Phase 2 — 정량 규칙 이행률 실시간 표시 + 완료 제안
 3b7d8dd feat: 정책 이행 통제 Phase 3 — 외화 매각 지시(Sell Order) 3영업일 이행 강제
 60cccac fix: 매각 완료 처리 후 화면 목록이 갱신 안 되던 버그 수정
+```
+
+---
+
+### 2026-08-05 세션 20차 (투자 집행 연동 수정 + 자산 구분 라우팅)
+
+#### [CRITICAL] restInsert 직접 호출 시 컬럼명 매핑 누락 ⭐
+```
+증상: 자금일보 출금 > "투자 집행 연동" 저장 시
+      Error: Could not find the 'start' column of 'investments' in the schema cache
+
+원인: investments 의 실제 DB 컬럼은 start_date. useInvestments 의 toDb() 가
+  start → start_date 매핑을 담당하는데, InvestExecutePopup 만 이를 거치지 않고
+  restInsert('investments', { start }) 를 직접 호출.
+  (InvestPage/NewBondForm/BondHistoryPanel 은 inv.save() 경유라 정상)
+
+해결: toDb 를 `export { toDb as investToDb }` 로 공개하고 팝업이 경유하도록 변경.
+금지: investments 에 restInsert/restUpdate 를 직접 호출하지 말 것.
+      반드시 investToDb() 를 거칠 것 (camelCase→snake_case: start→start_date,
+      bondName→bond_name, bondQty→bond_qty, bondPrice→bond_price, bondTicker→bond_ticker).
+```
+
+#### [BUG] 연동 팝업의 linked_type/linked_id 가 조용히 유실되던 문제
+- 4개 연동 팝업(InvestExecute/InvestReturn/LoanDrawdown/LoanRepayment)은 모두
+  `onSaved(amount, currency, memo, linkedType, linkedId)` 로 원천 레코드 id 를 넘기고
+  `useDailyReportItems.addItem` 도 두 컬럼을 지원하는데, **`ItemsSection` 의
+  `handleLinkedSaved` 가 앞 3개 인자만 선언**하고 호출부도 `(amt, cur, memo) => ...`
+  로 잘라 전달해 DB 에 항상 null 로 저장되고 있었음 → 일보 항목 ↔ 자산 레코드
+  역추적 불가. 시그니처·호출부·`onAdd` prop 타입에 관통시켜 수정.
+- ⚠ TypeScript 는 "인자를 덜 받는 함수"를 허용하므로 이런 유실은 타입 에러가
+  나지 않는다. 콜백 인자 추가 시 **호출부의 화살표 함수도 함께 확인할 것.**
+
+#### [개선] 투자 집행 연동에 자산 구분 선택 추가
+기존엔 운용자금(investments)으로만 저장돼 타사 RCPS 같은 지분성 투자를 넣을 곳이
+없었음. 팝업 상단에 4택 추가 + 각각 올바른 테이블/메뉴로 라우팅:
+| 자산 구분 | 저장 테이블 | 메뉴 |
+|---|---|---|
+| 운용자금 | `investments` (정기예금·MMF·RP 등) | 운용자금 |
+| 국채·채권 | `investments` (`product='국채'` + `bond_*`) | 지분/장기투자 > 채권 |
+| 상장주식 | `equities` (`market`=KOSPI/KOSDAQ) | 지분/장기투자 > 지분 |
+| 비상장주식 | `equities` (`market='비상장'`) | 지분/장기투자 > 비상장 |
+- 출금액 자동계산: 지분=`주식수×취득단가`, 국채=`calcBondValue(좌수, 기준가)`.
+  수수료로 실지급액이 다르면 override 가능 — 이때 `total_value`(평가액)와
+  `acquisition_cost`(취득원가)를 분리 기록하고 차액을 경고 표시.
+- 가용여부 기본값: 비상장=불가용, 그 외=가용.
+
+#### [BUG] 렌더 중 컴포넌트 정의 → 입력 포커스 유실
+```
+초안에서 Row/NumInput 을 컴포넌트 함수 *내부*에 정의 → 매 렌더마다 새로운
+컴포넌트 타입이 생성되어 input 이 remount 되고 한 글자 입력마다 포커스가 풀림.
+eslint react-hooks 가 "Cannot create components during render" 로 23건 검출.
+해결: 모듈 레벨로 호이스팅.
+금지: JSX 로 사용하는 헬퍼 컴포넌트를 렌더 함수 안에 정의하지 말 것.
+```
+
+#### 기타
+- `eslint.config.js` — `sites-mockup/**` 를 lint 대상에서 제외
+  (UI/UX 참조용 별도 vinext 프로젝트 + 자체 빌드산출이 lint 에 잡혀 무관한 에러 발생)
+- UI/UX 개편 기획서 작성: `C:\Users\attemptgt\.claude\plans\synchronous-humming-cray.md`
+  (목업 컨셉 채택 + 단계별 로드맵 + 메뉴별 개선 스펙. 구현은 미착수)
+
+#### 커밋
+```
+baf8ef9 fix: 투자 집행 연동 저장 실패 수정 + 자산 구분(운용/국채/상장/비상장) 선택 추가
 ```
 
 ---
