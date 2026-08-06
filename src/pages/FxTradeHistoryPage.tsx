@@ -33,7 +33,10 @@ function statusBadge(s: string) {
 }
 
 export default function FxTradeHistoryPage() {
-  const { user, canEdit, canApprove } = useAuth()
+  const { user, canEdit, canApprove, canAction } = useAuth()
+  // 외화매매거래 작업 권한 — 역할 기본값 위에 사용자별 개별 부여/회수 가능 (UsersPage > 작업 권한)
+  // 승인·완료·취소 모두 레코드를 변경하므로 write 로 통일해 게이트한다.
+  const canWriteFxTrade = canAction('fx_trade', 'write')
   const { company: resolvedCompany } = usePageCompany()
   const hist = useFxTradeHistory()
 
@@ -268,19 +271,19 @@ export default function FxTradeHistoryPage() {
                       {/* 액션 */}
                       <td className="px-3 py-2.5 whitespace-nowrap">
                         <div className="flex gap-1">
-                          {r.status === '발의' && canApprove() && (
+                          {r.status === '발의' && canApprove() && canWriteFxTrade && (
                             <button onClick={() => handleApprove(r.id)}
                               className="text-xs px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg">
                               승인
                             </button>
                           )}
-                          {r.status === '승인' && canEdit() && (
+                          {r.status === '승인' && canEdit() && canWriteFxTrade && (
                             <button onClick={() => { setCompleteTarget(r.id); setCompleteRate('') }}
                               className="text-xs px-2.5 py-1 bg-green-600 hover:bg-green-700 text-white rounded-lg">
                               완료
                             </button>
                           )}
-                          {(r.status === '발의' || r.status === '승인') && canApprove() && (
+                          {(r.status === '발의' || r.status === '승인') && canApprove() && canWriteFxTrade && (
                             <button onClick={() => handleCancel(r.id)}
                               className="text-xs px-2.5 py-1 border border-gray-300 dark:border-slate-600 text-gray-500 dark:text-slate-400 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700">
                               취소

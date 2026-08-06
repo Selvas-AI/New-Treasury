@@ -6,7 +6,7 @@
  *   2. 해당 이메일 소유자가 LoginPage "최초 계정 설정" 탭에서 비밀번호 설정
  *   3. 이후 일반 로그인
  */
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, Fragment } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { supabase, restInsert, restUpdate, restDelete } from '../../lib/supabase'
@@ -111,6 +111,8 @@ const SECTIONS: SectionDef[] = [
   { key: 'daily_submit', label: '결재 상신', group: '자금일보',  disabled: ['delete'] },
   { key: 'history',      label: '자금 이력', group: '이력 관리', disabled: ['write','delete'] },
   { key: 'issue_history',label: '이슈 이력', group: '이력 관리', disabled: ['delete'] },
+  // 외화매매거래: 승인/완료/취소가 있으나 하드 삭제는 없으므로 delete 비활성
+  { key: 'fx_trade',     label: '외화매매거래', group: '이력 관리', disabled: ['delete'] },
   { key: 'policy',       label: '자금정책',  group: '자금정책',  disabled: ['delete'] },
 ]
 
@@ -658,9 +660,10 @@ export default function UsersPage() {
                           </tr>
                         </thead>
                         <tbody>
+                          {/* key 는 Fragment 에 — <> 축약형은 key 를 받지 못해 React 경고가 났었음 */}
                           {groups.map(group => (
-                            <>
-                              <tr key={group} className="bg-gray-50 dark:bg-slate-700/40">
+                            <Fragment key={group}>
+                              <tr className="bg-gray-50 dark:bg-slate-700/40">
                                 <td colSpan={4} className="px-3 py-1.5 text-[11px] text-gray-400 dark:text-slate-500 font-medium">{group}</td>
                               </tr>
                               {SECTIONS.filter(s => s.group === group).map(s => {
@@ -685,7 +688,7 @@ export default function UsersPage() {
                                   </tr>
                                 )
                               })}
-                            </>
+                            </Fragment>
                           ))}
                         </tbody>
                       </table>
