@@ -8,7 +8,7 @@ import { usePolicyParams } from '../../hooks/usePolicyParams'
 import { usePolicyMeetings } from '../../hooks/usePolicyMeetings'
 import { useFx } from '../../hooks/useFx'
 import { fmtKRW, calcBondValue } from '../../lib/format'
-import type { PolicyDecision, PolicyMeeting } from '../../types'
+import type { PolicyDecision, PolicyMeeting, FxCode } from '../../types'
 
 interface Props {
   company: string
@@ -24,6 +24,24 @@ interface DailyRow {
   fx_cny: number
 }
 
+// DB 원본(snake_case) — investments 의 실제 컬럼명
+interface InvDbRow {
+  id: string
+  product: string
+  bank: string
+  amount: number
+  currency: string
+  bond_qty: number | null
+  bond_price: number | null
+  bond_ticker: string | null
+  start_date: string
+  maturity: string | null
+  active: boolean
+  available: string
+  bond_name: string | null
+  closed_date: string | null
+}
+
 interface InvRow {
   id: string
   product: string
@@ -32,11 +50,44 @@ interface InvRow {
   currency: string
   bondQty: number | null
   bondPrice: number | null
+  bondTicker: string | null
   start: string
   end: string | null
   active: boolean
   available: string
   bond_name?: string
+  closedDate: string | null
+}
+
+/**
+ * 국채 종목별 최신 1건만 남긴다 (useInvestments.getLatestBonds 와 동일 규칙).
+ * ⚠ 국채는 기준가 갱신 시마다 날짜별 row 가 쌓이고 전부 active=true 로 남으므로,
+ *   dedup 없이 합산하면 평가액이 수십 배로 부풀려진다(세션19차 외화비중 카드와 동일 버그).
+ */
+function latestBonds(rows: InvRow[]): InvRow[] {
+  const latest = new Map<string, InvRow>()
+  for (const b of rows) {
+    const key = b.bondTicker ?? b.bond_name ?? b.bank
+    const cur = latest.get(key)
+    if (!cur || (b.start ?? '') > (cur.start ?? '')) latest.set(key, b)
+  }
+  return [...latest.values()]
+}
+
+// ⚠ investments 의 DB 컬럼은 start_date / maturity / bond_qty / bond_price 다.
+//   이전에는 이 매핑 없이 start·bondQty 를 그대로 조회·사용해
+//   ① order=start.asc 가 400(column does not exist)으로 실패 → 국채 데이터가 항상 비었고
+//   ② 설령 조회돼도 bondQty/bondPrice 가 undefined 라 평가액이 0이 됐다.
+function invFromDb(r: InvDbRow): InvRow {
+  return {
+    id: r.id, product: r.product, bank: r.bank,
+    amount: r.amount ?? 0, currency: r.currency ?? 'KRW',
+    bondQty: r.bond_qty, bondPrice: r.bond_price, bondTicker: r.bond_ticker ?? null,
+    start: r.start_date ?? '', end: r.maturity ?? null,
+    active: r.active, available: r.available,
+    bond_name: r.bond_name ?? undefined,
+    closedDate: r.closed_date ?? null,
+  }
 }
 
 const Z_MAP: Record<number, number> = { 90: 1.2816, 95: 1.6503, 99: 2.3263 }
@@ -54,6 +105,20 @@ function fmtEok(won: number) {
 function fmtFx(val: number, code: string) {
   if (!val) return '-'
   return `${code.toUpperCase()} ${Math.round(val).toLocaleString()}`
+}
+
+/** 통화별 총 보유액 + 운용자금 외화가 있으면 "(운전 A + 운용 B)" 로 내역 병기 */
+function fxNativeSub(n: { op: Record<string, number>; inv: Record<string, number>; total: Record<string, number> }) {
+  return Object.entries(n.total)
+    .filter(([, a]) => a > 0)
+    .map(([c, a]) => {
+      const iv = n.inv[c] ?? 0
+      const base = fmtFx(a, c)
+      return iv > 0
+        ? `${base} (운전 ${Math.round(n.op[c] ?? 0).toLocaleString()} + 운용 ${Math.round(iv).toLocaleString()})`
+        : base
+    })
+    .join(' · ')
 }
 
 // ── 범례 커스텀 ──
@@ -90,6 +155,8 @@ export default function PolicyKpiTab({ company }: Props) {
 
   const [dailyHistory, setDailyHistory]     = useState<DailyRow[]>([])
   const [allBonds, setAllBonds]             = useState<InvRow[]>([])
+  // 운용자금 외화(비국채) — 외화정기예금 등. 환율 노출은 보유 형태와 무관하므로 FX 분석에 포함해야 함
+  const [fxInvests, setFxInvests]           = useState<InvRow[]>([])
   const [allDecisions, setAllDecisions]     = useState<PolicyDecision[]>([])
   const [loadingData, setLoadingData]       = useState(false)
 
@@ -111,10 +178,12 @@ export default function PolicyKpiTab({ company }: Props) {
         order: 'date.asc',
         limit: 400,
       }),
-      restSelect<InvRow>('investments', {
-        match: { company, product: '국채' },
-        order: 'start.asc',
-        limit: 200,
+      // 국채 + 외화 운용자금을 한 번에 조회 후 클라이언트에서 분리
+      // (restSelect 의 match 는 eq 만 지원 → product/currency 부등호 조건은 여기서 처리)
+      restSelect<InvDbRow>('investments', {
+        match: { company },
+        order: 'start_date.asc',
+        limit: 500,
       }),
       restSelect<PolicyDecision>('policy_decisions', {
         match: { company },
@@ -123,7 +192,9 @@ export default function PolicyKpiTab({ company }: Props) {
       }),
     ]).then(([dr, ir, decr]) => {
       setDailyHistory(dr.data ?? [])
-      setAllBonds(ir.data ?? [])
+      const invs = (ir.data ?? []).map(invFromDb)
+      setAllBonds(latestBonds(invs.filter(r => r.product === '국채')))
+      setFxInvests(invs.filter(r => r.product !== '국채' && r.currency && r.currency !== 'KRW'))
       setAllDecisions(decr.data ?? [])
     }).finally(() => setLoadingData(false))
   }, [company])
@@ -165,32 +236,56 @@ export default function PolicyKpiTab({ company }: Props) {
     const baseRec    = dailyHistory.find(d => d.date >= (effectiveFxDate ?? '')) ?? dailyHistory[0]
     const currentRec = dailyHistory[dailyHistory.length - 1]
 
-    const rowKRW = (r: DailyRow) =>
-      fxToKRW(r.fx_usd, 'USD')
-      + fxToKRW(r.fx_eur, 'EUR')
-      + fxToKRW(r.fx_jpy, 'JPY')
-      + fxToKRW(r.fx_gbp, 'GBP')
-      + fxToKRW(r.fx_cny, 'CNY')
+    const confLevel = Number(params.get('fx_conf_level') ?? 95)
+    const z = Z_MAP[confLevel] ?? 1.6503
+
+    const STD: Record<string, number> = {
+      USD: Number(params.get('fx_std_usd') ?? 0.08),
+      EUR: Number(params.get('fx_std_eur') ?? 0.09),
+      JPY: Number(params.get('fx_std_jpy') ?? 0.10),
+      GBP: Number(params.get('fx_std_gbp') ?? 0.09),
+      CNY: Number(params.get('fx_std_cny') ?? 0.05),
+    }
+
+    // 특정 시점에 열려 있던 운용 외화(비국채)의 통화별 네이티브 합계.
+    // closed_date 가 있으면 그 값으로, 없으면 active 플래그로 판별
+    // (closed_date 는 세션19차 신규 컬럼이라 이전 종료 건은 값이 없음 — CashflowChart 와 동일 규칙)
+    const fxInvestAt = (date: string): Record<string, number> => {
+      const m: Record<string, number> = {}
+      for (const iv of fxInvests) {
+        if (iv.start && iv.start > date) continue                       // 아직 취득 전
+        const open = iv.closedDate ? iv.closedDate > date : iv.active    // 그 시점에 보유 중이었나
+        if (!open) continue
+        m[iv.currency] = (m[iv.currency] ?? 0) + (iv.amount || 0)
+      }
+      return m
+    }
+
+    // 해당 일자의 통화별 총 외화 = 운전자금(daily.fx_*) + 운용자금 외화
+    const nativeAt = (r: DailyRow) => {
+      const op: Record<string, number> = {
+        USD: r.fx_usd ?? 0, EUR: r.fx_eur ?? 0, JPY: r.fx_jpy ?? 0,
+        GBP: r.fx_gbp ?? 0, CNY: r.fx_cny ?? 0,
+      }
+      const inv = fxInvestAt(r.date)
+      const total: Record<string, number> = { ...op }
+      for (const [c, a] of Object.entries(inv)) total[c] = (total[c] ?? 0) + a
+      return { op, inv, total }
+    }
+
+    const sumKRW = (m: Record<string, number>) =>
+      Object.entries(m).reduce((s, [c, a]) => s + fxToKRW(a, c as FxCode), 0)
+
+    const rowKRW     = (r: DailyRow) => sumKRW(nativeAt(r).total)
+    const rowMaxLoss = (r: DailyRow) =>
+      Object.entries(nativeAt(r).total)
+        .reduce((s, [c, a]) => s + fxToKRW(a, c as FxCode) * (STD[c] ?? 0), 0) * z
 
     const baseKRW    = rowKRW(baseRec)
     const currentKRW = rowKRW(currentRec)
 
-    const confLevel = Number(params.get('fx_conf_level') ?? 95)
-    const z = Z_MAP[confLevel] ?? 1.6503
-
-    const stdUsd = Number(params.get('fx_std_usd') ?? 0.08)
-    const stdEur = Number(params.get('fx_std_eur') ?? 0.09)
-    const stdJpy = Number(params.get('fx_std_jpy') ?? 0.10)
-    const stdGbp = Number(params.get('fx_std_gbp') ?? 0.09)
-    const stdCny = Number(params.get('fx_std_cny') ?? 0.05)
-
-    const rowMaxLoss = (r: DailyRow) => (
-      fxToKRW(r.fx_usd, 'USD') * stdUsd
-      + fxToKRW(r.fx_eur, 'EUR') * stdEur
-      + fxToKRW(r.fx_jpy, 'JPY') * stdJpy
-      + fxToKRW(r.fx_gbp, 'GBP') * stdGbp
-      + fxToKRW(r.fx_cny, 'CNY') * stdCny
-    ) * z
+    const baseNative    = nativeAt(baseRec)
+    const currentNative = nativeAt(currentRec)
 
     const maxLossBase    = rowMaxLoss(baseRec)
     const maxLossCurrent = rowMaxLoss(currentRec)
@@ -214,10 +309,12 @@ export default function PolicyKpiTab({ company }: Props) {
 
     return {
       baseRec, currentRec, baseKRW, currentKRW,
+      baseNative, currentNative,
       maxLossBase, maxLossCurrent, saving, savingPct,
       confLevel, trend,
     }
-  }, [dailyHistory, fx.rates, params, effectiveFxDate])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dailyHistory, fxInvests, fx.rates, params, effectiveFxDate])
 
   // ── 국채 Exit 분석 ──
   const bondAnalysis = useMemo(() => {
@@ -319,20 +416,12 @@ export default function PolicyKpiTab({ company }: Props) {
               <CmpCard
                 label={`환전 전 외화 (${effectiveFxDate})`}
                 value={fmtEok(fxAnalysis.baseKRW)}
-                sub={[
-                  fxAnalysis.baseRec.fx_usd && fmtFx(fxAnalysis.baseRec.fx_usd, 'USD'),
-                  fxAnalysis.baseRec.fx_eur && fmtFx(fxAnalysis.baseRec.fx_eur, 'EUR'),
-                  fxAnalysis.baseRec.fx_jpy && fmtFx(fxAnalysis.baseRec.fx_jpy, 'JPY'),
-                ].filter(Boolean).join(' · ')}
+                sub={fxNativeSub(fxAnalysis.baseNative)}
               />
               <CmpCard
                 label={`현재 외화 (${fxAnalysis.currentRec?.date})`}
                 value={fmtEok(fxAnalysis.currentKRW)}
-                sub={[
-                  fxAnalysis.currentRec?.fx_usd && fmtFx(fxAnalysis.currentRec.fx_usd, 'USD'),
-                  fxAnalysis.currentRec?.fx_eur && fmtFx(fxAnalysis.currentRec.fx_eur, 'EUR'),
-                  fxAnalysis.currentRec?.fx_jpy && fmtFx(fxAnalysis.currentRec.fx_jpy, 'JPY'),
-                ].filter(Boolean).join(' · ')}
+                sub={fxNativeSub(fxAnalysis.currentNative)}
               />
               <CmpCard
                 label={`환전 전 최대 예상 손실 (Z${fxAnalysis.confLevel})`}
