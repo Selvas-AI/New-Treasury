@@ -11,7 +11,9 @@ export default tseslint.config(
   // "No tsconfigRootDir was set" 파싱 에러로 lint 전체가 실패함.
   // sites-mockup: UI/UX 참조용 목업(별도 Next/vinext 프로젝트, 자체 tsconfig·빌드산출 포함).
   // 앱 소스가 아니고 자체 규칙을 따르므로 lint 대상에서 제외한다.
-  globalIgnores(['dist', '.claude/**', 'sites-mockup/**']),
+  // scripts: 브라우저가 아닌 Node(tsx)로 직접 실행하는 개발용 스크립트.
+  // 앱 번들에 포함되지 않고 globals.browser 전제도 맞지 않으므로 제외한다.
+  globalIgnores(['dist', '.claude/**', 'sites-mockup/**', 'scripts/**']),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [

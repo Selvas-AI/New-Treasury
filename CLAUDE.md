@@ -1293,6 +1293,7 @@ baf8ef9 fix: 투자 집행 연동 저장 실패 수정 + 자산 구분(운용/�
 - **`docs/db/fx_trade_history.sql`** — 외화매매거래 이력 (이전 세션)
 - **`docs/db/user_password_policy.sql`** ⭐ — `treasury_users.must_change_password` 컬럼 (세션18차 비밀번호 정책). **실행 필요**. 미실행 시 마스터의 "비번초기화" 버튼은 Auth 비밀번호는 바꾸지만 강제변경 플래그 갱신이 실패(컬럼 없음) — Edge Function은 500 반환.
 - **`docs/db/cashflow_plan_items.sql`** ⭐ — `cashflow_plan_items` 테이블 (세션19차 주간예측 항목별 입력). **실행 필요**. 미실행 시 주간예측 탭 "+ 추가"가 `Could not find the table 'public.cashflow_plan_items'` 에러로 실패 (앱 크래시는 없음, 안내 메시지만 표시).
+- **`docs/db/fx_rate_history.sql`** ⭐ — 일별 환율 이력 테이블 (세션21차 환율 국면 판정·동적 헷지 시뮬레이터 Phase 1). **실행 필요**. 미실행 시 백필/조회가 테이블 부재로 실패(앱 크래시는 없음). ⚠ 함께 필요: ① ECOS_API_KEY 로테이션 ② `Code.gs` 재배포(`?type=fxhistory` 신규 라우트 + `fetchEcosRates_` 날짜 반환 변경).
 - **`docs/db/closed_date_migration.sql`** ⭐⭐ — `loans`/`investments.closed_date` 컬럼 (세션19차 상환 후 과거 이력 소급변경 버그 fix). **실행 완료** (세션19차 중 사용자 확인).
 - **`docs/db/policy_decision_rules_migration.sql`** ⭐ — `policy_decisions.linked_metric`/`target_operator`/`target_value` 컬럼 (세션19차 정책 이행 통제 Phase 1). **실행 완료** (세션19차 중 사용자 확인, 대시보드/자금일보 자동 노출까지 end-to-end 검증 완료).
 - **`docs/db/fx_sell_order_deadline_migration.sql`** ⭐ — `fx_trade_history.due_date`/`order_type` 컬럼 (세션19차 정책 이행 통제 Phase 3, 외화 매각 지시). **실행 완료** (세션19차 중 사용자 확인, 재량 매각 지시 등록→완료 처리까지 end-to-end 검증 완료).

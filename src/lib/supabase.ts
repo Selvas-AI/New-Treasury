@@ -229,13 +229,21 @@ export async function restGet<T = unknown>(
  *   - match: col=eq.value 필터 (예: { company: '...', active: true })
  *   - order: 'date.desc' / 'maturity.asc' 형식 (PostgREST order 구문)
  *   - limit: 최대 행 수
+ *   - filters: eq 이외의 원시 PostgREST 절 (예: ['rate_date=gte.2020-01-01'])
+ *       범위 조회용. 값에 특수문자가 있으면 호출부에서 인코딩할 것.
  */
 export async function restSelect<T = unknown>(
   table: string,
-  opts: { match?: Record<string, string | number | boolean>; order?: string; limit?: number } = {},
+  opts: {
+    match?: Record<string, string | number | boolean>
+    order?: string
+    limit?: number
+    filters?: string[]
+  } = {},
 ): Promise<RestResult<T>> {
   const parts: string[] = ['select=*']
   if (opts.match && Object.keys(opts.match).length) parts.push(eqQuery(opts.match))
+  if (opts.filters?.length) parts.push(...opts.filters)
   if (opts.order) parts.push(`order=${encodeURIComponent(opts.order)}`)
   if (opts.limit != null) parts.push(`limit=${opts.limit}`)
   const url = `${REST_URL}/${table}?${parts.join('&')}`

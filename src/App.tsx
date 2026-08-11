@@ -23,6 +23,7 @@ import OrgChartPage from './pages/admin/OrgChartPage'
 import DailyReportListPage from './pages/DailyReportListPage'
 import AuditLogPage from './pages/AuditLogPage'
 import FxTradeHistoryPage from './pages/FxTradeHistoryPage'
+import FxRegimePage from './pages/FxRegimePage'
 import { useHolidays } from './hooks/useHolidays'
 
 /**
@@ -96,6 +97,12 @@ export default function App() {
             {/* 환율 */}
             <Route path="/fx"           element={<FxPage />} />
             <Route path="/fx/:currency" element={<FxPage />} />
+
+            {/* 환율 국면 판정 — 개발 전용.
+                실데이터 검증 + 정책회의 보고를 마친 뒤 이 게이트를 제거해 프로덕션에 노출한다.
+                (docs/기획/환율국면_동적헷지_시뮬레이터.md) */}
+            {import.meta.env.DEV && <Route path="/fx-regime"          element={<FxRegimePage />} />}
+            {import.meta.env.DEV && <Route path="/fx-regime/:company" element={<FxRegimePage />} />}
 
             {/* 자금정책 */}
             <Route path="/policy"          element={<PolicyPage />} />

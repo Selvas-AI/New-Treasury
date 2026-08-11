@@ -282,3 +282,66 @@ export async function fetchFxStdDev(months = 12): Promise<FxStdDevResult> {
     source: raw.source ?? 'ecos.bok.or.kr',
   }
 }
+
+// ── FX 일별 환율 이력 (환율 국면 판정용 시계열) ────────────────────────
+
+export interface FxHistoryPoint { date: string; rate: number }
+
+export interface FxHistoryResult {
+  currency:  string
+  from:      string
+  to:        string
+  rates:     FxHistoryPoint[]
+  /** ECOS 페이지 상한(500건) 도달 — 구간이 잘렸을 가능성 */
+  truncated: boolean
+}
+
+interface GasFxHistoryRaw {
+  success:   boolean
+  currency?: string
+  from?:     string
+  to?:       string
+  count?:    number
+  truncated?: boolean
+  rates?:    FxHistoryPoint[]
+  error?:    string
+  guide?:    string
+}
+
+// 단일 통화 · 단일 연도 조회라 fxstddev(4통화 순차, ~200초)보다 훨씬 가볍다.
+// 그래도 ECOS 자체가 느릴 수 있어 60초로 여유를 둔다.
+const FXHISTORY_TIMEOUT_MS = 60000
+
+/**
+ * GAS → ECOS 경유 일별 환율 이력 조회
+ *
+ * ⚠ ECOS는 1회 요청당 최대 500건을 반환한다. 일별 데이터는 연 약 250건이므로
+ *   **반드시 연 단위로 쪼개어** 호출할 것 (2년 초과 요청 시 뒷 구간이 조용히 잘림).
+ *   → 여러 해를 받으려면 useFxHistory 의 backfill() 을 사용한다.
+ *
+ * @param currency USD | EUR | JPY | GBP
+ * @param from     YYYYMMDD
+ * @param to       YYYYMMDD
+ */
+export async function fetchFxHistory(
+  currency: string,
+  from: string,
+  to: string,
+): Promise<FxHistoryResult> {
+  const raw = await gasGet<GasFxHistoryRaw>(
+    { type: 'fxhistory', currency, from, to },
+    FXHISTORY_TIMEOUT_MS,
+    false,
+  )
+  if (!raw.success) {
+    const guide = raw.guide ? ` (${raw.guide})` : ''
+    throw new Error((raw.error ?? '환율 이력 조회 실패') + guide)
+  }
+  return {
+    currency:  raw.currency ?? currency,
+    from:      raw.from ?? from,
+    to:        raw.to ?? to,
+    rates:     raw.rates ?? [],
+    truncated: raw.truncated ?? false,
+  }
+}

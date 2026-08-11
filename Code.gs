@@ -30,6 +30,9 @@ function doGet(e) {
     // ── FX 표준편차 자동계산: ?type=fxstddev ──────────────────────
     if (type === 'fxstddev') return calcFxStdDevFromEcos_(e);
 
+    // ── FX 일별 환율 이력: ?type=fxhistory&currency=USD&from=YYYYMMDD&to=YYYYMMDD ──
+    if (type === 'fxhistory') return fetchFxHistoryFromEcos_(e);
+
     // ── 공휴일 조회: ?type=holidays&year=YYYY ─────────────────────
     if (type === 'holidays') return fetchKoreanHolidays_(e);
 
@@ -902,7 +905,9 @@ function calcFxStdDevFromEcos_(e) {
   for (const [currency, code] of Object.entries(ECOS_CURRENCY_CODES)) {
     Utilities.sleep(300); // ECOS rate limit 방지 (3분 300회 한도)
     try {
-      const prices = fetchEcosRates_(apiKey, code, fromStr, toStr);
+      // fetchEcosRates_ 는 { date, rate } 배열을 반환 — 표준편차 계산은 값만 필요
+      const prices = fetchEcosRates_(apiKey, code, fromStr, toStr)
+        .map(function(r) { return r.rate; });
       if (!prices || prices.length < 10) {
         const msg = '데이터 부족 (' + (prices ? prices.length : 0) + '건)';
         Logger.log(currency + ': ' + msg);
@@ -1002,9 +1007,119 @@ function fetchEcosRates_(apiKey, itemCode, fromDate, toDate) {
   }
 
   const rows = (json.StatisticSearch || {}).row || [];
+  // ⚠ 과거엔 값(DATA_VALUE)만 반환하고 TIME(날짜)을 버렸다.
+  //   표준편차 계산에는 날짜가 불필요해 문제가 없었으나, 시계열 저장(fx_rate_history)에는
+  //   날짜가 필수이므로 { date: 'YYYY-MM-DD', rate: number } 형태로 반환하도록 변경.
+  //   → 숫자 배열이 필요한 호출부는 .map(r => r.rate) 로 변환해 사용할 것.
   return rows
-    .map(function(r) { return parseFloat(r.DATA_VALUE); })
-    .filter(function(v) { return !isNaN(v) && v > 0; });
+    .map(function(r) {
+      const t = String(r.TIME || '');            // ECOS 일별 TIME 형식: YYYYMMDD
+      const v = parseFloat(r.DATA_VALUE);
+      if (t.length !== 8 || isNaN(v) || v <= 0) return null;
+      return {
+        date: t.slice(0, 4) + '-' + t.slice(4, 6) + '-' + t.slice(6, 8),
+        rate: v
+      };
+    })
+    .filter(function(x) { return x !== null; });
+}
+
+// ══════════════════════════════════════════════════════════════════════
+//  FX 일별 환율 이력 조회 — 한국은행 ECOS API (환율 국면 판정용 시계열)
+//
+//  호출: ?type=fxhistory&currency=USD&from=YYYYMMDD&to=YYYYMMDD
+//    currency : USD | EUR | JPY | GBP  (ECOS_CURRENCY_CODES 키)
+//    from/to  : 생략 시 최근 1년
+//
+//  ⚠ ECOS는 1회 요청당 최대 500건을 반환한다. 일별 데이터는 연 약 250건이므로
+//    호출부(클라이언트)가 반드시 **연 단위로 쪼개어** 호출해야 한다.
+//    한 번에 2년을 초과해 요청하면 뒷 구간이 조용히 잘린다 → truncated: true 로 경고한다.
+//
+//  ⚠ JPY는 ECOS 기준 "원/100엔"이다. 저장·표시 시 단위 변환에 주의할 것.
+//
+//  응답:
+//  {
+//    "success": true,
+//    "currency": "USD",
+//    "from": "20250101", "to": "20251231",
+//    "count": 248,
+//    "truncated": false,
+//    "rates": [ { "date": "2025-01-02", "rate": 1472.5 }, ... ],
+//    "source": "ecos.bok.or.kr"
+//  }
+// ══════════════════════════════════════════════════════════════════════
+function fetchFxHistoryFromEcos_(e) {
+  const apiKey = PropertiesService.getScriptProperties().getProperty('ECOS_API_KEY');
+  if (!apiKey) {
+    return createResponse({
+      success: false,
+      error: 'ECOS_API_KEY가 설정되지 않았습니다. GAS 스크립트 속성에 ECOS_API_KEY를 추가하세요.',
+      guide: 'https://ecos.bok.or.kr/api/#/'
+    }, 503);
+  }
+
+  const currency = (e.parameter.currency || 'USD').trim().toUpperCase();
+  const code = ECOS_CURRENCY_CODES[currency];
+  if (!code) {
+    return createResponse({
+      success: false,
+      error: '지원하지 않는 통화: ' + currency,
+      supported: Object.keys(ECOS_CURRENCY_CODES)
+    }, 400);
+  }
+
+  // 기본 구간: 최근 1년 (당일은 미게재인 경우가 많아 전일까지)
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const defFrom = new Date(yesterday);
+  defFrom.setFullYear(defFrom.getFullYear() - 1);
+
+  const toStr   = (e.parameter.to   || '').trim() || formatDateEcos_(yesterday);
+  const fromStr = (e.parameter.from || '').trim() || formatDateEcos_(defFrom);
+
+  if (!/^\d{8}$/.test(fromStr) || !/^\d{8}$/.test(toStr)) {
+    return createResponse({ success: false, error: 'from/to 는 YYYYMMDD 형식이어야 합니다.' }, 400);
+  }
+
+  Logger.log('ECOS 환율 이력: ' + currency + ' ' + fromStr + ' ~ ' + toStr);
+
+  try {
+    const rates = fetchEcosRates_(apiKey, code, fromStr, toStr);
+    return createResponse({
+      success:   true,
+      currency:  currency,
+      from:      fromStr,
+      to:        toStr,
+      count:     rates.length,
+      // 500건은 ECOS 페이지 상한 = 잘렸을 가능성이 높다는 신호
+      truncated: rates.length >= 500,
+      rates:     rates,
+      source:    'ecos.bok.or.kr'
+    });
+  } catch (err) {
+    // fetchEcosRates_ 내부에서 API 키는 이미 마스킹되어 던져진다
+    return createResponse({
+      success:  false,
+      currency: currency,
+      error:    err.toString()
+    }, 502);
+  }
+}
+
+/**
+ * GAS 에디터에서 직접 실행하여 환율 이력 조회 테스트
+ */
+function testFxHistory() {
+  const res = fetchFxHistoryFromEcos_({ parameter: { currency: 'USD' } });
+  const json = JSON.parse(res.getContent());
+  Logger.log('success: ' + json.success + ' / count: ' + json.count + ' / truncated: ' + json.truncated);
+  if (json.rates && json.rates.length) {
+    Logger.log('첫 건: ' + JSON.stringify(json.rates[0]));
+    Logger.log('끝 건: ' + JSON.stringify(json.rates[json.rates.length - 1]));
+  } else {
+    Logger.log('오류: ' + json.error);
+  }
 }
 
 /**
@@ -1214,7 +1329,8 @@ function testFxStdDev() {
     // Rate limit 방지: 통화 간 0.5초 대기
     Utilities.sleep(500);
     try {
-      const prices = fetchEcosRates_(apiKey, code, fromStr, toStr);
+      const prices = fetchEcosRates_(apiKey, code, fromStr, toStr)
+        .map(function(r) { return r.rate; });
       Logger.log(currency + '(' + code + '): ' + prices.length + '건 조회됨');
 
       if (prices.length >= 2) {
