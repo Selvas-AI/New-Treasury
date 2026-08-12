@@ -42,8 +42,12 @@ describe('returnBadgeClass', () => {
 
 // ─── isBusinessDay ───────────────────────────────────────
 describe('isBusinessDay', () => {
-  it('월요일 → 영업일', () => expect(isBusinessDay('2026-05-25')).toBe(true))
+  // ⚠ 평일 케이스 날짜를 고를 때는 공휴일·대체공휴일 목록(bizDay.ts)을 반드시 확인할 것.
+  //   기존에 쓰던 2026-05-25 는 부처님오신날(5/24 일요일)의 대체공휴일이라
+  //   "평범한 월요일"이 아니었고, 그래서 이 테스트가 계속 실패하고 있었다.
+  it('월요일 → 영업일', () => expect(isBusinessDay('2026-05-18')).toBe(true))
   it('토요일 → 비영업일', () => expect(isBusinessDay('2026-05-23')).toBe(false))
+  it('대체공휴일(부처님오신날, 월) → 비영업일', () => expect(isBusinessDay('2026-05-25')).toBe(false))
   it('공휴일(삼일절) → 비영업일', () => expect(isBusinessDay('2026-03-01')).toBe(false))
   it('2027 추석 → 비영업일', () => expect(isBusinessDay('2027-09-22')).toBe(false))
   it('2028 신정 대체 → 비영업일', () => expect(isBusinessDay('2028-01-03')).toBe(false))

@@ -1,5 +1,5 @@
 /**
- * fxBacktest.ts — 환율 국면 프로토콜 백테스트 (순수 함수)
+ * fxBacktest.ts — 외화 순유입 구조의 환전 타이밍 백테스트 (순수 함수)
  *
  * 세션21차 신규. docs/기획/환율국면_동적헷지_시뮬레이터.md Phase 5
  *
@@ -11,30 +11,9 @@
  *    각 시점에서 series.slice(0, i + 1) 만 넘긴다. 전체 배열을 넘기면 미래를 보게 되고,
  *    백테스트 성적이 실제로는 달성 불가능한 수치로 부풀려진다.
  *
- * 모델:
- *   포트폴리오 = 원화현금(KRW) + 외화(USD). 총자산(원화환산) = krw + usd × 환율.
- *   목표 비율은 총자산 대비 외화 평가액 비중을 뜻한다.
- *   벤치마크는 "아무것도 안 함"(Buy & Hold) — 초기 비중을 그대로 유지하며 환율만 반영된다.
- *
- * ⛔ [중대 한계] 이 모델은 **외화 순수입(수출) 구조에 맞지 않는다.**
- *   여기서는 "고정된 자금 풀을 목표 비중으로 리밸런싱"한다고 가정하므로,
- *   비중이 목표에 미달하면 **외화를 매수**한다. 그러나 실측 결과 이 회사는
- *   fx_trade_history 12건이 전부 sell 이고 매수 이력이 0건이며,
- *   매달 약 3.0M USD 가 자동으로 유입된다(fxRegime.DEFAULT_TARGETS 주석의 실측 근거 참조).
- *
- *   그 결과 2026-08-11 실행분에서 하지도 않을 매수가 다수 생성되어
- *   "밴드 무시 시 −2.3억, 69회 거래" 같은 왜곡된 성과가 나왔다. 이 수치는 신뢰할 수 없다.
- *
- *   순수입 구조에 맞는 모델은 다음이어야 한다:
- *     · 매기 외화가 외생적으로 유입된다(월 유입액을 입력받음)
- *     · 의사결정은 매수/매도가 아니라 **"이번에 들어온 외화를 지금 환전할지 미룰지"**
- *     · 벤치마크는 "고정 비중 유지"가 아니라 ①즉시 전액 환전 ②전혀 환전 안 함(계속 누적)
- *   → 재설계 전까지 이 백테스트의 손익 수치를 정책 근거로 인용하지 말 것.
- *
- * 한계(의도적으로 단순화한 부분):
- *   - 이자(원화 예금금리 vs 외화 예금금리) 미반영. 국면 판정의 효과만 분리해 보기 위함.
- *   - 실현 환차손익은 **가중평균법**. FIFO 는 별도 원장 기획(외화원장_FIFO_가중평균.md) 소관.
- *   - 총자산은 매매 외 유입/유출이 없다고 가정(운전자본 변동 미반영).
+ * 매 영업일 월 유입액/20 만큼 외화가 외생적으로 들어오며, 점검일에는 쌓인
+ * 외화를 환전할지만 판단한다. 목표보다 외화가 적더라도 매수하지 않는다.
+ * 벤치마크는 ① 결제 버퍼 외 즉시 전액 환전, ② 전혀 환전하지 않고 누적이다.
  */
 import {
   evaluateRegime,
@@ -42,17 +21,20 @@ import {
   type RegimeSeriesPoint,
   type RegimeCode,
 } from './fxRegime'
+import { availableAmount, consumeFifoLots, unrealizedPnlKRW, weightedBookRate, type FxLot } from './fxLots'
 
 export interface BacktestInput {
   /** 오름차순 일별 환율 (원/외화 1단위) */
   series: RegimeSeriesPoint[]
   /** 시뮬레이션 시작일 YYYY-MM-DD. 이 날짜 이전 구간은 지표 워밍업에만 쓰인다 */
   startDate: string
-  /** 시작 시점 총자산 (원화환산) */
+  /** 시작 시점 가용자금 총액 (외화 보유액 포함) */
   initialTotalKRW: number
-  /** 시작 시점 외화 비중 (0~1) */
-  initialFxRatio: number
-  /** 향후 결제 예정 외화 (외화 단위) — 목표 비율의 하한을 만든다 */
+  /** 시작 시점 외화 보유액 (외화 단위) */
+  initialFxHolding: number
+  /** 월 외화 순유입액 (외화 단위, 20영업일로 일할) */
+  monthlyInflowFx: number
+  /** 항상 남겨야 할 결제 버퍼 (외화 단위) */
   fxPayableFx: number
   /** 정책 밴드 (0~1). null=제약 없음 */
   policyMinRatio: number | null
@@ -62,117 +44,196 @@ export interface BacktestInput {
   checkEveryDays?: number
   /** 왕복 거래비용 (bp). 기본 10bp = 0.1% */
   costBps?: number
+  /**
+   * 평균 취득환율. 지정하면 환전마다 실현손익을 이익/손실로 나눠 집계한다.
+   * 순유입 구조라 유입분의 취득환율은 원래 유입 시점 환율이지만,
+   * 원장 연동 전까지는 단일 가중평균값으로 근사한다.
+   */
+  avgAcquisitionRate?: number | null
+  /** 미래 시뮬레이션용 현재 실제 원장 로트 */
+  initialLots?: FxLot[]
+  /** 최대 미환전 노출 한도 (원화). 넘으면 Level 과 무관하게 환전 */
+  maxExposureKRW?: number | null
 }
 
 export interface BacktestTrade {
   date:      string
   rate:      number
   regime:    RegimeCode
-  /** + 매수 / − 매도 (외화 단위) */
-  amountFx:  number
-  /** 원화 기준 거래대금 (절대값) */
-  notionalKRW: number
-  costKRW:   number
-  /** 매도 시 실현 환차손익 (가중평균 취득환율 기준). 매수는 0 */
-  realizedPnlKRW: number
-  targetRatio:  number
-  beforeRatio:  number
+  convertedFx: number
+  realizedKRW: number
+  costKRW: number
+  targetRatio: number
+  beforeRatio: number
+  afterHoldingFx: number
+  /** 평균취득환율 대비 실현손익 (avgAcquisitionRate 미지정 시 null) */
+  realizedPnlKRW: number | null
+  /** FIFO로 실제 소진된 로트들의 수량가중 평균 원가 */
+  fifoConsumedRate: number | null
+  /** 거래 직후 남은 FIFO 장부환율 */
+  fifoRemainingBookRate: number | null
 }
 
 export interface BacktestPoint {
   date:      string
   rate:      number
-  /** 전략 총자산 (원화환산) */
-  strategy:  number
-  /** 아무것도 안 했을 때 총자산 */
-  buyHold:   number
-  fxRatio:   number
-  regime:    RegimeCode | null
+  strategyHoldingFx: number
+  strategyRealizedKRW: number
+  immediateRealizedKRW: number
+  neverHoldingFx: number
+  exposureKRW: number
+  regime: RegimeCode | null
+  /** 남아 있는 FIFO 로트의 장부환율 */
+  fifoBookRate: number | null
+  /** 남은 외화의 미실현 평가손익 */
+  fifoUnrealizedPnlKRW: number | null
+  /** FIFO 누적 실현손익 */
+  fifoCumulativeRealizedPnlKRW: number | null
+  /** 누적 실현손익 + 남은 외화 평가손익 */
+  fifoTotalPnlKRW: number | null
+  /** 시작 시점 고원가 개시 로트의 잔여량 */
+  openingLotRemainingFx: number | null
 }
 
 export interface BacktestResult {
   points: BacktestPoint[]
   trades: BacktestTrade[]
-  /** 전략 기말 총자산 */
-  finalStrategyKRW: number
-  /** Buy & Hold 기말 총자산 */
-  finalBuyHoldKRW:  number
-  /** 초과 성과 (전략 − B&H) */
-  excessKRW:        number
-  totalCostKRW:     number
-  realizedPnlKRW:   number
-  /** 최대 낙폭 (0~1) */
-  maxDrawdown:      number
-  buyHoldMaxDrawdown: number
-  tradeCount:       number
-  /** 판정에 필요한 표본이 모자라 건너뛴 점검 횟수 */
-  skippedChecks:    number
+  totalInflowFx: number
+  totalAvailableFx: number
+  convertedFx: number
+  totalRealizedKRW: number
+  weightedAverageRate: number | null
+  periodAverageRate: number
+  ratePremium: number | null
+  ratePremiumPct: number | null
+  endingHoldingFx: number
+  endingHoldingValueKRW: number
+  immediateRealizedKRW: number
+  immediateWeightedAverageRate: number | null
+  neverEndingHoldingFx: number
+  neverEndingValueKRW: number
+  totalCostKRW: number
+  maxExposureFx: number
+  maxExposureKRW: number
+  tradeCount: number
+  skippedChecks: number
+  /** 취득원가 대비 실현 이익 합계 (avgAcquisitionRate 지정 시) */
+  realizedGainKRW: number
+  /** 취득원가 대비 실현 손실 합계 (음수) */
+  realizedLossKRW: number
+  /** 취득원가 이하로 판 횟수 — 손실 실현이 몇 번 강제됐는지 */
+  belowCostTrades: number
+  /** 기말 FIFO 장부환율 */
+  endingFifoBookRate: number | null
+  /** 기말 미실현 평가손익 */
+  endingUnrealizedPnlKRW: number | null
+  /** 기말 누적 실현손익 + 미실현 평가손익 */
+  endingTotalPnlKRW: number | null
 }
 
 const EMPTY: BacktestResult = {
-  points: [], trades: [], finalStrategyKRW: 0, finalBuyHoldKRW: 0, excessKRW: 0,
-  totalCostKRW: 0, realizedPnlKRW: 0, maxDrawdown: 0, buyHoldMaxDrawdown: 0,
-  tradeCount: 0, skippedChecks: 0,
-}
-
-function maxDrawdownOf(values: number[]): number {
-  let peak = -Infinity
-  let mdd = 0
-  for (const v of values) {
-    if (v > peak) peak = v
-    if (peak > 0) {
-      const dd = (peak - v) / peak
-      if (dd > mdd) mdd = dd
-    }
-  }
-  return mdd
+  points: [], trades: [], totalInflowFx: 0, totalAvailableFx: 0, convertedFx: 0,
+  totalRealizedKRW: 0, weightedAverageRate: null, periodAverageRate: 0,
+  ratePremium: null, ratePremiumPct: null, endingHoldingFx: 0, endingHoldingValueKRW: 0,
+  immediateRealizedKRW: 0, immediateWeightedAverageRate: null,
+  neverEndingHoldingFx: 0, neverEndingValueKRW: 0, totalCostKRW: 0,
+  maxExposureFx: 0, maxExposureKRW: 0, tradeCount: 0, skippedChecks: 0,
+  realizedGainKRW: 0, realizedLossKRW: 0, belowCostTrades: 0,
+  endingFifoBookRate: null, endingUnrealizedPnlKRW: null, endingTotalPnlKRW: null,
 }
 
 export function runBacktest(input: BacktestInput): BacktestResult {
   const {
-    series, startDate, initialTotalKRW, initialFxRatio, fxPayableFx,
-    policyMinRatio, policyMaxRatio, protocol,
+    series, startDate, initialTotalKRW, initialFxHolding, monthlyInflowFx,
+    fxPayableFx, policyMinRatio, policyMaxRatio, protocol,
     checkEveryDays = 5, costBps = 10,
+    avgAcquisitionRate = null, initialLots = [], maxExposureKRW: maxExposureLimit = null,
   } = input
 
   const startIdx = series.findIndex(p => p.date >= startDate)
-  // 판정에는 최소 30개 표본이 필요하고, 변동성 Z-Score 까지 쓰려면 272개가 있어야 한다.
-  // 워밍업 구간이 없으면 시작 직후 판정이 전부 null 이 되어 의미 있는 비교가 불가능하다.
   if (startIdx < 30 || startIdx >= series.length - 1) return EMPTY
 
-  const cost = costBps / 10000
+  const costRate = Math.max(0, costBps) / 10_000
+  const dailyInflow = Math.max(0, monthlyInflowFx) / 20
+  const initialHolding = Math.max(0, initialFxHolding)
+  const buffer = Math.max(0, fxPayableFx)
   const r0 = series[startIdx].rate
+  const baseKrw = Math.max(0, initialTotalKRW - initialHolding * r0)
 
-  // 전략 포지션
-  let usd = (initialTotalKRW * initialFxRatio) / r0
-  let krw = initialTotalKRW * (1 - initialFxRatio)
-  let avgCostRate = r0                    // 가중평균 취득환율
-
-  // 벤치마크: 초기 상태 그대로 보유
-  const bhUsd = usd
-  const bhKrw = krw
-
-  const points: BacktestPoint[] = []
-  const trades: BacktestTrade[] = []
+  let holdingFx = initialHolding
+  let realizedKRW = 0
+  let convertedFx = 0
   let totalCost = 0
-  let realizedPnl = 0
+  let totalInflow = 0
   let skipped = 0
   let lastRegime: RegimeCode | null = null
+  let maxExposureFx = holdingFx
+  let maxExposureKRW = holdingFx * r0
+  let realizedGain = 0
+  let realizedLoss = 0
+  let belowCostTrades = 0
+  const fifoEnabled = initialLots.length > 0 || (avgAcquisitionRate != null && avgAcquisitionRate > 0)
+  let fifoLots: FxLot[] = initialLots.length > 0
+    ? initialLots.map(lot => ({ ...lot }))
+    : fifoEnabled && initialHolding > 0
+    ? [{ id: 'opening', company: 'simulation', currency: 'FX', acquiredDate: series[startIdx].date,
+        originalAmount: initialHolding, remainingAmount: initialHolding,
+        acqRate: avgAcquisitionRate ?? 0, accountType: 'demand_deposit', annualInterestRate: 0,
+        sourceType: 'opening' }]
+    : []
+  const openingLotIds = new Set(fifoLots.map(lot => lot.id))
+  let fifoCumulativeRealizedPnl = 0
+  // 시간 기반 강제 환전용 — 마지막 환전 이후 경과 영업일
+  let daysSinceLastConvert = 0
+
+  // 즉시 환전 벤치마크도 결제 버퍼는 보존한다.
+  let immediateHoldingFx = Math.min(initialHolding, buffer)
+  const initialImmediateSell = Math.max(0, initialHolding - immediateHoldingFx)
+  let immediateConvertedFx = initialImmediateSell
+  let immediateGross = initialImmediateSell * r0
+  let immediateRealized = immediateGross * (1 - costRate)
+  let neverHoldingFx = initialHolding
+  const points: BacktestPoint[] = []
+  const trades: BacktestTrade[] = []
 
   for (let i = startIdx; i < series.length; i++) {
     const { date, rate } = series[i]
-    const isCheckDay = (i - startIdx) % checkEveryDays === 0
 
+    // 시작일 다음 영업일부터 월 유입액을 20영업일로 일할해 쌓는다.
+    if (i > startIdx) {
+      holdingFx += dailyInflow
+      // 유입일 시장환율을 해당 신규 로트의 취득환율로 둔다.
+      if (fifoEnabled && dailyInflow > 0) fifoLots.push({
+        id: `inflow-${date}`, company: 'simulation', currency: 'FX', acquiredDate: date,
+        originalAmount: dailyInflow, remainingAmount: dailyInflow,
+        acqRate: rate, accountType: 'demand_deposit', annualInterestRate: 0, sourceType: 'manual',
+      })
+      neverHoldingFx += dailyInflow
+      totalInflow += dailyInflow
+
+      const bufferGap = Math.max(0, buffer - immediateHoldingFx)
+      const retained = Math.min(dailyInflow, bufferGap)
+      const sellFx = dailyInflow - retained
+      immediateHoldingFx += retained
+      immediateConvertedFx += sellFx
+      immediateGross += sellFx * rate
+      immediateRealized += sellFx * rate * (1 - costRate)
+    }
+
+    const isCheckDay = (i - startIdx) % Math.max(1, checkEveryDays) === 0
     if (isCheckDay) {
-      const totalKRW = krw + usd * rate
+      const totalKRW = baseKrw + realizedKRW + holdingFx * rate
       const sig = evaluateRegime(
-        series.slice(0, i + 1),          // ⚠ look-ahead 차단
+        series.slice(0, i + 1), // ⚠ look-ahead 차단
         {
           totalFundKRW:   totalKRW,
-          fxHoldingKRW:   usd * rate,
-          fxPayableKRW:   fxPayableFx * rate,
+          fxHoldingKRW:   holdingFx * rate,
+          fxPayableKRW:   buffer * rate,
           policyMinRatio,
           policyMaxRatio,
+          maxExposureKRW: maxExposureLimit,
+          daysSinceLastConvert,
+          avgAcquisitionRate: fifoEnabled ? weightedBookRate(fifoLots) : avgAcquisitionRate,
         },
         protocol,
       )
@@ -181,69 +242,94 @@ export function runBacktest(input: BacktestInput): BacktestResult {
         skipped++
       } else {
         lastRegime = sig.regime.code
-        if (sig.decision.actionRequired) {
-          const beforeRatio = (usd * rate) / totalKRW
-          const target = sig.decision.appliedTargetRatio
-          const desiredFxKRW = target * totalKRW
-          const deltaKRW = desiredFxKRW - usd * rate     // + 매수 / − 매도
+        const beforeRatio = totalKRW > 0 ? holdingFx * rate / totalKRW : 0
+        const desiredHoldingFx = Math.max(
+          buffer,
+          sig.decision.appliedTargetRatio * totalKRW / rate,
+        )
+        // 순유입 모델: 목표 미달이면 기다릴 뿐 매수하지 않는다.
+        const requestedSellFx = Math.max(0, holdingFx - desiredHoldingFx)
+        // 정기예금은 만기일까지 보유액에는 포함되지만 환전 가능액에는 포함하지 않는다.
+        const sellFx = fifoEnabled ? Math.min(requestedSellFx, availableAmount(fifoLots, date)) : requestedSellFx
+        if (sellFx > 0) {
+          const gross = sellFx * rate
+          const cost = gross * costRate
+          holdingFx -= sellFx
+          realizedKRW += gross - cost
+          convertedFx += sellFx
+          totalCost += cost
+          daysSinceLastConvert = 0
 
-          if (deltaKRW < 0) {
-            // 매도
-            const sellKRW = Math.min(-deltaKRW, usd * rate)
-            const sellFx  = sellKRW / rate
-            const c       = sellKRW * cost
-            const pnl     = sellFx * (rate - avgCostRate)   // 가중평균법 실현손익
-            usd -= sellFx
-            krw += sellKRW - c
-            totalCost   += c
-            realizedPnl += pnl
-            trades.push({
-              date, rate, regime: sig.regime.code, amountFx: -sellFx,
-              notionalKRW: sellKRW, costKRW: c, realizedPnlKRW: pnl,
-              targetRatio: target, beforeRatio,
-            })
-            // 매도는 평균단가를 바꾸지 않는다 (수량만 감소)
-          } else if (deltaKRW > 0) {
-            // 매수
-            const buyKRW = Math.min(deltaKRW, krw)
-            if (buyKRW > 0) {
-              const c     = buyKRW * cost
-              const buyFx = (buyKRW - c) / rate
-              // 가중평균 취득환율 갱신
-              avgCostRate = (usd * avgCostRate + buyFx * rate) / (usd + buyFx)
-              usd += buyFx
-              krw -= buyKRW
-              totalCost += c
-              trades.push({
-                date, rate, regime: sig.regime.code, amountFx: buyFx,
-                notionalKRW: buyKRW, costKRW: c, realizedPnlKRW: 0,
-                targetRatio: target, beforeRatio,
-              })
-            }
+          // 취득원가 대비 실현손익 — 실제 FIFO 순서로 오래된 로트부터 소진한다.
+          let pnl: number | null = null
+          let fifoConsumedRate: number | null = null
+          if (fifoEnabled) {
+            const fifo = consumeFifoLots(fifoLots, sellFx, rate, date)
+            fifoLots = fifo.nextLots
+            pnl = fifo.realizedPnlKRW
+            fifoConsumedRate = fifo.consumedBookRate
+            fifoCumulativeRealizedPnl += fifo.realizedPnlKRW
+            if (pnl >= 0) realizedGain += pnl
+            else { realizedLoss += pnl; belowCostTrades++ }
           }
+
+          trades.push({
+            date, rate, regime: sig.regime.code, convertedFx: sellFx,
+            realizedKRW: gross - cost, costKRW: cost,
+            targetRatio: sig.decision.appliedTargetRatio, beforeRatio,
+            afterHoldingFx: holdingFx, realizedPnlKRW: pnl,
+            fifoConsumedRate,
+            fifoRemainingBookRate: fifoEnabled ? weightedBookRate(fifoLots) : null,
+          })
         }
       }
     }
 
-    const strategy = krw + usd * rate
-    const buyHold  = bhKrw + bhUsd * rate
-    points.push({ date, rate, strategy, buyHold, fxRatio: (usd * rate) / strategy, regime: lastRegime })
+    daysSinceLastConvert++
+    maxExposureFx = Math.max(maxExposureFx, holdingFx)
+    maxExposureKRW = Math.max(maxExposureKRW, holdingFx * rate)
+    const fifoUnrealized = fifoEnabled ? unrealizedPnlKRW(fifoLots, rate) : null
+    points.push({
+      date, rate, strategyHoldingFx: holdingFx, strategyRealizedKRW: realizedKRW,
+      immediateRealizedKRW: immediateRealized, neverHoldingFx,
+      exposureKRW: holdingFx * rate, regime: lastRegime,
+      fifoBookRate: fifoEnabled ? weightedBookRate(fifoLots) : null,
+      fifoUnrealizedPnlKRW: fifoUnrealized,
+      fifoCumulativeRealizedPnlKRW: fifoEnabled ? fifoCumulativeRealizedPnl : null,
+      fifoTotalPnlKRW: fifoUnrealized == null ? null : fifoCumulativeRealizedPnl + fifoUnrealized,
+      openingLotRemainingFx: fifoEnabled
+        ? fifoLots.filter(lot => openingLotIds.has(lot.id)).reduce((sum, lot) => sum + lot.remainingAmount, 0)
+        : null,
+    })
   }
 
-  const finalStrategy = points[points.length - 1].strategy
-  const finalBuyHold  = points[points.length - 1].buyHold
+  const lastRate = series[series.length - 1].rate
+  const period = series.slice(startIdx)
+  const periodAverageRate = period.reduce((sum, p) => sum + p.rate, 0) / period.length
+  const weightedAverageRate = convertedFx > 0
+    ? (realizedKRW + totalCost) / convertedFx
+    : null
+  const ratePremium = weightedAverageRate == null ? null : weightedAverageRate - periodAverageRate
 
+  const endingFifoBookRate = fifoEnabled ? weightedBookRate(fifoLots) : null
+  const endingUnrealizedPnlKRW = fifoEnabled ? unrealizedPnlKRW(fifoLots, lastRate) : null
   return {
-    points,
-    trades,
-    finalStrategyKRW: finalStrategy,
-    finalBuyHoldKRW:  finalBuyHold,
-    excessKRW:        finalStrategy - finalBuyHold,
-    totalCostKRW:     totalCost,
-    realizedPnlKRW:   realizedPnl,
-    maxDrawdown:        maxDrawdownOf(points.map(p => p.strategy)),
-    buyHoldMaxDrawdown: maxDrawdownOf(points.map(p => p.buyHold)),
-    tradeCount:       trades.length,
-    skippedChecks:    skipped,
+    points, trades, totalInflowFx: totalInflow,
+    totalAvailableFx: initialHolding + totalInflow,
+    convertedFx, totalRealizedKRW: realizedKRW, weightedAverageRate, periodAverageRate,
+    ratePremium,
+    ratePremiumPct: ratePremium == null || periodAverageRate === 0 ? null : ratePremium / periodAverageRate,
+    endingHoldingFx: holdingFx, endingHoldingValueKRW: holdingFx * lastRate,
+    immediateRealizedKRW: immediateRealized,
+    immediateWeightedAverageRate: immediateConvertedFx > 0 ? immediateGross / immediateConvertedFx : null,
+    neverEndingHoldingFx: neverHoldingFx, neverEndingValueKRW: neverHoldingFx * lastRate,
+    totalCostKRW: totalCost, maxExposureFx, maxExposureKRW,
+    tradeCount: trades.length, skippedChecks: skipped,
+    realizedGainKRW: realizedGain, realizedLossKRW: realizedLoss, belowCostTrades,
+    endingFifoBookRate,
+    endingUnrealizedPnlKRW,
+    endingTotalPnlKRW: endingUnrealizedPnlKRW == null
+      ? null
+      : fifoCumulativeRealizedPnl + endingUnrealizedPnlKRW,
   }
 }

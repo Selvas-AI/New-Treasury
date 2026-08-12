@@ -1,0 +1,757 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta http-equiv="refresh" content="0; url=fx-regime-mechanism-briefing.html" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>환율 국면 판정 시스템 — 도입 브리핑 및 사용 설명서</title>
+<style>
+  :root{
+    --bg:#f5f7fa; --surface:#fff; --surface2:#f8fafc; --ink:#16233a; --muted:#68758c;
+    --line:#e3e8f0; --navy:#0f1c33; --blue:#2563eb; --red:#d93b45; --green:#12855f;
+    --amber:#c9800f; --shadow:0 6px 20px rgb(16 34 66/.07);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:"Pretendard","Malgun Gothic",-apple-system,system-ui,sans-serif;
+    line-height:1.7;font-size:16px}
+  .wrap{max-width:960px;margin:0 auto;padding:0 20px 80px}
+
+  header{background:var(--navy);color:#fff;padding:56px 20px 44px;margin-bottom:32px}
+  header .inner{max-width:960px;margin:0 auto}
+  header .kicker{font-size:13px;letter-spacing:.14em;color:#8fa6c8;margin:0 0 10px;text-transform:uppercase}
+  header h1{font-size:32px;margin:0 0 12px;line-height:1.3;letter-spacing:-.02em}
+  header p{margin:0;color:#c2d0e4;font-size:15px}
+
+  nav.toc{background:var(--surface);border:1px solid var(--line);border-radius:12px;
+    padding:16px 20px;margin-bottom:36px;box-shadow:var(--shadow)}
+  nav.toc strong{display:block;font-size:13px;color:var(--muted);margin-bottom:8px}
+  nav.toc ol{margin:0;padding-left:20px;columns:2;column-gap:32px}
+  nav.toc a{color:var(--ink);text-decoration:none}
+  nav.toc a:hover{color:var(--blue);text-decoration:underline}
+
+  section{background:var(--surface);border:1px solid var(--line);border-radius:14px;
+    padding:28px 30px;margin-bottom:24px;box-shadow:var(--shadow)}
+  h2{font-size:22px;margin:0 0 6px;letter-spacing:-.01em}
+  h2 .num{display:inline-block;min-width:30px;color:var(--blue);font-weight:800}
+  .lead{color:var(--muted);margin:0 0 20px;font-size:14px}
+  h3{font-size:16px;margin:26px 0 8px}
+  p{margin:0 0 12px}
+  ul,ol{margin:0 0 12px;padding-left:22px}
+  li{margin-bottom:6px}
+
+  .callout{border-left:4px solid var(--blue);background:var(--surface2);
+    padding:14px 16px;border-radius:0 8px 8px 0;margin:16px 0;font-size:14.5px}
+  .callout.warn{border-color:var(--amber)}
+  .callout.bad{border-color:var(--red)}
+  .callout.good{border-color:var(--green)}
+  .callout b{display:block;margin-bottom:4px}
+
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:14px}
+  th,td{border-bottom:1px solid var(--line);padding:9px 10px;text-align:left}
+  th{background:var(--surface2);font-size:12.5px;color:var(--muted);font-weight:600}
+  td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+  td.mid,th.mid{text-align:center}
+  .scroll{overflow-x:auto}
+
+  .pos{color:var(--green);font-weight:700}
+  .neg{color:var(--red);font-weight:700}
+  .best{background:#eef7f2}
+
+  .matrix td{text-align:center;font-variant-numeric:tabular-nums}
+  .matrix td:first-child{text-align:left;font-weight:600}
+  .cell-sell{background:#fdecec;color:var(--red);font-weight:700}
+  .cell-hold{background:#eaf1fd;color:var(--blue);font-weight:700}
+  .cell-mid{background:var(--surface2)}
+
+  .steps{counter-reset:s;list-style:none;padding:0}
+  .steps li{counter-increment:s;position:relative;padding-left:42px;margin-bottom:16px}
+  .steps li::before{content:counter(s);position:absolute;left:0;top:1px;width:28px;height:28px;
+    background:var(--navy);color:#fff;border-radius:50%;display:flex;align-items:center;
+    justify-content:center;font-size:13px;font-weight:700}
+  .steps b{display:block}
+
+  .kpi{display:flex;gap:14px;flex-wrap:wrap;margin:16px 0}
+  .kpi div{flex:1 1 170px;background:var(--surface2);border:1px solid var(--line);
+    border-radius:10px;padding:14px}
+  .kpi span{display:block;font-size:12px;color:var(--muted);margin-bottom:4px}
+  .kpi strong{font-size:22px;letter-spacing:-.02em}
+
+  dl.glossary{margin:0}
+  dl.glossary dt{font-weight:700;margin-top:14px}
+  dl.glossary dd{margin:2px 0 0;color:var(--muted);font-size:14.5px}
+
+  footer{color:var(--muted);font-size:13px;text-align:center;padding-top:16px}
+
+  @media print{
+    body{background:#fff;font-size:12pt}
+    header{padding:24px 0;background:#fff;color:#000;border-bottom:3px solid #000}
+    header .kicker,header p{color:#444}
+    nav.toc{display:none}
+    section{break-inside:avoid;box-shadow:none;border:1px solid #bbb;page-break-inside:avoid}
+    h2{page-break-after:avoid}
+  }
+  @media (max-width:640px){
+    nav.toc ol{columns:1}
+    header h1{font-size:24px}
+    section{padding:20px 18px}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="inner">
+    <p class="kicker">Selvas Treasury · 자금정책회의 보고자료</p>
+    <h1>환율 국면 판정 시스템<br />— 왜 필요하며, 어떻게 작동하는가</h1>
+    <p>2026년 8월 · 대상 통화 USD · 적용 법인 메디아나(우선)</p>
+  </div>
+</header>
+
+<div class="wrap">
+
+<nav class="toc">
+  <strong>목차</strong>
+  <ol>
+    <li><a href="#s1">왜 만들었는가 — 2026년 7월의 사고</a></li>
+    <li><a href="#s2">문제의 본질 — 기준의 부재</a></li>
+    <li><a href="#s3">이 시스템이 하는 일</a></li>
+    <li><a href="#s4">핵심 개념 세 가지</a></li>
+    <li><a href="#s5">정책 매트릭스 — 시스템의 심장</a></li>
+    <li><a href="#s6">폭주를 막는 안전장치</a></li>
+    <li><a href="#s7">검증 — 실제로 효과가 있는가</a></li>
+    <li><a href="#s8">이 시스템이 하지 않는 일</a></li>
+    <li><a href="#s9">사용 설명서</a></li>
+    <li><a href="#s10">도입에 필요한 의사결정</a></li>
+    <li><a href="#s11">용어 사전</a></li>
+  </ol>
+</nav>
+
+<!-- 1 -->
+<section id="s1">
+  <h2><span class="num">1</span>왜 만들었는가 — 2026년 7월의 사고</h2>
+  <p class="lead">이 시스템은 아이디어에서 출발하지 않았습니다. 실제로 발생한 손실에서 출발했습니다.</p>
+
+  <p>2026년 7월, 원/달러 환율이 <b>1,540원대</b>까지 올랐습니다. 정책회의에서 외화 매각이 결정됐지만
+  실행은 미뤄졌습니다. &ldquo;조금 더 오르면 팔자&rdquo;는 판단이었습니다. 이후 환율은 하락했고,
+  8월 현재 <b>1,415원</b> 수준입니다.</p>
+
+  <div class="callout bad">
+    <b>손실의 크기</b>
+    같은 100만 달러를 7월 고점 부근에 팔았다면 약 <b>1억 2천만원</b>을 더 받았습니다.
+    회사의 월 외화 유입이 약 300만 달러인 점을 감안하면, 한 달 유입분만으로도 수억원 규모의 차이가 발생합니다.
+  </div>
+
+  <p>사고 후 회고에서 확인된 사실은 이렇습니다.</p>
+  <ul>
+    <li>환율 정보가 <b>없어서</b> 못 판 것이 아닙니다. 모두가 1,540원인 것을 알고 있었습니다.</li>
+    <li>규정이 <b>없어서</b>도 아닙니다. 매각은 이미 의결되어 있었습니다.</li>
+    <li><b>&ldquo;지금이 팔 때인가&rdquo;를 판단할 정량적 기준이 없었습니다.</b> 그래서 판단이 개인의 감(感)에 맡겨졌고,
+      감은 언제나 &ldquo;조금 더&rdquo;를 원합니다.</li>
+  </ul>
+
+  <div class="callout">
+    <b>이 시스템의 목적</b>
+    사람의 판단력을 대체하려는 것이 아닙니다. <b>판단의 기준선을 문서가 아니라 화면에 띄워두어,
+    &ldquo;조금 더&rdquo;라는 감정이 개입할 여지를 줄이는 것</b>입니다.
+  </div>
+</section>
+
+<!-- 2 -->
+<section id="s2">
+  <h2><span class="num">2</span>문제의 본질 — 기준의 부재</h2>
+  <p class="lead">환율을 맞히는 것은 불가능합니다. 그러나 &ldquo;지금이 평소보다 비싼가&rdquo;는 판단할 수 있습니다.</p>
+
+  <p>이 구분이 이 시스템 전체의 출발점입니다. 우리는 환율을 예측하지 않습니다.
+  다만 <b>지금 가격이 회사에 유리한 수준인지</b>를 데이터로 판정할 뿐입니다.</p>
+
+  <p>회사의 구조가 이 판단을 특히 중요하게 만듭니다.</p>
+
+  <div class="scroll">
+  <table>
+    <thead><tr><th>항목</th><th class="num">값</th><th>의미</th></tr></thead>
+    <tbody>
+      <tr><td>월 외화 순유입</td><td class="num">약 300만 USD</td><td>수출대금이 계속 들어옴</td></tr>
+      <tr><td>외화 매매 이력</td><td class="num">매도 12건 / 매수 0건</td><td>외화를 <b>사지 않고 팔기만</b> 하는 구조</td></tr>
+      <tr><td>3.8개월간 보유 증가</td><td class="num">+742만 USD</td><td>400만 달러를 팔고도 재고가 늘어남</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="callout warn">
+    <b>구조가 만드는 압력</b>
+    외화는 <b>가만히 있어도 계속 쌓입니다</b>. 따라서 회사의 진짜 의사결정은
+    &ldquo;외화를 살까 팔까&rdquo;가 아니라 <b>&ldquo;쌓이는 외화를 언제 원화로 바꿀 것인가&rdquo;</b>입니다.
+    타이밍을 놓치면 손실이 아니라 <b>기회비용</b>이 쌓이고, 이는 장부에 드러나지 않아 더 위험합니다.
+  </div>
+</section>
+
+<!-- 3 -->
+<section id="s3">
+  <h2><span class="num">3</span>이 시스템이 하는 일</h2>
+  <p class="lead">데이터를 모으고 → 상태를 판정하고 → 목표를 제시합니다. 실행은 사람이 합니다.</p>
+
+  <ol class="steps">
+    <li><b>공식 환율을 매일 축적한다</b>
+      한국은행 ECOS의 매매기준율을 사용합니다. 회계·세무 기준과 같은 출처라 사후 정산에서 숫자가 어긋나지 않습니다.
+      현재 2022년부터 약 1,130영업일치가 쌓여 있습니다.</li>
+    <li><b>오늘의 상태를 판정한다</b>
+      추세(오르는가/내리는가), 변동성(출렁이는가), 수준(비싼가/싼가) 세 축으로 현재 국면을 분류합니다.</li>
+    <li><b>목표 보유 비중을 제시한다</b>
+      회사가 정한 정책 매트릭스에 따라 &ldquo;외화를 몇 % 들고 있어야 하는가&rdquo;를 계산하고,
+      현재 비중과의 차이를 금액으로 환산해 보여줍니다.</li>
+    <li><b>사람이 판단하고 실행한다</b>
+      시스템은 제안까지만 합니다. 실행은 기존 매각 지시 워크플로우(발의 → 승인 → 완료)를 그대로 거칩니다.</li>
+  </ol>
+</section>
+
+<!-- 4 -->
+<section id="s4">
+  <h2><span class="num">4</span>핵심 개념 세 가지</h2>
+  <p class="lead">이 세 가지만 이해하면 화면 전체를 읽을 수 있습니다.</p>
+
+  <h3>① 추세 — 어느 방향으로 가고 있는가</h3>
+  <p>환율이 오르는 중인지 내리는 중인지를 5단계(강한 상승 / 온건 상승 / 횡보 / 온건 하락 / 강한 하락)로 나눕니다.</p>
+  <p>주의할 점은 <b>&ldquo;얼마나 곧게 갔는가&rdquo;와 &ldquo;얼마나 많이 갔는가&rdquo;를 모두 확인</b>한다는 것입니다.
+  환율이 0.1원만 움직여도 한 방향이면 &ldquo;완벽한 추세&rdquo;로 보일 수 있기 때문에,
+  20일간 1.5% 이상 실제로 이동한 경우에만 추세로 인정합니다.
+  (원/달러의 20일 무작위 변동폭이 약 2%이므로, 그 미만은 노이즈로 봅니다.)</p>
+
+  <h3>② 변동성 — 얼마나 출렁이는가</h3>
+  <p>같은 하락이라도 조용히 흘러내리는 것과 급락과 반등을 반복하는 것은 대응이 달라야 합니다.
+  변동성이 큰 국면에서는 한 번에 몰아서 환전하지 않고 나누어 집행합니다.</p>
+
+  <h3>③ 수준 — 지금이 비싼가 싼가 <span style="color:var(--blue)">(가장 중요)</span></h3>
+  <p>추세와 수준은 <b>완전히 다른 축</b>입니다. 높은 가격에서 내릴 수도, 낮은 가격에서 내릴 수도 있습니다.
+  그런데 이 둘을 구분하지 않으면 심각한 오류가 발생합니다.</p>
+
+  <div class="callout bad">
+    <b>수준 개념이 없을 때 벌어지는 일</b>
+    추세만 보는 시스템은 &ldquo;오르는 중이니 더 들고 있자, 내리는 중이니 빨리 팔자&rdquo;고 판단합니다.
+    결과적으로 <b>비쌀 때 안 팔고, 쌀 때 팝니다.</b> 정확히 2026년 7월에 벌어진 일입니다.
+  </div>
+
+  <p>&ldquo;비싸다/싸다&rdquo;를 말하려면 기준점이 필요합니다. 이 기준점을 <b>앵커(anchor)</b>라 부릅니다.</p>
+
+  <div class="callout">
+    <b>앵커는 어떻게 정하는가</b>
+    최근 3년 중 <b>환율이 좁은 범위에서 오래 머물렀던 구간</b>(박스권)을 찾아 그 평균을 씁니다.
+    시장이 오래 머물렀다는 것은 그 가격대에서 매수·매도가 균형을 이뤘다는 뜻이고,
+    따라서 <b>시장이 합의한 &ldquo;정상 가격&rdquo;</b>으로 볼 수 있기 때문입니다.
+    <br /><br />
+    현재 설정값: <b>1,378원</b> (2024년 5~8월 구간, 변동폭 2.2%)
+    → 오늘 환율 1,415원은 앵커 대비 <b>+2.7%</b>로 &ldquo;중립&rdquo; 수준입니다.
+  </div>
+
+  <p><b>앵커는 자동으로 바뀌지 않습니다.</b> 매일 최적값을 다시 계산하면 기준이 흔들려 불필요한 매매가 생깁니다.
+  담당자가 선택한 값이 고정되며, 분기 1회 재검토합니다. 변경은 정책회의 의결 사항입니다.</p>
+</section>
+
+<!-- 5 -->
+<section id="s5">
+  <h2><span class="num">5</span>정책 매트릭스 — 시스템의 심장</h2>
+  <p class="lead">수준이 <b>방향</b>을 정하고, 추세가 <b>속도</b>를 정합니다.</p>
+
+  <p>아래 표가 회사의 외화 관리 정책 그 자체입니다. 숫자는 목표 외화 보유 비중이며,
+  <b>낮을수록 더 많이 환전하라</b>는 뜻입니다.</p>
+
+  <div class="scroll">
+  <table class="matrix">
+    <thead>
+      <tr><th>수준 \ 추세</th><th class="mid">상승 중</th><th class="mid">횡보</th><th class="mid">하락 중</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>매우 높음 (앵커 +8% 초과)</td><td class="cell-sell">22%</td><td class="cell-sell">18%</td><td class="cell-sell">15% ★</td></tr>
+      <tr><td>높음 (+3~8%)</td><td class="cell-mid">26%</td><td class="cell-mid">24%</td><td class="cell-sell">20%</td></tr>
+      <tr><td>중립 (−3~+3%)</td><td class="cell-mid">30%</td><td class="cell-mid">30%</td><td class="cell-mid">30%</td></tr>
+      <tr><td>낮음 (−8~−3%)</td><td class="cell-hold">36%</td><td class="cell-mid">34%</td><td class="cell-mid">32%</td></tr>
+      <tr><td>매우 낮음 (−8% 미만)</td><td class="cell-hold">42%</td><td class="cell-hold">40%</td><td class="cell-hold">38%</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>★ <b>가장 강한 매도 신호는 &ldquo;매우 높음 × 하락 중&rdquo;</b>입니다.
+  비싼데 꺾이기 시작했다면 더 기다릴 이유가 없습니다.
+  <b>2026년 7월의 상황이 정확히 이 칸에 해당합니다.</b></p>
+
+  <p>반대로 <b>수준이 낮으면 하락 추세여도 매도를 강요하지 않습니다.</b>
+  싼 가격에 억지로 팔아 손실을 확정하는 것을 막기 위해서입니다.</p>
+
+  <div class="callout good">
+    <b>이 구조의 의미</b>
+    &ldquo;비쌀 때 팔고 쌀 때 기다린다&rdquo;는 상식을 규칙으로 고정한 것입니다.
+    상식을 규칙으로 만드는 이유는, 정작 그 순간이 오면 상식대로 행동하기 어렵기 때문입니다.
+  </div>
+
+  <h3>왜 15%~42%인가 — 폭을 더 좁히면 안 되는 이유</h3>
+  <p>보유 비중이 15%에서 42%까지 움직이는 것이 넓어 보일 수 있습니다.
+  실제로 폭을 좁혀가며 과거 데이터로 성과를 측정했습니다.</p>
+
+  <div class="callout">
+    <b>🚗 한 문장 비유 — 브레이크 페달</b>
+    브레이크 페달을 <b>5cm만 밟을 수 있게 고정</b>해두면, 평소 주행에는 아무 문제가 없습니다.
+    문제는 <b>급정거가 필요한 그 한 순간</b>에 멈추지 못한다는 것입니다.
+    운용 폭을 좁히는 것이 정확히 이와 같습니다.
+  </div>
+
+  <!-- 시각화 1 : 절벽 차트 -->
+  <figure style="margin:22px 0">
+    <figcaption style="font-size:14px;font-weight:700;margin-bottom:6px">
+      운용 폭에 따른 성과 — 2026년 7월 고점 구간
+    </figcaption>
+    <p style="font-size:13px;color:var(--muted);margin:0 0 8px">
+      막대는 &ldquo;기간 평균환율보다 1달러당 몇 원 더 받았는가&rdquo;입니다. 0보다 아래면 평균보다 못 판 것입니다.
+    </p>
+    <svg viewBox="0 0 720 312" width="100%" role="img"
+         aria-label="운용 폭이 좁아질수록 성과가 급격히 무너지는 막대 차트">
+      <!-- 0선 -->
+      <line x1="60" y1="150.5" x2="700" y2="150.5" stroke="#16233a" stroke-width="1.5"/>
+      <text x="52" y="155" text-anchor="end" font-size="11" fill="#68758c">0원</text>
+      <text x="52" y="40" text-anchor="end" font-size="11" fill="#68758c">+55</text>
+      <text x="52" y="255" text-anchor="end" font-size="11" fill="#68758c">−50</text>
+      <line x1="60" y1="30" x2="60" y2="265" stroke="#e3e8f0" stroke-width="1"/>
+
+      <!-- 막대 6개 -->
+      <g font-size="12" text-anchor="middle">
+        <!-- 10~45 : +52.9 -->
+        <rect x="80"  y="34.6"  width="76" height="115.9" fill="#9ec8a9"/>
+        <text x="118" y="28"  fill="#12855f" font-weight="700">+52.9</text>
+        <text x="118" y="285" fill="#68758c">10~45%</text>
+
+        <!-- 15~42 : +48.6  (채택) -->
+        <rect x="180" y="44.0"  width="76" height="106.5" fill="#12855f"/>
+        <text x="218" y="37"  fill="#12855f" font-weight="700">+48.6</text>
+        <text x="218" y="285" fill="#16233a" font-weight="700">15~42%</text>
+        <text x="218" y="299" fill="#12855f" font-weight="700" font-size="11">← 채택</text>
+
+        <!-- 18~39 : +40.8 -->
+        <rect x="280" y="61.1"  width="76" height="89.4" fill="#9ec8a9"/>
+        <text x="318" y="54"  fill="#12855f" font-weight="700">+40.8</text>
+        <text x="318" y="285" fill="#68758c">18~39%</text>
+
+        <!-- 22~36 : +9.6 -->
+        <rect x="380" y="129.4" width="76" height="21.1" fill="#e3c98a"/>
+        <text x="418" y="122" fill="#c9800f" font-weight="700">+9.6</text>
+        <text x="418" y="285" fill="#68758c">22~36%</text>
+
+        <!-- 24~34 : -46.0 -->
+        <rect x="480" y="150.5" width="76" height="100.7" fill="#d93b45"/>
+        <text x="518" y="266" fill="#d93b45" font-weight="700">−46.0</text>
+        <text x="518" y="285" fill="#68758c">24~34%</text>
+
+        <!-- 26~33 : 거래 0 -->
+        <rect x="580" y="146.5" width="76" height="4" fill="#b6bfcd"/>
+        <text x="618" y="140" fill="#68758c" font-weight="700">거래 0건</text>
+        <text x="618" y="285" fill="#68758c">26~33%</text>
+      </g>
+
+      <!-- 절벽 표시 -->
+      <path d="M356 175 L476 175" stroke="#d93b45" stroke-width="1.5" stroke-dasharray="4 3"/>
+      <text x="416" y="192" text-anchor="middle" font-size="11.5" fill="#d93b45" font-weight="700">
+        이 지점부터 무너짐
+      </text>
+    </svg>
+  </figure>
+
+  <div class="callout bad">
+    <b>서서히 나빠지지 않습니다 — 어느 순간 무너집니다</b>
+    폭을 22~36%까지 줄이면 성과가 +9.6원으로 거의 사라지고,
+    24~34%에서는 <b>기간 평균보다 46원 낮게</b> 파는 역효과가 납니다.
+    26~33%에서는 <b>거래가 한 건도 발생하지 않았습니다.</b>
+  </div>
+
+  <!-- 시각화 2 : 데드존 -->
+  <figure style="margin:24px 0">
+    <figcaption style="font-size:14px;font-weight:700;margin-bottom:6px">
+      왜 무너지는가 — &ldquo;거래가 일어나지 않는 구간&rdquo;
+    </figcaption>
+    <p style="font-size:13px;color:var(--muted);margin:0 0 8px">
+      목표와 현재 비중의 차이가 <b>3%p 미만이면 거래하지 않습니다</b>(잦은 소액 매매 방지).
+      회색 띠가 그 &ldquo;죽은 구간&rdquo;입니다. 목표가 이 띠를 벗어나야 비로소 환전이 일어납니다.
+    </p>
+    <svg viewBox="0 0 720 300" width="100%" role="img"
+         aria-label="운용 폭이 좁으면 목표 비중이 거래 발생 임계 구간을 벗어나지 못함을 보여주는 도식">
+      <!-- 눈금 -->
+      <g font-size="11" fill="#68758c" text-anchor="end">
+        <text x="52" y="44">45%</text><text x="52" y="147">30%</text><text x="52" y="284">10%</text>
+      </g>
+      <line x1="60" y1="35" x2="60" y2="280" stroke="#e3e8f0"/>
+
+      <!-- 죽은 구간 27~33% -->
+      <rect x="60" y="122.3" width="640" height="41.1" fill="#dfe4ec" opacity=".85"/>
+      <text x="694" y="138" text-anchor="end" font-size="11" fill="#68758c" font-weight="700">
+        거래 없음 (현재 30% ±3%p)
+      </text>
+      <line x1="60" y1="142.9" x2="700" y2="142.9" stroke="#68758c" stroke-dasharray="4 3"/>
+
+      <!-- 3개 케이스 -->
+      <g text-anchor="middle" font-size="12">
+        <!-- 15~42 -->
+        <rect x="130" y="60.6" width="86" height="185.1" rx="6" fill="#2563eb" opacity=".22" stroke="#2563eb"/>
+        <text x="173" y="55" font-weight="700" fill="#2563eb">15 ~ 42%</text>
+        <text x="173" y="262" font-size="11" fill="#16233a">띠를 크게 벗어남</text>
+        <text x="173" y="277" font-size="11" font-weight="700" fill="#12855f">→ 고점에서 대량 환전 ✔</text>
+
+        <!-- 22~36 -->
+        <rect x="317" y="101.7" width="86" height="96" rx="6" fill="#c9800f" opacity=".22" stroke="#c9800f"/>
+        <text x="360" y="96" font-weight="700" fill="#c9800f">22 ~ 36%</text>
+        <text x="360" y="262" font-size="11" fill="#16233a">간신히 벗어남</text>
+        <text x="360" y="277" font-size="11" font-weight="700" fill="#c9800f">→ 조금밖에 못 팜</text>
+
+        <!-- 26~33 -->
+        <rect x="504" y="122.3" width="86" height="47.9" rx="6" fill="#d93b45" opacity=".22" stroke="#d93b45"/>
+        <text x="547" y="116" font-weight="700" fill="#d93b45">26 ~ 33%</text>
+        <text x="547" y="262" font-size="11" fill="#16233a">띠 안에 갇힘</text>
+        <text x="547" y="277" font-size="11" font-weight="700" fill="#d93b45">→ 아무 일도 안 일어남 ✕</text>
+      </g>
+    </svg>
+  </figure>
+
+  <div class="callout warn">
+    <b>고점에서 못 판 물량은 어디로 가는가</b>
+    사라지지 않습니다. <b>나중에 더 싼 값에 팔립니다.</b>
+    그래서 평균 실현환율이 떨어지고, 좁힐수록 &ldquo;평균보다 못 파는&rdquo; 결과에 가까워집니다.
+    2026년 7월에 실제로 벌어진 일이 바로 이것입니다.
+  </div>
+
+  <div class="callout good">
+    <b>그래도 안심하셔도 되는 이유 — 극단값은 잘 쓰이지 않습니다</b>
+    2025년 백테스트에서 <b>실제로 적용된 목표 비중은 15~30% 구간</b>이었습니다.
+    42%는 한 번도 쓰이지 않았습니다. 표의 상·하한은 <b>이론적 경계</b>일 뿐입니다.
+    <br /><br />
+    또한 이 매트릭스 위에 <b>결제 버퍼 → 정책 밴드 → 노출 한도</b>가 차례로 걸립니다.
+    <b>운용 폭을 제한하고 싶으시면 매트릭스가 아니라 정책 밴드로 조이는 것이 맞습니다.</b>
+    매트릭스는 알고리즘의 &ldquo;판단 해상도&rdquo;이고, 정책 밴드는 &ldquo;거버넌스 한계선&rdquo;이라 역할이 다릅니다.
+  </div>
+</section>
+
+<!-- 6 -->
+<section id="s6">
+  <h2><span class="num">6</span>폭주를 막는 안전장치</h2>
+  <p class="lead">&ldquo;쌀 때 기다린다&rdquo;는 원칙에는 명백한 위험이 있습니다. 그 위험을 그대로 두지 않았습니다.</p>
+
+  <div class="callout warn">
+    <b>정직하게 말해야 할 위험</b>
+    &ldquo;싸니까 기다리자&rdquo;는 <b>7월에 실무진이 했던 판단과 같은 문장</b>입니다.
+    환율이 구조적으로 하락하는 국면이라면, 기다리는 동안 외화 재고는 계속 쌓이고 노출은 무한히 커집니다.
+    따라서 &ldquo;기다림&rdquo;에는 반드시 한계가 있어야 합니다.
+  </div>
+
+  <table>
+    <thead><tr><th>장치</th><th>작동 방식</th></tr></thead>
+    <tbody>
+      <tr><td><b>정책 밴드 우선</b></td>
+        <td>정책회의가 정한 보유 비중 상·하한을 알고리즘이 넘을 수 없습니다. 충돌 시 <b>정책이 이깁니다.</b></td></tr>
+      <tr><td><b>결제 버퍼 하한</b></td>
+        <td>향후 3개월 결제 예정액은 어떤 국면에서도 남깁니다. 없으면 결제일에 비싸게 되사야 합니다.</td></tr>
+      <tr><td><b>최대 노출 한도</b></td>
+        <td>미환전 잔량이 한도를 넘으면 수준과 무관하게 환전합니다.</td></tr>
+      <tr><td><b>시간 기반 강제 환전</b></td>
+        <td>일정 기간(기본 90영업일) 환전이 없으면 중립 수준까지 자동으로 환전을 지시합니다.
+          &ldquo;기다림&rdquo;이 무한정 지속되는 것을 구조적으로 차단합니다.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- 7 -->
+<section id="s7">
+  <h2><span class="num">7</span>검증 — 실제로 효과가 있는가</h2>
+  <p class="lead">주장이 아니라 과거 데이터로 확인했습니다.</p>
+
+  <p>2022년 이후 실제 환율로, <b>이 규칙을 그때 적용했다면 어떻게 됐을지</b>를 재현했습니다.
+  비교 대상은 &ldquo;수준 개념 없이 추세만 보는 방식&rdquo;입니다.</p>
+
+  <div class="callout">
+    <b>공정성을 위한 조치</b>
+    앵커를 전체 데이터에서 뽑으면 &ldquo;미래를 알고 기준을 정한&rdquo; 셈이 되어 성적이 부풀려집니다.
+    그래서 <b>각 검증 시작일 이전 데이터만으로 앵커를 산출</b>했습니다.
+  </div>
+
+  <div class="scroll">
+  <table>
+    <thead>
+      <tr><th>검증 구간</th><th class="num">기간 평균환율</th><th class="num">수준 축 적용</th><th class="num">추세만 (기존)</th><th class="num">차이</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>2024년 1월 이후</td><td class="num">1,414.1</td>
+        <td class="num best"><b>1,432.7</b> <span class="pos">(+18.7)</span></td>
+        <td class="num">1,409.0 <span class="neg">(−5.1)</span></td><td class="num pos">+23.7원</td></tr>
+      <tr><td>2025년 1월 이후</td><td class="num">1,445.3</td>
+        <td class="num best"><b>1,464.9</b> <span class="pos">(+19.5)</span></td>
+        <td class="num">1,440.7 <span class="neg">(−4.6)</span></td><td class="num pos">+24.2원</td></tr>
+      <tr><td><b>2026년 7월 이후</b></td><td class="num">1,479.8</td>
+        <td class="num best"><b>1,528.4</b> <span class="pos">(+48.6)</span></td>
+        <td class="num">1,448.7 <span class="neg">(−31.1)</span></td><td class="num pos">+79.7원</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p style="font-size:13px;color:var(--muted)">괄호 안은 기간 평균환율 대비 차이. 정책 밴드 해제 조건에서 알고리즘 자체 효과를 측정.</p>
+
+  <h3>읽는 법</h3>
+  <ul>
+    <li><b>기존 방식은 세 구간 모두 기간 평균보다 못한 환율에 팔았습니다</b> (−5.1 / −4.6 / −31.1원).
+      추세만 보면 하락장에 대량 매도하게 되어 실제로 저가 매도가 발생합니다.</li>
+    <li><b>수준 축을 넣으면 세 구간 모두 평균을 상회했습니다</b> (+19.0 / +21.2 / +52.9원).</li>
+    <li>특히 <b>2026년 7월 구간에서 평균 1,532.7원에 환전</b>했습니다. 당시 고점이 약 1,554원이었으니
+      <b>고점 부근에서 실행</b>한 셈입니다. 같은 구간 기존 방식은 1,448.7원이었습니다.</li>
+  </ul>
+
+  <div class="kpi">
+    <div><span>7월 구간 1달러당 차이</span><strong class="pos">+79.7원</strong></div>
+    <div><span>월 유입 300만 달러 기준</span><strong class="pos">약 2.4억원 / 월</strong></div>
+    <div><span>검증 구간</span><strong>3개 구간 전부 개선</strong></div>
+  </div>
+
+  <!-- 시각화 3 : 7월 리플레이 -->
+  <figure style="margin:26px 0">
+    <figcaption style="font-size:15px;font-weight:700;margin-bottom:6px">
+      2026년 7월에 이 시스템이 있었다면 — 언제 팔았을까
+    </figcaption>
+    <p style="font-size:13px;color:var(--muted);margin:0 0 8px">
+      실제 원/달러 환율(굵은 선) 위에 두 방식의 <b>환전 시점</b>을 표시했습니다.
+      원의 크기는 그때 환전한 금액입니다.
+    </p>
+    <svg viewBox="0 0 720 375" width="100%" role="img"
+         aria-label="2026년 6~8월 환율 곡선 위에 수준 축 방식과 기존 방식의 환전 시점을 비교한 차트">
+      <!-- y 눈금 -->
+      <g font-size="11" fill="#68758c" text-anchor="end">
+        <text x="50" y="66.9">1,550</text><text x="50" y="149.3">1,500</text>
+        <text x="50" y="231.6">1,450</text><text x="50" y="314">1,400</text>
+      </g>
+      <g stroke="#eef1f6" stroke-width="1">
+        <line x1="58" y1="62.9" x2="690" y2="62.9"/><line x1="58" y1="145.3" x2="690" y2="145.3"/>
+        <line x1="58" y1="227.6" x2="690" y2="227.6"/><line x1="58" y1="310" x2="690" y2="310"/>
+      </g>
+
+      <!-- 실현환율 기준선 -->
+      <line x1="58" y1="98.5"  x2="690" y2="98.5"  stroke="#12855f" stroke-width="1.3" stroke-dasharray="6 4"/>
+      <line x1="58" y1="178.6" x2="690" y2="178.6" stroke="#9aa5b7" stroke-width="1.2" stroke-dasharray="2 4"/>
+      <line x1="58" y1="229.8" x2="690" y2="229.8" stroke="#d93b45" stroke-width="1.3" stroke-dasharray="6 4"/>
+
+      <!-- 환율 곡선 -->
+      <polyline fill="none" stroke="#16233a" stroke-width="2.2" stroke-linejoin="round"
+        points="58.0,140.0 70.9,126.7 83.8,119.6 96.7,98.2 109.6,74.5 122.5,68.7 135.4,115.0 148.3,108.4 161.2,100.8 174.1,111.7 187.0,128.8 199.9,123.1 212.8,124.2 225.7,106.8 238.6,87.6 251.5,86.5 264.4,84.0 277.3,82.2 290.2,70.7 303.1,72.5 316.0,76.9 328.9,65.6 341.8,55.7 354.7,56.2 367.6,79.9 380.4,92.9 393.3,101.5 406.2,129.0 419.1,138.4 432.0,133.6 444.9,137.2 457.8,158.1 470.7,163.7 483.6,171.2 496.5,174.9 509.4,185.5 522.3,176.8 535.2,195.7 548.1,200.8 561.0,202.3 573.9,201.0 586.8,227.5 599.7,242.3 612.6,254.7 625.5,260.8 638.4,263.6 651.3,269.2 664.2,279.0 677.1,276.9 690.0,284.8"/>
+
+      <!-- 고점 -->
+      <circle cx="341.8" cy="55.7" r="3.5" fill="#16233a"/>
+      <text x="341.8" y="45" font-size="11.5" text-anchor="middle" font-weight="700" fill="#16233a">고점 1,554원 (7/2)</text>
+
+      <!-- 수준 축 매도 -->
+      <g fill="#12855f" fill-opacity=".78" stroke="#0b6b4b" stroke-width="1.5">
+        <circle cx="328.9" cy="65.6"  r="9.8"/>
+        <circle cx="393.3" cy="101.5" r="12.4"/>
+        <circle cx="457.8" cy="158.1" r="7.2"/>
+        <circle cx="651.3" cy="269.2" r="5.3"/>
+      </g>
+      <!-- 기존 방식 매도 -->
+      <g fill="#d93b45" fill-opacity=".72" stroke="#a8202a" stroke-width="1.5">
+        <circle cx="586.8" cy="227.5" r="19.4"/>
+        <circle cx="651.3" cy="269.2" r="7.7"/>
+      </g>
+
+      <!-- 주석 -->
+      <text x="300" y="126" font-size="11.5" font-weight="700" fill="#12855f">7/1 즉시 환전 시작</text>
+      <text x="586.8" y="205" font-size="11.5" font-weight="700" fill="#d93b45" text-anchor="middle">7/30 뒤늦게 한꺼번에</text>
+      <text x="586.8" y="192" font-size="11" fill="#d93b45" text-anchor="middle">(고점 대비 −104원)</text>
+
+      <text x="686" y="94"  font-size="11" text-anchor="end" font-weight="700" fill="#12855f">수준 축 실현 1,528원</text>
+      <text x="686" y="174" font-size="11" text-anchor="end" fill="#68758c">기간 평균 1,480원</text>
+      <text x="686" y="245" font-size="11" text-anchor="end" font-weight="700" fill="#d93b45">기존 방식 실현 1,449원</text>
+
+      <!-- x 라벨 -->
+      <g font-size="11" fill="#68758c" text-anchor="middle">
+        <text x="58"  y="330">6/1</text><text x="174.1" y="330">6/15</text>
+        <text x="328.9" y="330">7/1</text><text x="457.8" y="330">7/15</text>
+        <text x="612.6" y="330">8/3</text><text x="690" y="330">8/11</text>
+      </g>
+
+      <!-- 범례 -->
+      <g font-size="12">
+        <circle cx="150" cy="356" r="7" fill="#12855f" fill-opacity=".78" stroke="#0b6b4b" stroke-width="1.5"/>
+        <text x="164" y="360" fill="#16233a">수준 축 (환전 시점)</text>
+        <circle cx="360" cy="356" r="7" fill="#d93b45" fill-opacity=".72" stroke="#a8202a" stroke-width="1.5"/>
+        <text x="374" y="360" fill="#16233a">기존 방식 (추세만)</text>
+        <text x="560" y="360" fill="#68758c">원 크기 = 환전 금액</text>
+      </g>
+    </svg>
+  </figure>
+
+  <div class="scroll">
+  <table>
+    <thead><tr><th>방식</th><th>환전 시점</th><th class="num">환율</th><th class="num">금액</th></tr></thead>
+    <tbody>
+      <tr><td rowspan="4" style="vertical-align:top"><b style="color:var(--green)">수준 축</b></td>
+        <td><b>7월 1일</b> — 고점 하루 전</td><td class="num">1,548.4</td><td class="num">137만 USD</td></tr>
+      <tr><td>7월 8일 — 꺾이기 시작</td><td class="num">1,526.6</td><td class="num">286만 USD</td></tr>
+      <tr><td>7월 15일</td><td class="num">1,492.2</td><td class="num">41만 USD</td></tr>
+      <tr><td>8월 6일</td><td class="num">1,424.8</td><td class="num">7만 USD</td></tr>
+      <tr><td rowspan="2" style="vertical-align:top"><b style="color:var(--red)">기존 방식</b></td>
+        <td><b>7월 30일</b> — 한 달 늦게, 한꺼번에</td><td class="num">1,450.1</td><td class="num">954만 USD</td></tr>
+      <tr><td>8월 6일</td><td class="num">1,424.8</td><td class="num">54만 USD</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="callout good">
+    <b>이 그림이 말하는 것</b>
+    수준 축은 <b>고점 하루 전인 7월 1일(1,548원)부터 환전을 시작</b>했습니다.
+    기존 방식은 하락이 &ldquo;확정&rdquo;될 때까지 기다리다 <b>7월 30일(1,450원)에야 한꺼번에</b> 팔았습니다.
+    그 사이 환율은 <b>104원 떨어졌습니다.</b>
+    <br /><br />
+    차이의 원인은 명확합니다. 기존 방식은 <b>&ldquo;오르는 중이니 더 들고 있자&rdquo;</b>고 판단했고,
+    수준 축은 <b>&ldquo;앵커보다 12% 비싸다, 지금이 파는 때다&rdquo;</b>라고 판단했습니다.
+  </div>
+
+  <div class="callout warn">
+    <b>함께 보고해야 할 트레이드오프</b>
+    수준 축은 싼 구간에서 환전을 미루므로 <b>미환전 잔량이 더 커집니다</b>
+    (7월 구간 기준 1,383만 달러 vs 기존 846만 달러). 환율이 더 하락하면 평가손실이 커질 수 있습니다.
+    §6의 노출 한도와 강제 환전 장치를 반드시 함께 설정해야 하는 이유입니다.
+  </div>
+</section>
+
+<!-- 8 -->
+<section id="s8">
+  <h2><span class="num">8</span>이 시스템이 하지 않는 일</h2>
+  <p class="lead">과대평가를 막기 위해 한계를 명시합니다.</p>
+  <ul>
+    <li><b>환율을 예측하지 않습니다.</b> 미래를 맞히는 것이 아니라 현재 수준을 판정합니다.</li>
+    <li><b>자동으로 매매하지 않습니다.</b> 제안만 하며, 실행은 기존 승인 절차를 거칩니다.</li>
+    <li><b>매번 이기지 않습니다.</b> 규칙 기반이므로 특정 국면에서는 사람의 판단이 더 나을 수 있습니다.
+      이 시스템의 가치는 &ldquo;최고의 판단&rdquo;이 아니라 <b>&ldquo;최악의 판단을 반복하지 않는 것&rdquo;</b>에 있습니다.</li>
+    <li><b>정책을 대체하지 않습니다.</b> 정책 밴드가 알고리즘보다 우선합니다.</li>
+    <li>현재 <b>USD·메디아나 기준</b>으로 검증됐습니다. 다른 통화·법인은 각각 확인이 필요합니다.</li>
+  </ul>
+</section>
+
+<!-- 9 -->
+<section id="s9">
+  <h2><span class="num">9</span>사용 설명서</h2>
+  <p class="lead">화면은 세 개의 탭으로 구성됩니다.</p>
+
+  <h3>사전 준비 — 자금·정책 입력</h3>
+  <p>화면 상단에서 아래 값을 입력합니다. 법인·통화별로 브라우저에 저장되며,
+  현재는 Treasury 시스템과 연동하지 않고 직접 입력합니다.</p>
+  <table>
+    <thead><tr><th>항목</th><th>설명</th></tr></thead>
+    <tbody>
+      <tr><td>가용 자금 총액</td><td>비중 계산의 분모</td></tr>
+      <tr><td>현재 외화 보유액</td><td>비중 계산의 분자</td></tr>
+      <tr><td>월 외화 유입액</td><td>시뮬레이션에서 매월 들어올 금액</td></tr>
+      <tr><td>향후 3개월 결제 버퍼</td><td>어떤 경우에도 남길 금액</td></tr>
+      <tr><td>정책 밴드 상·하한</td><td>정책회의가 정한 보유 비중 한계</td></tr>
+      <tr><td>평균 취득환율</td><td>입력하면 환전 시 실현손익을 함께 표시</td></tr>
+      <tr><td>최대 미환전 노출 한도</td><td>넘으면 수준과 무관하게 환전</td></tr>
+    </tbody>
+  </table>
+
+  <h3>탭 1 · 현재 국면 — 매일 보는 화면</h3>
+  <ul>
+    <li><b>현재 국면</b> — 추세와 변동성, 그리고 수준(앵커 대비 몇 %)</li>
+    <li><b>목표 외화 보유 비율</b> — 목표와 현재 비중. 제약이 걸렸다면 그 사유를 함께 표시</li>
+    <li><b>권고 조치</b> — 환전 권고 금액과 실현 예상 손익</li>
+    <li><b>지표</b> — 판정 근거가 된 수치들</li>
+    <li><b>차트</b> — 실제 환율(회색)과 노이즈를 제거한 추세선(파랑)</li>
+  </ul>
+  <p>각 항목 옆의 <b>?</b> 표시에 마우스를 올리면 그 값이 무엇을 뜻하는지 설명이 나옵니다.</p>
+
+  <h3>탭 2 · 정책 프로토콜 — 분기 1회 점검</h3>
+  <ol class="steps">
+    <li><b>앵커 확인</b> &ldquo;횡보 구간 후보 찾기&rdquo;를 누르면 상위 3개 후보가 나옵니다.
+      각 후보를 선택하면 오늘 환율이 어떤 등급이 되는지 미리 볼 수 있습니다. 직접 입력도 가능합니다.</li>
+    <li><b>매트릭스 조정</b> 국면별 목표 비중을 회사 정책에 맞게 수정합니다.</li>
+    <li><b>파라미터 확인</b> 판정 기준값과 안전장치 기한을 점검합니다.</li>
+  </ol>
+  <div class="callout warn">
+    <b>주의</b> 이 탭의 값을 바꾸면 탭 1의 권고 금액이 즉시 달라집니다.
+    변경 전 반드시 탭 3에서 결과를 확인하고, 정책회의 의결을 거치십시오.
+  </div>
+
+  <h3>탭 3 · 시뮬레이션 — 바꾸기 전 검증</h3>
+  <p>과거 데이터에 현재 설정을 적용했을 때의 결과를 보여줍니다.</p>
+  <ul>
+    <li><b>가중평균 실현환율</b>이 <b>기간 평균환율</b>보다 높아야 의미가 있습니다</li>
+    <li>&ldquo;수준 축 도입 효과&rdquo; 표에서 기존 방식과 직접 비교됩니다</li>
+    <li>기간 프리셋의 <b>2026-07 이후</b>가 실제 사고 구간 재현입니다</li>
+    <li>벤치마크 두 가지 — 유입 즉시 전액 환전 / 전혀 환전하지 않음</li>
+  </ul>
+
+  <h3>일상 운영 흐름</h3>
+  <ol class="steps">
+    <li><b>매일</b> 탭 1에서 국면과 권고 조치를 확인합니다.</li>
+    <li><b>권고가 발생하면</b> 금액과 실현손익을 검토하고, 기존 매각 지시 워크플로우로 발의합니다.</li>
+    <li><b>분기 1회</b> 탭 2에서 앵커 노후화 여부를 점검합니다.</li>
+    <li><b>정책 변경 시</b> 탭 3에서 검증한 뒤 회의체에 보고합니다.</li>
+  </ol>
+</section>
+
+<!-- 10 -->
+<section id="s10">
+  <h2><span class="num">10</span>도입에 필요한 의사결정</h2>
+  <p class="lead">시스템은 준비됐습니다. 아래 항목은 회의체의 결정이 필요합니다.</p>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>결정 사항</th><th>현재 설정</th><th>비고</th></tr></thead>
+    <tbody>
+      <tr><td>앵커(기준 수준)</td><td class="num">1,378원</td><td>2024년 5~8월 박스권. 분기 재검토</td></tr>
+      <tr><td>정책 밴드 상·하한</td><td>미설정</td><td>알고리즘보다 우선 적용되는 한계선</td></tr>
+      <tr><td>결제 버퍼</td><td class="num">250만 USD</td><td>3개월 결제 예정액</td></tr>
+      <tr><td>최대 미환전 노출 한도</td><td>미설정</td><td><b>반드시 설정 권장</b> (§7 트레이드오프)</td></tr>
+      <tr><td>강제 환전 기한</td><td class="num">90영업일</td><td>&ldquo;기다림&rdquo;의 한계</td></tr>
+      <tr><td>적용 범위</td><td>USD · 메디아나</td><td>타 통화·법인은 별도 검증 후</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="callout good">
+    <b>권고</b>
+    1단계로 <b>참고 지표로만 3개월 병행 운영</b>하며 실제 판단과 얼마나 어긋나는지 확인하고,
+    2단계에서 정식 정책으로 채택하는 방식을 제안합니다.
+    시스템의 신뢰는 선언이 아니라 누적된 기록에서 나옵니다.
+  </div>
+</section>
+
+<!-- 11 -->
+<section id="s11">
+  <h2><span class="num">11</span>용어 사전</h2>
+  <dl class="glossary">
+    <dt>앵커 (기준 수준)</dt>
+    <dd>&ldquo;비싸다/싸다&rdquo;를 판단하는 기준 환율. 최근 3년 중 시장이 좁은 범위에 오래 머물렀던 구간의 평균.</dd>
+
+    <dt>국면 (Regime)</dt>
+    <dd>추세 5단계 × 변동성 2단계로 분류한 현재 시장 상태. 예: &ldquo;5-B&rdquo; = 강한 하락 / 저변동성.</dd>
+
+    <dt>추세강도 (ER)</dt>
+    <dd>20일간 실제 이동 거리 ÷ 오르내린 거리 총합 × 100. 100에 가까울수록 한 방향으로 곧게 이동.</dd>
+
+    <dt>변동성 Z-Score</dt>
+    <dd>현재 변동성이 지난 1년 분포에서 어디쯤인지. 1.0 이상이면 평소보다 뚜렷하게 출렁이는 국면.</dd>
+
+    <dt>목표 보유 비중</dt>
+    <dd>가용자금 중 외화로 들고 있어야 할 비율. 낮을수록 많이 환전하라는 뜻.</dd>
+
+    <dt>가중평균 실현환율</dt>
+    <dd>기간 중 환전한 외화 전체를 평균 몇 원에 팔았는지. 이 시스템의 핵심 성과지표.</dd>
+
+    <dt>기간 평균환율</dt>
+    <dd>해당 기간 환율의 단순 평균. 아무 전략 없이 매일 조금씩 팔았을 때의 결과에 해당하는 기준선.</dd>
+
+    <dt>결제 버퍼</dt>
+    <dd>향후 결제 예정 외화. 어떤 국면에서도 환전하지 않고 남겨두는 금액.</dd>
+
+    <dt>리밸런싱 밴드</dt>
+    <dd>목표와 현재 비중의 차이가 이 값 미만이면 거래하지 않는 구간. 잦은 소액 매매를 방지.</dd>
+
+    <dt>백테스트</dt>
+    <dd>과거 데이터에 규칙을 적용해 &ldquo;그때 이렇게 했다면&rdquo;을 재현하는 검증 방법.</dd>
+  </dl>
+</section>
+
+<footer>
+  Selvas Treasury · 환율 국면 판정 시스템 · 2026년 8월<br />
+  데이터 출처: 한국은행 ECOS 매매기준율 (2022-01-03 ~ 2026-08-11, USD 1,130영업일)
+</footer>
+
+</div>
+</body>
+</html>

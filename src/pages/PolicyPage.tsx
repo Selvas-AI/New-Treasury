@@ -701,8 +701,8 @@ function DecisionRuleProgress({
   // FX비중 초과분을 매도해야 하는 경우, 참고용 추가 매도 필요액 계산
   let extraNote: string | null = null
   if (decision.linked_metric === 'fx_ratio' && decision.target_operator === 'lte' && r.violated) {
-    const targetKrw = data.totalFundAvail * (decision.target_value / 100)
-    const excessKrw = data.fxTotalHoldings - targetKrw
+    const targetKrw = data.fxPolicyDenominator * (decision.target_value / 100)
+    const excessKrw = data.fxPortfolioHoldings - targetKrw
     if (excessKrw > 0) extraNote = `약 ${fmtKRW(excessKrw)} 추가 매도 시 목표 달성`
   }
 
@@ -2166,4 +2166,3 @@ export default function PolicyPage() {
     </div>
   )
 }
-

@@ -272,6 +272,23 @@ export function restInsert<T = unknown>(table: string, rows: unknown, returning 
   return restSend<T>('POST', table, { body: rows, returning })
 }
 
+/** PostgREST RPC — 인증된 사용자의 UI 확정 동작에서만 호출한다. */
+export async function restRpc<T = unknown>(fn: string, args: Record<string, unknown>): Promise<RestResult<T>> {
+  try {
+    const resp = await fetchWithTimeout(`${REST_URL}/rpc/${fn}`, {
+      method: 'POST', headers: { ...restHeaders(), Prefer: 'return=representation' }, body: JSON.stringify(args),
+    })
+    if (!resp.ok) {
+      let message = `${resp.status} ${resp.statusText}`
+      try { const j=await resp.json() as {message?:string}; if(j.message) message=j.message } catch { /* */ }
+      return { data: null, error: { message, status: resp.status } }
+    }
+    return { data: await resp.json() as T[], error: null }
+  } catch (e) {
+    return { data: null, error: { message: e instanceof Error ? e.message : '네트워크 오류', status: 0 } }
+  }
+}
+
 /** UPSERT — unique 제약 충돌 시 merge (PostgREST resolution=merge-duplicates)
  *  onConflict: 충돌 기준 컬럼(들), 예) 'company,report_date' */
 export function restUpsert<T = unknown>(table: string, rows: unknown, returning = false, onConflict?: string): Promise<RestResult<T>> {

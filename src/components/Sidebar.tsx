@@ -23,6 +23,8 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { to: '/dashboard', label: '통합 상황판', icon: '⊞', slug: 'dashboard' },
       { to: '/policy',    label: '자금정책',    icon: '📋', slug: 'policy'    },
+      // 기본 비공개 — 사용자 관리에서 별도 메뉴 권한을 받은 계정만 표시된다.
+      { to: '/fx-regime', label: '환율 국면', icon: '🧭', slug: 'fx-regime' },
     ],
   },
   {
@@ -48,6 +50,7 @@ const NAV_GROUPS: NavGroup[] = [
       { to: '/issue-history', label: '이슈 이력',      icon: '🔔', slug: 'history'   },
       { to: '/fx',                 label: '환율 이력',     icon: '💱', slug: 'fx'               },
       { to: '/fx-trade-history',  label: '외화매매거래',  icon: '🔄', slug: 'fx-trade-history' },
+      { to: '/fx-ledger',         label: '외화 FIFO 원장', icon: '📚', slug: 'fx-ledger' },
       { to: '/audit-log',         label: '변경 이력 로그', icon: '🗒️', slug: 'audit-log'       },
     ],
   },
@@ -407,4 +410,3 @@ export default function Sidebar({ collapsed, onCollapse, onNavClick }: Props) {
     </aside>
   )
 }
-

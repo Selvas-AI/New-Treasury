@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import type { ReactNode } from 'react'
 import AuthProvider from './contexts/AuthContext'
 import IssueCountProvider from './contexts/IssueCountProvider'
 import { ToastProvider } from './contexts/ToastProvider'
@@ -24,7 +25,18 @@ import DailyReportListPage from './pages/DailyReportListPage'
 import AuditLogPage from './pages/AuditLogPage'
 import FxTradeHistoryPage from './pages/FxTradeHistoryPage'
 import FxRegimePage from './pages/FxRegimePage'
+import FxLedgerPage from './pages/FxLedgerPage'
 import { useHolidays } from './hooks/useHolidays'
+import { useAuth } from './hooks/useAuth'
+
+/**
+ * 민감 메뉴 라우트 가드.
+ * 사이드바 표시만 숨기는 것으로는 URL 직접 입력을 막을 수 없으므로 라우트에서도 동일 권한을 확인한다.
+ */
+function MenuRoute({ slug, children }: { slug: string; children: ReactNode }) {
+  const { hasMenu } = useAuth()
+  return hasMenu(slug) ? children : <Navigate to="/dashboard" replace />
+}
 
 /**
  * 라우팅 구조
@@ -98,11 +110,9 @@ export default function App() {
             <Route path="/fx"           element={<FxPage />} />
             <Route path="/fx/:currency" element={<FxPage />} />
 
-            {/* 환율 국면 판정 — 개발 전용.
-                실데이터 검증 + 정책회의 보고를 마친 뒤 이 게이트를 제거해 프로덕션에 노출한다.
-                (docs/기획/환율국면_동적헷지_시뮬레이터.md) */}
-            {import.meta.env.DEV && <Route path="/fx-regime"          element={<FxRegimePage />} />}
-            {import.meta.env.DEV && <Route path="/fx-regime/:company" element={<FxRegimePage />} />}
+            {/* 환율 국면 판정 — 기본 비공개. 사용자 관리에서 fx-regime 메뉴를 명시 허용한 계정만 접근. */}
+            <Route path="/fx-regime" element={<MenuRoute slug="fx-regime"><FxRegimePage /></MenuRoute>} />
+            <Route path="/fx-regime/:company" element={<MenuRoute slug="fx-regime"><FxRegimePage /></MenuRoute>} />
 
             {/* 자금정책 */}
             <Route path="/policy"          element={<PolicyPage />} />
@@ -115,6 +125,8 @@ export default function App() {
             {/* 외화매매거래 이력 */}
             <Route path="/fx-trade-history"           element={<FxTradeHistoryPage />} />
             <Route path="/fx-trade-history/:company"  element={<FxTradeHistoryPage />} />
+            <Route path="/fx-ledger" element={<MenuRoute slug="fx-ledger"><FxLedgerPage /></MenuRoute>} />
+            <Route path="/fx-ledger/:company" element={<MenuRoute slug="fx-ledger"><FxLedgerPage /></MenuRoute>} />
 
             {/* 변경 이력 로그 */}
             <Route path="/audit-log"           element={<AuditLogPage />} />

@@ -413,6 +413,157 @@ export function confirmRegime(
 }
 
 // ══════════════════════════════════════════════════════════════════════
+//  2.5 수준(Level) 축 — "지금이 비싼가 싼가"
+//
+//  설계 근거: docs/기획/환율국면_레벨축_설계.md
+//
+//  ⭐ 왜 필요한가:
+//    기존 축은 추세(방향)와 변동성뿐이라 "높은 수준인가"를 판단할 수 없었다.
+//    그 결과 상승장(=고가)에 목표 비중을 올려 **고가 매도를 억제**하고,
+//    하락장(=저가)에 목표를 내려 **저가 매도를 강제**하는 역효과가 있었다.
+//    2026-07 사고 검증: 1,531원(연중 최고)에서 기존 로직은 ①강한상승 → 목표 45%
+//    → "보유 유지"를 권고한다. 이는 실무진이 실제로 한 행동과 같아 사고를 재현한다.
+//    Level 축은 같은 시점을 "앵커 대비 크게 높음 → 대량 환전"으로 판정한다.
+// ══════════════════════════════════════════════════════════════════════
+
+/** 횡보(박스권) 구간 — 앵커 후보 */
+export interface ConsolidationZone {
+  from:     string
+  to:       string
+  /** 이 구간 평균 환율 = 앵커 후보값 */
+  mean:     number
+  min:      number
+  max:      number
+  /** (max−min)/mean — 좁을수록 횡보 */
+  rangePct: number
+  /** Efficiency Ratio 0~100 — 낮을수록 제자리 왕복 */
+  er:       number
+  /** 종합 점수 (낮을수록 좋은 앵커). rangePct%×1 + ER/10 */
+  score:    number
+}
+
+export interface ConsolidationOptions {
+  /** 후보 탐색 범위 (영업일). 기본 750 ≈ 3년 */
+  lookbackDays?: number
+  /** 박스 판정 창 (영업일) */
+  windowDays?:   number
+  /** 반환할 후보 수 */
+  topN?:         number
+}
+
+/**
+ * "가장 좌우로 횡보했던 구간" 탐색.
+ *
+ * 정의: 밴드 폭이 좁고(rangePct) 시작점으로 되돌아온(er 낮음) 창.
+ * `efficiencyRatio()` 를 그대로 재사용한다 — 순이동/총이동 비율이라
+ * 정확히 "제자리 왕복 정도"를 재는 지표다. 신규 지표 개발 불필요.
+ *
+ * ⚠ 이 함수의 결과를 **자동으로 앵커에 적용하지 말 것.**
+ *   데이터가 하루 늘 때마다 최적 구간이 바뀌면 앵커가 점프하고,
+ *   목표 비중이 점프해 불필요한 매매가 발생한다.
+ *   후보만 제시하고, 담당자가 선택해 policy_params 에 고정한다.
+ */
+export function findConsolidationZones(
+  series: RegimeSeriesPoint[],
+  opts: ConsolidationOptions = {},
+): ConsolidationZone[] {
+  const { lookbackDays = 750, windowDays = 60, topN = 3 } = opts
+  if (series.length < windowDays + 1) return []
+
+  const start = Math.max(0, series.length - lookbackDays)
+  const cands: ConsolidationZone[] = []
+
+  for (let i = start; i + windowDays <= series.length; i++) {
+    const w = series.slice(i, i + windowDays)
+    const vals = w.map(p => p.rate)
+    const min = Math.min(...vals)
+    const max = Math.max(...vals)
+    const mean = vals.reduce((a, b) => a + b, 0) / vals.length
+    if (mean <= 0) continue
+    const er = efficiencyRatio(vals, vals.length - 1)
+    if (er == null) continue
+    const rangePct = (max - min) / mean
+    cands.push({
+      from: w[0].date, to: w[w.length - 1].date,
+      mean, min, max, rangePct, er,
+      // 종합 점수 — 폭(%)과 횡보의 질(ER)을 함께 본다.
+      // ER 10점차 ≈ 폭 1%p 로 환산(er/10).
+      score: rangePct * 100 + er / 10,
+    })
+  }
+
+  // ⚠ 폭만으로 정렬하면 안 된다.
+  //   실측(2026-08-11): 폭 2.80%/ER 15.5 인 후보(1,330.5)를 2순위로 올렸는데,
+  //   백테스트에서 실현환율 프리미엄이 +19.9원으로 3개 중 최악이었다
+  //   (폭 2.90%/ER 0.2 인 1,453.3 은 +46.8원). 폭이 좁아도 그 안에서 방향성이 있으면
+  //   "합의된 가격대"가 아니라 완만한 추세 구간이라 앵커로 부적합하다.
+  //   → 폭과 ER 을 함께 보는 종합 점수로 정렬한다.
+  cands.sort((a, b) => a.score - b.score)
+
+  // 겹침 제거 — 인접 창은 점수가 비슷해 상위권을 독점하므로 비최대 억제
+  const picked: ConsolidationZone[] = []
+  for (const c of cands) {
+    if (picked.some(p => !(c.to < p.from || c.from > p.to))) continue
+    picked.push(c)
+    if (picked.length >= topN) break
+  }
+  return picked
+}
+
+/** 수준 등급 */
+export type LevelGrade = 'VH' | 'H' | 'N' | 'L' | 'VL'
+
+export const LEVEL_LABEL: Record<LevelGrade, string> = {
+  VH: '매우 높음',
+  H:  '높음',
+  N:  '중립',
+  L:  '낮음',
+  VL: '매우 낮음',
+}
+
+/** 앵커 대비 편차(비율) 경계 */
+export interface LevelThresholds {
+  vh: number   // dev ≥ vh  → VH
+  h:  number   // dev ≥ h   → H
+  l:  number   // dev ≤ l   → L
+  vl: number   // dev ≤ vl  → VL
+}
+
+/** 원/달러 연변동성 약 6% 기준으로 잡은 초기값 — 백테스트로 교정할 것 */
+export const DEFAULT_LEVEL_THRESHOLDS: LevelThresholds = {
+  vh:  0.08,
+  h:   0.03,
+  l:  -0.03,
+  vl: -0.08,
+}
+
+/** 현재가와 앵커로 수준 등급 산출 */
+export function classifyLevel(
+  rate: number,
+  anchor: number,
+  th: LevelThresholds = DEFAULT_LEVEL_THRESHOLDS,
+): { dev: number; grade: LevelGrade } {
+  if (!(anchor > 0)) return { dev: 0, grade: 'N' }
+  const dev = (rate - anchor) / anchor
+  let grade: LevelGrade = 'N'
+  if (dev >= th.vh)      grade = 'VH'
+  else if (dev >= th.h)  grade = 'H'
+  else if (dev <= th.vl) grade = 'VL'
+  else if (dev <= th.l)  grade = 'L'
+  return { dev, grade }
+}
+
+/** 추세 방향 그룹 — Level×Trend 매트릭스의 열 */
+export type TrendGroup = 'up' | 'side' | 'down'
+
+export function trendGroupOf(code: RegimeCode): TrendGroup {
+  const t = code.charAt(0) as TrendCode
+  if (t === '1' || t === '2') return 'up'
+  if (t === '3') return 'side'
+  return 'down'
+}
+
+// ══════════════════════════════════════════════════════════════════════
 //  3. 정책 프로토콜 → 목표 보유 비율
 // ══════════════════════════════════════════════════════════════════════
 
@@ -452,7 +603,47 @@ export const DEFAULT_TARGETS: RegimeTargets = {
   '5-A': 0.18, '5-B': 0.12,   // 강한 하락 — 즉시 최대 매도 (A는 패닉셀 방지로 분할)
 }
 
+/**
+ * ⭐ Level × Trend 목표 매트릭스 — 현행 기본 로직.
+ *
+ * **Level 이 방향을, Trend 가 속도를 정한다.**
+ *   · Level(수준)  = 팔 것인가 (앵커 대비 비싼가/싼가)
+ *   · Trend(추세)  = 언제·얼마나 빨리 (같은 수준 안에서의 타이밍)
+ *
+ * 값은 "목표 외화 보유 비중"이므로 **낮을수록 많이 환전**한다는 뜻이다.
+ * 가장 강한 매도 신호 = VH(매우 높음) × down(하락 전환) → 2026-07 사고 상황이 여기 해당.
+ * 낮은 수준에서는 하락 추세여도 매도를 강제하지 않는다(기존 저가 매도 강제 제거).
+ */
+export type LevelTargets = Record<LevelGrade, Record<TrendGroup, number>>
+
+/**
+ * 기본 매트릭스. 운용 범위 **15% ~ 42%** (중립 30% 기준 ±).
+ *
+ * ⚠ 폭을 더 좁히면 효과가 급격히 사라진다 — 실측(2026-08-11, 앵커 1,378):
+ *   | 범위 | 2025~ 프리미엄 | 2026-07 프리미엄 |
+ *   | 10~45% | +21.2원 | +52.9원 |
+ *   | 15~42% | +19.5원 | +48.6원 |  ← 채택 (폭 23%↓, 효과 손실 8%)
+ *   | 18~39% | +16.9원 | +40.8원 |
+ *   | 22~36% | +13.2원 |  +9.6원 |
+ *   | 24~34% | +10.6원 | **−46.0원** |  ← 기간평균보다 나쁨
+ *   | 26~33% |  +8.5원 | 거래 0건 |     ← 시스템이 아무것도 안 함
+ *   좁으면 목표와 현재의 차이가 리밸런싱 밴드를 넘지 못해 고점에서 충분히 팔지 못하고,
+ *   남은 물량을 나중에 더 싸게 팔게 된다.
+ *
+ * 참고: 2025년 백테스트에서 실제 사용된 목표는 15~30% 구간이었다.
+ *   상·하 극단값은 이론적 경계일 뿐 상시 도달하지 않는다.
+ */
+export const DEFAULT_LEVEL_TARGETS: LevelTargets = {
+  //        상승      횡보      하락
+  VH: { up: 0.22, side: 0.18, down: 0.15 },   // 매우 높음 — 적극 실현 (하락 전환 시 최대)
+  H:  { up: 0.26, side: 0.24, down: 0.20 },   // 높음 — 실현
+  N:  { up: 0.30, side: 0.30, down: 0.30 },   // 중립 — 정기 환전 유지
+  L:  { up: 0.36, side: 0.34, down: 0.32 },   // 낮음 — 환전 최소화
+  VL: { up: 0.42, side: 0.40, down: 0.38 },   // 매우 낮음 — 보유 (필수분만)
+}
+
 export interface PolicyProtocol {
+  /** @deprecated Level 축 도입 전의 국면 단독 매핑. useLevelAxis=false 일 때만 사용 */
   targets:      RegimeTargets
   thresholds:   RegimeThresholds
   confirmDays:  number
@@ -460,6 +651,25 @@ export interface PolicyProtocol {
   kalmanR:      number
   /** 목표와 현재의 차이가 이 값(비율 포인트) 미만이면 거래하지 않음 — 잦은 소액매매 방지 */
   rebalanceBandPct: number
+
+  // ── Level 축 ────────────────────────────────────────────────────────
+  /**
+   * true 이고 anchorRate 가 있으면 Level×Trend 매트릭스를 쓴다.
+   * false 면 구 국면 단독 매핑(targets)으로 동작 — **백테스트 A/B 비교용으로 반드시 유지할 것.**
+   * (7월 사고 재현 검증: 구 로직이 1,531원에서 '보유'를 권고하는지 확인해야 한다)
+   */
+  useLevelAxis:    boolean
+  /** 기준 수준. 담당자가 findConsolidationZones 후보 중 선택해 고정한다. null=미설정 */
+  anchorRate:      number | null
+  levelThresholds: LevelThresholds
+  levelTargets:    LevelTargets
+  /**
+   * 시간 기반 강제 환전 (영업일). 미환전 잔량이 이 기간 이상 방치되면
+   * Level 이 낮아도 중립 수준까지는 환전한다.
+   * ⚠ 이 장치가 없으면 "싸니까 안 판다"가 무한정 지속된다 —
+   *   그게 2026-07 에 실무진이 한 판단이기도 하다. 0=비활성
+   */
+  forceConvertDays: number
 }
 
 /** 모든 국면 코드 (편집 UI·저장 순회용) */
@@ -482,7 +692,26 @@ export const PROTOCOL_PARAM_KEYS = {
   kalmanQ:          'fx_regime_kalman_q',
   kalmanR:          'fx_regime_kalman_r',
   rebalanceBandPct: 'fx_regime_rebalance_band', // % 단위로 저장 (3 = 3%p)
+  // ── Level 축 ──
+  useLevelAxis:     'fx_level_use',             // 1=사용 0=미사용
+  anchorRate:       'fx_level_anchor_krw',      // 앵커 환율 (원)
+  anchorSetAt:      'fx_level_anchor_set_at',   // 설정일 — param_text 에 저장(노후화 경보용)
+  levelWindowDays:  'fx_level_window_days',     // 박스 판정 창
+  levelLookbackDays:'fx_level_lookback_days',   // 후보 탐색 범위
+  levelVhPct:       'fx_level_vh_pct',          // % 단위 (8 = +8%)
+  levelHPct:        'fx_level_h_pct',
+  levelLPct:        'fx_level_l_pct',           // % 단위 (-3 = −3%)
+  levelVlPct:       'fx_level_vl_pct',
+  forceConvertDays: 'fx_force_convert_days',
 } as const
+
+export const ALL_LEVEL_GRADES: LevelGrade[] = ['VH', 'H', 'N', 'L', 'VL']
+export const ALL_TREND_GROUPS: TrendGroup[] = ['up', 'side', 'down']
+
+/** policy_params 키 이름 — Level×Trend 목표 비율 (예: fx_level_target_vh_down) */
+export function levelTargetParamKey(grade: LevelGrade, group: TrendGroup): string {
+  return `fx_level_target_${grade.toLowerCase()}_${group}`
+}
 
 /**
  * policy_params 값에서 프로토콜을 조립한다. 값이 없으면 코드 기본값을 쓴다.
@@ -504,8 +733,33 @@ export function protocolFromParams(get: (key: string) => number | null): PolicyP
     if (v != null && Number.isFinite(v)) targets[code] = v / 100
   }
 
+  const levelTargets: LevelTargets = {
+    VH: { ...DEFAULT_LEVEL_TARGETS.VH }, H: { ...DEFAULT_LEVEL_TARGETS.H },
+    N:  { ...DEFAULT_LEVEL_TARGETS.N },  L: { ...DEFAULT_LEVEL_TARGETS.L },
+    VL: { ...DEFAULT_LEVEL_TARGETS.VL },
+  }
+  for (const g of ALL_LEVEL_GRADES) {
+    for (const tg of ALL_TREND_GROUPS) {
+      const v = get(levelTargetParamKey(g, tg))
+      if (v != null && Number.isFinite(v)) levelTargets[g][tg] = v / 100
+    }
+  }
+
+  const anchor = get(PROTOCOL_PARAM_KEYS.anchorRate)
+
   return {
     targets,
+    // 앵커가 없으면 Level 축을 켤 수 없다 — 기준점 없이 '높다/낮다'를 말할 수 없기 때문.
+    useLevelAxis: anchor != null && anchor > 0 && pick(PROTOCOL_PARAM_KEYS.useLevelAxis, 1) !== 0,
+    anchorRate:   anchor != null && anchor > 0 ? anchor : null,
+    levelThresholds: {
+      vh: pick(PROTOCOL_PARAM_KEYS.levelVhPct, DEFAULT_LEVEL_THRESHOLDS.vh * 100) / 100,
+      h:  pick(PROTOCOL_PARAM_KEYS.levelHPct,  DEFAULT_LEVEL_THRESHOLDS.h  * 100) / 100,
+      l:  pick(PROTOCOL_PARAM_KEYS.levelLPct,  DEFAULT_LEVEL_THRESHOLDS.l  * 100) / 100,
+      vl: pick(PROTOCOL_PARAM_KEYS.levelVlPct, DEFAULT_LEVEL_THRESHOLDS.vl * 100) / 100,
+    },
+    levelTargets,
+    forceConvertDays: pick(PROTOCOL_PARAM_KEYS.forceConvertDays, DEFAULT_PROTOCOL.forceConvertDays),
     thresholds: {
       strongTrendER:   pick(PROTOCOL_PARAM_KEYS.strongTrendER,   DEFAULT_THRESHOLDS.strongTrendER),
       weakTrendER:     pick(PROTOCOL_PARAM_KEYS.weakTrendER,     DEFAULT_THRESHOLDS.weakTrendER),
@@ -527,6 +781,12 @@ export const DEFAULT_PROTOCOL: PolicyProtocol = {
   kalmanQ:    2,
   kalmanR:    10,
   rebalanceBandPct: 0.03,
+  // 앵커는 담당자가 고정하기 전까지 없다 → 기본 상태에서는 구 국면 매핑으로 동작한다.
+  useLevelAxis:    false,
+  anchorRate:      null,
+  levelThresholds: DEFAULT_LEVEL_THRESHOLDS,
+  levelTargets:    DEFAULT_LEVEL_TARGETS,
+  forceConvertDays: 90,
 }
 
 /** 목표 비율을 제약 조건으로 클램프할 때 필요한 회사 상황 */
@@ -545,15 +805,44 @@ export interface TreasuryContext {
   policyMaxRatio: number | null
   /** 정책 밴드 하한 (policy_params.fx_target_min, 0~1). null=제약 없음 */
   policyMinRatio: number | null
+
+  // ── 안전장치 (Level 축 도입과 함께 신설) ──────────────────────────
+  /**
+   * 최대 미환전 노출 한도 (원화 환산). 넘으면 Level 과 무관하게 환전한다.
+   * ⚠ 순수입 구조라 재고가 자동으로 쌓인다 — 상한이 없으면 노출이 단조 증가한다.
+   */
+  maxExposureKRW?: number | null
+  /** 마지막 환전 이후 경과 영업일. forceConvertDays 와 함께 시간 기반 강제 환전에 쓰인다 */
+  daysSinceLastConvert?: number | null
+  /**
+   * 평균 취득환율 (원/외화). 매도 시 실현손익 산출용.
+   * 1단계는 수동 입력, 추후 FIFO 원장 연동(docs/기획/외화원장_FIFO_가중평균.md).
+   */
+  avgAcquisitionRate?: number | null
 }
 
-export type ClampReason = 'none' | 'buffer' | 'policy_band'
+export type ClampReason = 'none' | 'buffer' | 'policy_band' | 'exposure_cap' | 'time_force'
+
+export const CLAMP_LABEL: Record<ClampReason, string> = {
+  none:         '제약 없음',
+  buffer:       '결제 버퍼 하한',
+  policy_band:  '정책 밴드',
+  exposure_cap: '최대 노출 한도 초과',
+  time_force:   '장기 미환전 — 시간 기반 강제 환전',
+}
 
 export interface AppliedTarget {
   rawTarget:     number
   appliedTarget: number
   clampedBy:     ClampReason
   bufferFloor:   number
+}
+
+export interface ConstraintOptions {
+  /** 시간 기반 강제 환전 기준일. 0=비활성 */
+  forceConvertDays?: number
+  /** 강제 환전 시 끌어내릴 목표(중립 수준). 기본 0.3 */
+  neutralTarget?:    number
 }
 
 /**
@@ -563,7 +852,11 @@ export interface AppliedTarget {
  * ⭐ 알고리즘 제안이 정책 밴드를 넘어설 수 없다. 충돌 시 정책이 이긴다.
  *   화면에서 clampedBy 를 반드시 표기해 "왜 제안과 다른가"를 설명할 것.
  */
-export function applyConstraints(rawTarget: number, ctx: TreasuryContext): AppliedTarget {
+export function applyConstraints(
+  rawTarget: number,
+  ctx: TreasuryContext,
+  opts: ConstraintOptions = {},
+): AppliedTarget {
   const bufferFloor =
     ctx.totalFundKRW > 0 ? Math.min(1, ctx.fxPayableKRW / ctx.totalFundKRW) : 0
 
@@ -578,7 +871,30 @@ export function applyConstraints(rawTarget: number, ctx: TreasuryContext): Appli
     applied = ctx.policyMinRatio
     clampedBy = 'policy_band'
   }
-  // 결제 버퍼가 최종 하한 — 정책 밴드보다도 우선한다 (실제 지급 의무이므로)
+
+  // ── 안전장치 ①: 최대 노출 한도 ─────────────────────────────────
+  // Level 이 "싸니까 보유"라 해도 노출이 한도를 넘으면 환전한다.
+  if (ctx.maxExposureKRW != null && ctx.maxExposureKRW > 0 && ctx.totalFundKRW > 0) {
+    const cap = ctx.maxExposureKRW / ctx.totalFundKRW
+    if (applied > cap) {
+      applied = cap
+      clampedBy = 'exposure_cap'
+    }
+  }
+
+  // ── 안전장치 ②: 시간 기반 강제 환전 ────────────────────────────
+  // "싸니까 안 판다"가 무한정 지속되는 것을 막는다.
+  // (그 판단이 바로 2026-07 에 매각 시기를 놓친 경위였다)
+  const fcd = opts.forceConvertDays ?? 0
+  if (fcd > 0 && (ctx.daysSinceLastConvert ?? 0) >= fcd) {
+    const neutral = opts.neutralTarget ?? 0.3
+    if (applied > neutral) {
+      applied = neutral
+      clampedBy = 'time_force'
+    }
+  }
+
+  // ── 결제 버퍼가 최종 하한 — 다른 모든 제약보다 우선 (실제 지급 의무) ──
   if (applied < bufferFloor) {
     applied = bufferFloor
     clampedBy = 'buffer'
@@ -601,6 +917,15 @@ export interface FxRegimeSignal {
     rawCode:       RegimeCode
     confirmedDays: number
   }
+  /** 수준 축. 앵커 미설정이거나 Level 축 비활성이면 null */
+  level: {
+    anchorRate: number
+    /** (현재가 − 앵커) / 앵커 */
+    dev:        number
+    grade:      LevelGrade
+    label:      string
+    trendGroup: TrendGroup
+  } | null
   decision: {
     rawTargetRatio:     number
     appliedTargetRatio: number
@@ -612,6 +937,15 @@ export interface FxRegimeSignal {
     /** rebalanceBandPct 미만이면 false — 거래 불필요 */
     actionRequired:     boolean
     action:             string
+    /**
+     * 이 권고를 실행할 때 실현되는 환차손익 (원화). 매도일 때만 산출.
+     * avgAcquisitionRate 미설정이면 null.
+     * ⚠ 음수라도 차단하지 않는다 — 비중 상한 해소 등을 위해 손실 실현이 필요할 수 있다.
+     *   다만 화면에 반드시 경고와 함께 금액을 표시할 것(사용자 결정 2026-08-11).
+     */
+    expectedRealizedPnlKRW: number | null
+    /** 취득원가 이하 매도 여부 */
+    belowCost:              boolean
   }
 }
 
@@ -647,24 +981,54 @@ export function evaluateRegime(
   const rawCode = rawCodes.length ? rawCodes[rawCodes.length - 1] : classifyRegime(ind, protocol.thresholds)
   const { code, confirmedDays } = confirmRegime(rawCodes, protocol.confirmDays)
 
-  const rawTarget = protocol.targets[code] ?? 0.3
-  const applied = applyConstraints(rawTarget, ctx)
+  // ── 수준(Level) 판정 → 목표 비율 ─────────────────────────────────
+  // Level 이 방향을, Trend 가 속도를 정한다. 앵커가 없으면 구 국면 매핑으로 폴백.
+  const trendGroup = trendGroupOf(code)
+  let levelBlock: FxRegimeSignal['level'] = null
+  let rawTarget: number
+
+  if (protocol.useLevelAxis && protocol.anchorRate != null && protocol.anchorRate > 0) {
+    const { dev, grade } = classifyLevel(ind.close, protocol.anchorRate, protocol.levelThresholds)
+    levelBlock = {
+      anchorRate: protocol.anchorRate,
+      dev, grade, label: LEVEL_LABEL[grade], trendGroup,
+    }
+    rawTarget = protocol.levelTargets[grade][trendGroup]
+  } else {
+    rawTarget = protocol.targets[code] ?? 0.3
+  }
+
+  const applied = applyConstraints(rawTarget, ctx, {
+    forceConvertDays: protocol.forceConvertDays,
+    neutralTarget:    protocol.levelTargets.N[trendGroup],
+  })
 
   const currentRatio = ctx.totalFundKRW > 0 ? ctx.fxHoldingKRW / ctx.totalFundKRW : 0
   const gap = applied.appliedTarget - currentRatio
   const actionRequired = Math.abs(gap) >= protocol.rebalanceBandPct
   const tradeKRW = gap * ctx.totalFundKRW
 
+  // 매도 시 실현 환차손익 — 취득원가 이하라도 차단하지 않고 금액만 명시한다
+  let expectedRealizedPnlKRW: number | null = null
+  let belowCost = false
+  const acq = ctx.avgAcquisitionRate
+  if (actionRequired && tradeKRW < 0 && acq != null && acq > 0 && ind.close > 0) {
+    const sellFx = -tradeKRW / ind.close
+    expectedRealizedPnlKRW = sellFx * (ind.close - acq)
+    belowCost = ind.close < acq
+  }
+
   let action: string
   if (!actionRequired) action = '조치 불필요 — 리밸런싱 밴드 이내'
   else if (tradeKRW < 0) action = '외화 매도 권고'
-  else action = '외화 매수/보유 확대 권고'
+  else action = '외화 보유 확대 권고 (순유입 구조에서는 환전 지연을 의미)'
 
   return {
     asOf:     series[series.length - 1].date,
     currency,
     indicators: ind,
     regime: { code, label: regimeLabel(code), rawCode, confirmedDays },
+    level: levelBlock,
     decision: {
       rawTargetRatio:     applied.rawTarget,
       appliedTargetRatio: applied.appliedTarget,
@@ -674,6 +1038,8 @@ export function evaluateRegime(
       suggestedTradeKRW:  tradeKRW,
       actionRequired,
       action,
+      expectedRealizedPnlKRW,
+      belowCost,
     },
   }
 }

@@ -12,7 +12,9 @@ import {
   sma, stdev, bollinger, ema, macd, efficiencyRatio, annualizedVol,
   kalmanSmooth, classifyRegime, computeIndicators, confirmRegime,
   applyConstraints, evaluateRegime, regimeLabel,
-  type RegimeCode, type RegimeSeriesPoint,
+  findConsolidationZones, classifyLevel, trendGroupOf,
+  DEFAULT_PROTOCOL, DEFAULT_LEVEL_TARGETS,
+  type RegimeCode, type RegimeSeriesPoint, type PolicyProtocol,
 } from '../src/lib/fxRegime'
 
 let pass = 0, fail = 0
@@ -129,6 +131,98 @@ ok('강한 하락 → 매도 제안(음수)', sig.decision.suggestedTradeKRW < 0
 ok('조치 필요 플래그', sig.decision.actionRequired)
 ok('현재 비율 정확', near(sig.decision.currentRatio, 0.45, 1e-9))
 ok('표본 부족 시 null', evaluateRegime(fallS.slice(0, 10), base) === null)
+
+console.log('\n── 8. 수준(Level) 축 ──')
+
+// 앵커 후보 탐색 — 앞쪽에 뚜렷한 박스권, 뒤쪽에 급등 구간을 심는다
+const boxThenRally = mkSeries(i => (i < 200 ? 1300 + Math.sin(i / 3) * 6 : 1300 + (i - 200) * 4), 320)
+const zones = findConsolidationZones(boxThenRally, { lookbackDays: 320, windowDays: 60, topN: 3 })
+console.log(`     후보 ${zones.length}개, 1위 ${zones[0]?.from}~${zones[0]?.to} ` +
+            `평균 ${zones[0]?.mean.toFixed(1)} 폭 ${(zones[0]?.rangePct * 100).toFixed(2)}% ER ${zones[0]?.er.toFixed(1)}`)
+ok('앵커 후보를 찾는다', zones.length > 0)
+ok('1위 후보는 박스권 구간(급등 구간 아님)', zones[0] != null && zones[0].mean < 1330,
+   `mean=${zones[0]?.mean.toFixed(1)}`)
+ok('후보끼리 겹치지 않는다',
+   zones.every((z, i) => zones.slice(i + 1).every(o => o.from > z.to || o.to < z.from)))
+
+// 등급 분류
+ok('앵커 대비 +10% → VH', classifyLevel(1430, 1300).grade === 'VH')
+ok('앵커 대비 +5%  → H',  classifyLevel(1365, 1300).grade === 'H')
+ok('앵커 대비 0%   → N',  classifyLevel(1300, 1300).grade === 'N')
+ok('앵커 대비 −5%  → L',  classifyLevel(1235, 1300).grade === 'L')
+ok('앵커 대비 −10% → VL', classifyLevel(1170, 1300).grade === 'VL')
+ok('앵커 0 이면 안전하게 N', classifyLevel(1400, 0).grade === 'N')
+
+ok('추세 그룹 매핑', trendGroupOf('1-A') === 'up' && trendGroupOf('3-B') === 'side' && trendGroupOf('5-B') === 'down')
+
+// 매트릭스 방향성 — 낮을수록 많이 환전
+ok('고수준일수록 목표 비중이 낮다(=많이 환전)',
+   DEFAULT_LEVEL_TARGETS.VH.down < DEFAULT_LEVEL_TARGETS.N.down &&
+   DEFAULT_LEVEL_TARGETS.N.down  < DEFAULT_LEVEL_TARGETS.VL.down)
+ok('가장 강한 매도 신호 = 매우높음 × 하락',
+   DEFAULT_LEVEL_TARGETS.VH.down === Math.min(
+     ...Object.values(DEFAULT_LEVEL_TARGETS).flatMap(r => Object.values(r))))
+
+console.log('\n── 9. ⭐ 2026-07 사고 재현 대비 (Level 축의 존재 이유) ──')
+// 앵커 1,350 대비 1,531 은 +13.4% → VH. 그리고 급등 추세이므로 구 로직은 ①강한상승 판정.
+// ⚠ 기울기는 minTrendMovePct(20일 1.5%) 를 넘어야 '강한 상승'으로 잡힌다.
+//   0.9원/일(20일 1.33%)이면 횡보로 분류돼 이 테스트의 의미가 사라진다.
+const rallyToPeak = mkSeries(i => 1350 + i * 2.5, 320)
+const ctxJuly = {
+  totalFundKRW: 100_000_000_000,
+  fxHoldingKRW:  35_000_000_000,   // 35%
+  fxPayableKRW:   3_000_000_000,
+  policyMaxRatio: null, policyMinRatio: null,
+}
+const legacy: PolicyProtocol = { ...DEFAULT_PROTOCOL, useLevelAxis: false, forceConvertDays: 0 }
+const withLevel: PolicyProtocol = {
+  ...DEFAULT_PROTOCOL, useLevelAxis: true,
+  anchorRate: rallyToPeak[0].rate,        // 상승 시작점을 앵커로 → 현재는 크게 높음
+  forceConvertDays: 0,
+}
+const sLegacy = evaluateRegime(rallyToPeak, ctxJuly, legacy)!
+const sLevel  = evaluateRegime(rallyToPeak, ctxJuly, withLevel)!
+console.log(`     구 로직  : ${sLegacy.regime.code} 목표 ${(sLegacy.decision.appliedTargetRatio * 100).toFixed(0)}% → ${sLegacy.decision.action}`)
+console.log(`     Level축  : ${sLevel.regime.code} / ${sLevel.level?.grade}(${((sLevel.level?.dev ?? 0) * 100).toFixed(1)}%) ` +
+            `목표 ${(sLevel.decision.appliedTargetRatio * 100).toFixed(0)}% → ${sLevel.decision.action}`)
+ok('상승장에서 구 로직은 목표를 높게 잡는다 (=매도 억제)',
+   sLegacy.decision.appliedTargetRatio >= 0.35, `${sLegacy.decision.appliedTargetRatio}`)
+ok('고수준에서 Level 축은 목표를 낮게 잡는다 (=매도 유도)',
+   sLevel.decision.appliedTargetRatio <= 0.25, `${sLevel.decision.appliedTargetRatio}`)
+ok('⭐ 같은 시점에 Level 축이 더 많이 환전하도록 지시',
+   sLevel.decision.appliedTargetRatio < sLegacy.decision.appliedTargetRatio)
+ok('Level 축은 매도를 권고', sLevel.decision.suggestedTradeKRW < 0)
+ok('level 블록은 앵커 미설정 시 null', sLegacy.level === null)
+
+console.log('\n── 10. 안전장치 & 취득원가 ──')
+const base10 = { totalFundKRW: 1000, fxHoldingKRW: 500, fxPayableKRW: 0,
+                 policyMaxRatio: null, policyMinRatio: null }
+ok('최대 노출 한도가 목표를 끌어내린다',
+   applyConstraints(0.5, { ...base10, maxExposureKRW: 200 }).appliedTarget === 0.2 &&
+   applyConstraints(0.5, { ...base10, maxExposureKRW: 200 }).clampedBy === 'exposure_cap')
+ok('시간 기반 강제 환전 발동',
+   applyConstraints(0.45, { ...base10, daysSinceLastConvert: 100 },
+                    { forceConvertDays: 90, neutralTarget: 0.3 }).clampedBy === 'time_force')
+ok('기한 전이면 발동 안 함',
+   applyConstraints(0.45, { ...base10, daysSinceLastConvert: 30 },
+                    { forceConvertDays: 90, neutralTarget: 0.3 }).appliedTarget === 0.45)
+ok('결제 버퍼는 모든 제약보다 우선(최종 하한)',
+   applyConstraints(0.1, { ...base10, fxPayableKRW: 400, maxExposureKRW: 200 }).appliedTarget === 0.4)
+
+// 취득원가 이하 매도 — 차단하지 않고 손실만 보고
+const fallSeries = mkSeries(i => 2100 - i * 2.5)
+const sPnl = evaluateRegime(fallSeries, {
+  totalFundKRW: 100_000_000_000, fxHoldingKRW: 45_000_000_000, fxPayableKRW: 0,
+  policyMaxRatio: null, policyMinRatio: null,
+  avgAcquisitionRate: 99_999,   // 현재가보다 훨씬 높은 취득원가 → 손실 실현 상황
+})!
+ok('취득원가 이하 매도를 차단하지 않는다', sPnl.decision.actionRequired && sPnl.decision.suggestedTradeKRW < 0)
+ok('실현손실을 계산해 보고한다',
+   sPnl.decision.expectedRealizedPnlKRW != null && sPnl.decision.expectedRealizedPnlKRW < 0)
+ok('belowCost 플래그', sPnl.decision.belowCost === true)
+ok('취득원가 미설정 시 null',
+   evaluateRegime(fallSeries, { ...base10, totalFundKRW: 1000, fxHoldingKRW: 900 })!
+     .decision.expectedRealizedPnlKRW === null)
 
 console.log(`\n결과: ${pass} passed, ${fail} failed\n`)
 process.exit(fail ? 1 : 0)

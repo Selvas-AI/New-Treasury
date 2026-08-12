@@ -3,6 +3,8 @@ import type { TreasuryUser, Company, SectionKey, SectionPermission } from '../ty
 
 // 역할별 기본 허용 메뉴 slug
 export const MENU_DEFAULTS: Record<string, string[]> = {
+  // fx-regime / fx-ledger 는 민감한 개발·실원장 메뉴라 역할 기본값에 넣지 않는다.
+  // master는 hasMenu()에서 항상 허용되고, 그 외 계정은 treasury_users.menus에 명시돼야 한다.
   master:  ['*'],
   admin:   ['dashboard','daily','input','invest','loans','equity','history','fx','policy'],
   editor:  ['dashboard','daily','input','invest','loans','equity','history','fx'],

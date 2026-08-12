@@ -32,7 +32,7 @@ export function checkFx(data: PolicyRealData, params: PolicyParamReader) {
     : ratio >= min && ratio <= max ? 'ok'
     : ratio < min * 0.9 || ratio > max * 1.1 ? 'over'
     : 'warn'
-  return { status, ratio, min, max, fxKrw: data.fxTotalHoldings, totalFund: data.totalFundAvail }
+  return { status, ratio, min, max, fxKrw: data.fxPortfolioHoldings, totalFund: data.fxPolicyDenominator }
 }
 
 export function checkLoan(data: PolicyRealData, params: PolicyParamReader) {

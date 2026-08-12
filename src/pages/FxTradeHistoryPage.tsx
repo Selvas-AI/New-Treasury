@@ -116,7 +116,7 @@ export default function FxTradeHistoryPage() {
 
   async function handleCancel(id: string) {
     if (!window.confirm('이 발의를 취소하시겠습니까?')) return
-    await hist.cancel(id)
+    await hist.cancel(id, user?.label ?? '')
     doFetch()
   }
 

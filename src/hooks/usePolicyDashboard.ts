@@ -60,13 +60,16 @@ export interface PolicyRealData {
   // 총 자금 규모
   totalFundEstimate: number   // 운전자금+운용자금+국채 (정책 파라미터 없을 때 추정)
 
-  // ── FX 정책 비교용 SSOT (FxPolicyTab과 동일 공식 — 세션18차 통일) ──
-  // fxTotalHoldings = 운전자금 외화(fxKrw) + 운용자금 외화(가용, non-bond) 원화환산
-  // totalFundAvail  = 운전자금 + 가용운용 + 가용국채 + 가용지분 (= 대시보드 "가용자금 합계"와 동일)
-  // fxRatio         = fxTotalHoldings / totalFundAvail × 100
+  // ── FX 정책 비교용 SSOT ──
+  // fxRatio는 전 통화 외화자산(가용·잠금 포함) / 전사 자금 바구니로 계산한다.
+  // totalFundAvail은 대시보드 가용자금 호환 필드이며 정책밴드 분모로 쓰지 않는다.
   fxTotalHoldings: number
   totalFundAvail: number
   fxRatio: number
+  /** 정책밴드용 전사 외화 바구니: 통화별 원금/원화환산(가용·잠금 모두 포함) */
+  fxByCurrency: Record<FxCode, { nativeAmount: number; krwAmount: number }>
+  fxPortfolioHoldings: number
+  fxPolicyDenominator: number
 
   loading: boolean
 }
@@ -152,20 +155,30 @@ function computePolicyData(raw: RawCompanyData, loading: boolean, toKRW: ToKRWFn
     .filter(e => e.available === '가용')
     .reduce((s, e) => s + (e.total_value || 0), 0)
 
-  // FX 정책 SSOT — FxPolicyTab과 동일 공식(세션18차 통일)
-  // 운용자금 외화(가용, non-bond)의 원화환산 = investAvail 산출 시 이미 toKRWAmt 적용된 값 중
-  // 외화(KRW 아님) 통화분만 별도 추출
-  const investFxKrw = nonBonds.filter(i => i.available === '가용' && i.currency && i.currency !== 'KRW')
-    .reduce((s, i) => s + toKRWAmt(i.amount || 0, i.currency || 'KRW'), 0)
-  const fxTotalHoldings = fxKrw + investFxKrw
+  // FX 정책 SSOT: 정책밴드는 특정 통화가 아니라 전사 외화 바구니 / 전사 자금으로 계산한다.
+  // daily.fx_usd 등은 외화 원금이며 fx_krw는 그 운전자금 외화 전체의 원화환산 합계다.
+  const fxCodes: FxCode[] = ['USD','EUR','JPY','GBP','CNY']
+  const dailyRecord = latestDaily as unknown as Record<string, unknown> | null
+  const fxByCurrency = Object.fromEntries(fxCodes.map(code => {
+    const operatingNative = Number(dailyRecord?.[`fx_${code.toLowerCase()}`] ?? 0)
+    const investNative = nonBonds.filter(i => i.currency === code)
+      .reduce((sum, i) => sum + (i.amount || 0), 0)
+    const nativeAmount = operatingNative + investNative
+    return [code, { nativeAmount, krwAmount: toKRWAmt(nativeAmount, code) }]
+  })) as Record<FxCode, { nativeAmount: number; krwAmount: number }>
+  const fxPortfolioHoldings = Object.values(fxByCurrency).reduce((sum, row) => sum + row.krwAmount, 0)
+  // 총 자금 대비 외화 비율: 환전 가능 여부와 무관하게 회사가 보유한 자산을 분모/분자에 모두 포함한다.
+  const fxPolicyDenominator = operatingCashWithFx + investAvail + investUnavail + bondAvail + equityAvail
+  const fxTotalHoldings = fxPortfolioHoldings
   const totalFundAvail  = operatingCashWithFx + investAvail + bondAvail + equityAvail
-  const fxRatio = totalFundAvail > 0 ? (fxTotalHoldings / totalFundAvail) * 100 : 0
+  const fxRatio = fxPolicyDenominator > 0 ? (fxPortfolioHoldings / fxPolicyDenominator) * 100 : 0
 
   return {
     latestDaily, operatingCash, operatingCashWithFx, fxKrw,
     investments: nonBonds, investAvail, investUnavail, investByBank,
     bonds, bondAvail, equityAvail, loans: loanData, totalLoan, loanByBank,
-    totalFundEstimate, fxTotalHoldings, totalFundAvail, fxRatio, loading,
+    totalFundEstimate, fxTotalHoldings, totalFundAvail, fxRatio,
+    fxByCurrency, fxPortfolioHoldings, fxPolicyDenominator, loading,
   }
 }
 

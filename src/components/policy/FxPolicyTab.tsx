@@ -153,6 +153,13 @@ export default function FxPolicyTab({ company }: { company: Company }) {
         return s + fx.toKRW(i.amount || 0, i.currency as FxCode)
       }, 0)
   }, [invest.data, fx.rates]) // eslint-disable-line react-hooks/exhaustive-deps
+  const investAllCash = useMemo(() => {
+    const latest = getLatestInvestments(invest.data)
+    return latest.filter(i => i.product !== '국채').reduce((s, i) => {
+      if (!i.currency || i.currency === 'KRW') return s + (i.amount || 0)
+      return s + fx.toKRW(i.amount || 0, i.currency as FxCode)
+    }, 0)
+  }, [invest.data, fx.rates]) // eslint-disable-line react-hooks/exhaustive-deps
   const bondAvailCash = useMemo(() => {
     const latestBonds = getLatestBonds(invest.data)
     return latestBonds
@@ -167,7 +174,9 @@ export default function FxPolicyTab({ company }: { company: Company }) {
       .filter(e => e.available === '가용')
       .reduce((s, e) => s + (e.total_value || 0), 0)
   , [equities.latest])
-  const totalFund = operatingCash + investAvailCash + bondAvailCash + equityAvailCash
+  // 정책밴드 분모는 환전 가능액이 아니라 회사의 전체 자금 바구니다.
+  // 정기예금/불가용 외화도 외화위험에는 노출되므로 분자와 분모에 함께 포함한다.
+  const totalFund = operatingCash + investAllCash + bondAvailCash + equityAvailCash
 
   // ── 이중 안전장치 (로컬 슬라이더 값으로 실시간 계산 — Supabase 저장 전에도 즉각 반영)
   const maxAllowedLoss  = (operatingProfit + interestIncome) * (localRiskPct / 100)
@@ -186,12 +195,12 @@ export default function FxPolicyTab({ company }: { company: Company }) {
     GBP: latestDaily?.fx_gbp ?? 0,
     CNY: latestDaily?.fx_cny ?? 0,
   }
-  // 운용자금 외화 (investments 테이블, currency != KRW, 가용만)
+  // 운용자금 외화 (investments 테이블, currency != KRW, 가용·불가용 모두)
   const investFxNative = useMemo(() => {
     const result: Partial<Record<FxCode, number>> = {}
     const latest = getLatestInvestments(invest.data)
     latest
-      .filter(i => i.product !== '국채' && i.available === '가용' && i.currency && i.currency !== 'KRW')
+      .filter(i => i.product !== '국채' && i.currency && i.currency !== 'KRW')
       .forEach(i => {
         const code = i.currency as FxCode
         result[code] = (result[code] ?? 0) + (i.amount || 0)
