@@ -2,11 +2,23 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/New-Treasury/favicon.svg" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>new-treasury</title>
-    <script type="module" crossorigin src="/New-Treasury/assets/index-z9zvzraD.js"></script>
-    <link rel="stylesheet" crossorigin href="/New-Treasury/assets/index-BgKMJlLd.css">
+    <title>Selvas Treasury</title>
+    <script>
+      // GitHub Pages SPA: 404.html에서 전달된 경로 복원
+      // ⚠ 해시(#access_token=...)를 함께 복원해야 함 — Supabase 비밀번호 재설정/초대
+      // 링크는 세션 토큰을 URL 해시로 전달하는데, replaceState에 해시를 안 붙이면
+      // 여기서 사라져 recovery 세션 수립이 실패한다 (2026-07-01 실사용 버그).
+      (function() {
+        var p = new URLSearchParams(window.location.search).get('p');
+        if (p) {
+          window.history.replaceState(null, '', decodeURIComponent(p) + window.location.hash);
+        }
+      })();
+    </script>
+    <script type="module" crossorigin src="/assets/index-C9q1W8QR.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-DJZ0CHnv.css">
   </head>
   <body>
     <div id="root"></div>

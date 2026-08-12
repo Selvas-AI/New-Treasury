@@ -1,0 +1,15 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script>
+    // GitHub Pages SPA 라우팅 리다이렉트
+    // /XXX 직접 접근 시 GitHub Pages가 404를 반환 → index.html(루트)로 경로 전달
+    var path = window.location.pathname;
+    var search = window.location.search;
+    var hash = window.location.hash;
+    window.location.replace('/?p=' + encodeURIComponent(path + search) + hash);
+  </script>
+</head>
+<body></body>
+</html>
