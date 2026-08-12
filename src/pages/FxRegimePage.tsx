@@ -140,6 +140,9 @@ function TreasuryInputPanel({ source, onSourceChange, inputs, currency, canEdit,
   canEdit: boolean
   basket: { code: string; nativeAmount: number; krwAmount: number }[]
 }) {
+  const [imported, setImported] = useState(false)
+  // 모든 탭에 공통으로 붙는 큰 입력 영역이므로 기본은 접어 결과 화면을 넓게 쓴다.
+  const [open, setOpen] = useState(false)
   const setNumber = (key: keyof FxTreasuryInputs, v: number | null) => {
     inputs.updateInputs({ [key]: v ?? 0 })
   }
@@ -148,7 +151,23 @@ function TreasuryInputPanel({ source, onSourceChange, inputs, currency, canEdit,
     <div className={CARD}>
       <div className="flex flex-wrap items-center gap-2">
         <div className="text-sm font-semibold text-gray-800 dark:text-slate-100">💰 자금·정책 입력</div>
-        <div className="ml-auto flex rounded-lg bg-gray-100 p-0.5 text-xs dark:bg-slate-800">
+        {!open && (
+          <div className="text-[11px] text-gray-500 dark:text-slate-400">
+            총자금 {fmtKRW(inputs.totalFundKRW)} · 외화비중 {(inputs.totalFundKRW > 0 ? inputs.portfolioFxHoldingKRW / inputs.totalFundKRW * 100 : 0).toFixed(1)}% · 밴드 {inputs.policyMinRatio == null ? '—' : `${(inputs.policyMinRatio * 100).toFixed(1)}%`}~{inputs.policyMaxRatio == null ? '—' : `${(inputs.policyMaxRatio * 100).toFixed(1)}%`}
+          </div>
+        )}
+        {open && source === 'manual' && canEdit && (
+          <button type="button" onClick={() => { inputs.importTreasuryAmounts(); setImported(true) }}
+            className="rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-300">
+            {imported ? '✓ Treasury 금액 반영됨' : 'Treasury 주요 금액 불러오기'}
+          </button>
+        )}
+        <button type="button" onClick={() => setOpen(v => !v)}
+          className="ml-auto rounded-md border border-gray-200 px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+          aria-expanded={open}>
+          {open ? '▲ 입력 접기' : '▼ 입력 펼치기'}
+        </button>
+        <div className="flex rounded-lg bg-gray-100 p-0.5 text-xs dark:bg-slate-800">
           <button
             type="button"
             onClick={() => onSourceChange('manual')}
@@ -160,6 +179,7 @@ function TreasuryInputPanel({ source, onSourceChange, inputs, currency, canEdit,
           </button>
         </div>
       </div>
+      {open && <>
       <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <InputField label="정책 기준 총자금" unit="원">
           <NumField value={inputs.totalFundKRW} disabled={!canEdit || source === 'treasury'}
@@ -182,14 +202,14 @@ function TreasuryInputPanel({ source, onSourceChange, inputs, currency, canEdit,
             onChange={v => setNumber('fxPayableFx', v)} />
         </InputField>
         <InputField label="정책 밴드 하한" unit="%">
-          <NumField allowEmpty disabled={!canEdit || source === 'treasury'} placeholder="미설정"
+          <NumField allowEmpty disabled={!canEdit} placeholder="미설정"
             value={inputs.policyMinRatio == null ? null : inputs.policyMinRatio * 100}
             onChange={v => inputs.updateInputs({
               policyMinRatio: v == null ? null : Math.min(1, Math.max(0, v / 100)),
             })} />
         </InputField>
         <InputField label="정책 밴드 상한" unit="%">
-          <NumField allowEmpty disabled={!canEdit || source === 'treasury'} placeholder="미설정"
+          <NumField allowEmpty disabled={!canEdit} placeholder="미설정"
             value={inputs.policyMaxRatio == null ? null : inputs.policyMaxRatio * 100}
             onChange={v => inputs.updateInputs({
               policyMaxRatio: v == null ? null : Math.min(1, Math.max(0, v / 100)),
@@ -214,7 +234,7 @@ function TreasuryInputPanel({ source, onSourceChange, inputs, currency, canEdit,
         <div className="mt-2 text-[11px] text-gray-500">정책밴드는 이 바구니 전체를 총자금으로 나눈 값입니다. 통화 탭은 그중 어떤 통화를 실제로 환전할지 판단하며, 정기예금 등 잠긴 금액은 집행 가능액에서 다시 제외됩니다.</div>
       </div>
       <div className="mt-2 text-[11px] text-gray-500 dark:text-slate-400">
-        {source === 'manual' ? '법인·통화별 브라우저에 자동 저장됩니다. Treasury 정책 파라미터에는 기록하지 않습니다.' : '총자금·외화잔액·정책밴드·FIFO 장부환율은 Treasury 조회값입니다. 나머지 운영 가정은 수동 입력값을 함께 사용합니다.'}
+        {source === 'manual' ? '법인·통화별 브라우저에 자동 저장됩니다. Treasury 주요 금액 불러오기는 금액과 FIFO 장부환율만 복사하며 정책·운영 가정은 유지합니다.' : '총자금·외화잔액·FIFO 장부환율은 Treasury 조회값입니다. 정책밴드와 나머지 운영 가정은 이 화면의 수동 입력값을 사용합니다.'}
         평균 취득환율을 넣으면 환전 시 실현손익을 함께 계산합니다(취득원가 이하 매도를 막지는 않습니다).
       </div>
       {source === 'treasury' && (
@@ -232,6 +252,7 @@ function TreasuryInputPanel({ source, onSourceChange, inputs, currency, canEdit,
           가용 자금 총액을 입력해야 현재 비중과 정책 밴드 제약을 정확히 계산할 수 있습니다.
         </div>
       )}
+      </>}
     </div>
   )
 }
@@ -293,10 +314,8 @@ export default function FxRegimePage() {
     totalFundKRW: policyData.fxPolicyDenominator,
     fxHoldingFx: fxLots.totalAmount > 0 ? fxLots.totalAmount : treasuryNativeHolding,
     portfolioFxHoldingKRW: policyData.fxPortfolioHoldings,
-    policyMinRatio: params.get('fx_target_min') == null ? null : Number(params.get('fx_target_min')) / 100,
-    policyMaxRatio: params.get('fx_target_max') == null ? null : Number(params.get('fx_target_max')) / 100,
     avgAcquisitionRate: fxLots.bookRate ?? 0,
-  }), [policyData.fxPolicyDenominator, policyData.fxPortfolioHoldings, treasuryNativeHolding, fxLots.totalAmount, fxLots.bookRate, params])
+  }), [policyData.fxPolicyDenominator, policyData.fxPortfolioHoldings, treasuryNativeHolding, fxLots.totalAmount, fxLots.bookRate])
   const treasuryInputs = useFxTreasuryInputs(inputSource, company, currency, treasuryValues)
   const portfolioBasket = useMemo(() => {
     if (inputSource === 'treasury') return Object.entries(policyData.fxByCurrency)
@@ -592,6 +611,7 @@ export default function FxRegimePage() {
       </div>
 
       <TreasuryInputPanel
+        key={`${company}_${currency}`}
         source={inputSource}
         onSourceChange={setInputSource}
         inputs={treasuryInputs}

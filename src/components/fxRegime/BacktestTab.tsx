@@ -94,25 +94,6 @@ export default function BacktestTab({
      avgAcquisitionRate, maxExposureKRW],
   )
 
-  /**
-   * ⭐ 구 로직(국면 단독 매핑) 대조군.
-   *
-   * Level 축이 실제로 개선인지 보려면 **같은 구간에서 둘을 나란히 돌려야** 한다.
-   * 특히 2026-07 구간에서 구 로직이 고가에 '보유'를 권고하는지 확인하는 것이
-   * 이 기능 도입의 근거이므로, 이 대조군을 제거하지 말 것.
-   */
-  const legacyResult: BacktestResult = useMemo(
-    () => runBacktest({
-      ...common,
-      protocol: { ...protocol, useLevelAxis: false },
-      avgAcquisitionRate, maxExposureKRW,
-    }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [series, startDate, initialTotalKRW, initialFxHolding, monthlyInflowFx, fxPayableFx,
-     policyMinRatio, policyMaxRatio, protocol, costBps, checkDays, ignoreBand,
-     avgAcquisitionRate, maxExposureKRW],
-  )
-
   const chart = useMemo(() => {
     if (!result.points.length) return []
     const step = result.points.length > 400 ? 4 : 1
@@ -397,15 +378,15 @@ export default function BacktestTab({
           {avgAcquisitionRate > 0 && fifoChart.length > 0 && (
             <div className={CARD}>
               <div className="mb-1 text-sm font-semibold text-gray-800 dark:text-slate-100">
-                FIFO 장부 정상화 경로 — 시장 판단과 회계 손익을 함께 보기
+                동일 외화 유입 가정에서 국면 전략을 적용한 누적 손익
               </div>
               <div className="mb-3 text-[11px] leading-relaxed text-gray-500 dark:text-slate-400">
-                시작 재고는 입력한 장부환율로 하나의 개시 로트로 두고, 이후 유입분은 <strong>그날 시장환율로 새 로트</strong>를 만듭니다.
-                환전할 때는 가장 오래된 로트부터 소진합니다. 따라서 고원가 개시 재고가 먼저 빠지면 장부환율이 낮아질 수 있지만,
-                <strong>0 수렴이나 미래 이익은 보장되지 않습니다.</strong> 이후 유입 환율과 실제 환전 속도가 결과를 결정합니다.
+                현재 입력한 시작 재고와 월 유입액이 과거부터 동일하게 들어왔다고 가정하고, 각 날짜의 실제 환율에 국면 전략을 적용한 실험입니다.
+                유입분은 그날 환율로 새 FIFO 로트가 되고, 환전 시 가장 오래된 로트부터 소진됩니다.
+                아래 파란 총손익이 0보다 위면 이 가정에서 누적 이익, 아래면 누적 손실입니다. <strong>실제 과거 실적이나 미래 수익 보장은 아닙니다.</strong>
               </div>
 
-              <div className="mb-1 text-xs font-medium text-gray-700 dark:text-slate-200">① 시장환율과 남은 FIFO 장부환율</div>
+              <div className="mb-1 text-xs font-medium text-gray-700 dark:text-slate-200">① 전략 실행 후 남은 FIFO 장부환율은 시장환율에 어떻게 가까워졌나</div>
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={fifoChart} margin={{ top: 8, right: 8, bottom: 4, left: 8 }}>
@@ -420,7 +401,7 @@ export default function BacktestTab({
                 </ResponsiveContainer>
               </div>
 
-              <div className="mb-1 mt-4 text-xs font-medium text-gray-700 dark:text-slate-200">② 손익의 이동 — 실현·평가·합계</div>
+              <div className="mb-1 mt-4 text-xs font-medium text-gray-700 dark:text-slate-200">② 동일 유입 가정의 누적 환차손익 — 실현손익 + 남은 재고 평가손익</div>
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={fifoChart} margin={{ top: 8, right: 8, bottom: 4, left: 8 }}>
@@ -436,58 +417,12 @@ export default function BacktestTab({
                 </ResponsiveContainer>
               </div>
               <div className="mt-2 text-[11px] text-gray-500 dark:text-slate-400">
-                빨강과 주황 사이의 이동은 손실의 이름·인식 위치가 바뀐 효과입니다. 파란 총손익이 개선될 때만 경제적 손실이 실제로 줄었다고 볼 수 있습니다.
+                빨강은 환전으로 확정된 누적 실현손익, 주황은 아직 남은 외화의 평가손익, 파랑은 두 값을 합친 누적 총손익입니다.
+                실현손익과 평가손익 사이의 이동만으로 이익이 생긴 것은 아니며, 파란 총손익이 0보다 높아질 때 이 가정에서 경제적 이익이 발생한 것입니다.
                 기말 FIFO 장부환율 <strong>{fmtRate(result.endingFifoBookRate)}</strong>, 총손익 <strong>{fmtKRW(result.endingTotalPnlKRW ?? 0)}</strong>.
               </div>
             </div>
           )}
-
-          {/* ⭐ 구 로직 대조 — Level 축 도입 근거 */}
-          <div className={CARD}>
-            <div className="mb-1 text-sm font-semibold text-gray-800 dark:text-slate-100">
-              ⭐ 수준(Level) 축 도입 효과
-            </div>
-            <div className="mb-2 text-[11px] leading-relaxed text-gray-500 dark:text-slate-400">
-              같은 구간·같은 조건에서 <strong>구 로직(국면 단독)</strong>과 비교합니다.
-              구 로직은 상승장(=고가)에 목표 비중을 올려 매도를 억제하므로,
-              고점 구간에서 실현환율이 낮게 나오는 것이 정상입니다.
-              {!protocol.useLevelAxis && (
-                <span className="ml-1 font-semibold text-amber-700 dark:text-amber-400">
-                  현재 Level 축이 꺼져 있어 두 행이 동일합니다 — 정책 프로토콜 탭에서 앵커를 지정하세요.
-                </span>
-              )}
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[520px] text-sm">
-                <thead>
-                  <tr className="border-b border-gray-200 text-left text-xs text-gray-500 dark:border-slate-700 dark:text-slate-400">
-                    <th className="py-2">로직</th>
-                    <th className="py-2 text-right">가중평균 실현환율</th>
-                    <th className="py-2 text-right">기간평균 대비</th>
-                    <th className="py-2 text-right">환전량</th>
-                    <th className="py-2 text-right">거래</th>
-                    <th className="py-2 text-right">기말 미환전</th>
-                  </tr>
-                </thead>
-                <tbody className="tabular-nums">
-                  <AbRow name="수준×추세 (현재)" r={result} strong />
-                  <AbRow name="구 로직 (국면 단독)" r={legacyResult} />
-                </tbody>
-              </table>
-            </div>
-            {result.weightedAverageRate != null && legacyResult.weightedAverageRate != null && (
-              <div className={`mt-2 text-xs font-semibold ${
-                result.weightedAverageRate >= legacyResult.weightedAverageRate
-                  ? 'text-emerald-700 dark:text-emerald-400'
-                  : 'text-red-600 dark:text-red-400'
-              }`}>
-                차이 {(result.weightedAverageRate - legacyResult.weightedAverageRate >= 0 ? '+' : '')}
-                {(result.weightedAverageRate - legacyResult.weightedAverageRate).toFixed(1)}원/{' '}
-                {result.convertedFx > 0 && `환전 ${Math.round(result.convertedFx).toLocaleString()} 기준 약 `}
-                {fmtKRW((result.weightedAverageRate - legacyResult.weightedAverageRate) * result.convertedFx)}
-              </div>
-            )}
-          </div>
 
           {/* 프로토콜 비교 */}
           <div className={CARD}>
@@ -618,22 +553,6 @@ export default function BacktestTab({
 }
 
 // ── 모듈 레벨 헬퍼 (렌더 중 컴포넌트 정의 금지 — 입력 포커스 유실 전례) ──
-
-/** 구 로직 vs Level 축 대조 행 */
-function AbRow({ name, r, strong }: { name: string; r: BacktestResult; strong?: boolean }) {
-  return (
-    <tr className="border-b border-gray-100 dark:border-slate-800">
-      <td className={`py-1.5 ${strong ? 'font-semibold text-gray-900 dark:text-slate-100' : 'text-gray-600 dark:text-slate-300'}`}>{name}</td>
-      <td className="py-1.5 text-right">{fmtRate(r.weightedAverageRate)}</td>
-      <td className={`py-1.5 text-right ${(r.ratePremium ?? 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
-        {r.ratePremium == null ? '—' : `${r.ratePremium >= 0 ? '+' : ''}${r.ratePremium.toFixed(1)}원`}
-      </td>
-      <td className="py-1.5 text-right">{Math.round(r.convertedFx).toLocaleString()}</td>
-      <td className="py-1.5 text-right">{r.tradeCount}회</td>
-      <td className="py-1.5 text-right">{Math.round(r.endingHoldingFx).toLocaleString()}</td>
-    </tr>
-  )
-}
 
 function Metric({ label, value, sub, tone, tip, muted }: {
   label: string; value: string; sub?: string; tone?: 'good' | 'bad'; tip?: string[]

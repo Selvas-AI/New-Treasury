@@ -34,6 +34,8 @@ export type InputSource = 'manual' | 'treasury'
 export interface FxTreasuryInputAdapter extends FxTreasuryInputs {
   source: InputSource
   updateInputs: (patch: Partial<FxTreasuryInputs>) => void
+  /** Treasury 조회 금액을 수동 입력의 시작값으로 복사한다. 정책·운영 가정은 덮어쓰지 않는다. */
+  importTreasuryAmounts: () => void
 }
 
 const EMPTY_INPUTS: FxTreasuryInputs = {
@@ -129,8 +131,20 @@ export function useFxTreasuryInputs(
     })
   }, [storageKey])
 
+  const importTreasuryAmounts = useCallback(() => {
+    // Treasury에서 실제 조회할 수 있는 금액·장부가만 가져온다.
+    // 정책밴드와 월 유입·결제·손실 한도는 이 화면의 독립 운영 가정이므로 보존한다.
+    const patch: Partial<FxTreasuryInputs> = {}
+    if (treasuryValues.totalFundKRW != null) patch.totalFundKRW = treasuryValues.totalFundKRW
+    if (treasuryValues.portfolioFxHoldingKRW != null) patch.portfolioFxHoldingKRW = treasuryValues.portfolioFxHoldingKRW
+    if (treasuryValues.fxHoldingFx != null) patch.fxHoldingFx = treasuryValues.fxHoldingFx
+    if (treasuryValues.avgAcquisitionRate != null) patch.avgAcquisitionRate = treasuryValues.avgAcquisitionRate
+    updateInputs(patch)
+  }, [treasuryValues, updateInputs])
+
   const values = source === 'treasury'
     ? { ...manual, ...treasuryValues }
     : manual
-  return useMemo(() => ({ ...values, source, updateInputs }), [values, source, updateInputs])
+  return useMemo(() => ({ ...values, source, updateInputs, importTreasuryAmounts }),
+    [values, source, updateInputs, importTreasuryAmounts])
 }
