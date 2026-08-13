@@ -374,7 +374,7 @@ export default function BacktestTab({
               </ResponsiveContainer>
             </div>
             <div className="mt-2 text-[11px] text-gray-500 dark:text-slate-400">
-              회색 = 전혀 환전하지 않고 누적, 파랑 = 국면 프로토콜에 따라 환전한 뒤 보유 잔량.
+              회색 = 전혀 환전하지 않고 누적, 파랑 = FX 리짐 전략에 따라 환전한 뒤 보유 잔량.
             </div>
           </div>
 
@@ -432,20 +432,24 @@ export default function BacktestTab({
 
           {/* 프로토콜 비교 */}
           <div className={CARD}>
-            <div className="mb-2 text-sm font-semibold text-gray-800 dark:text-slate-100">
+            <div className="mb-1 text-sm font-semibold text-gray-800 dark:text-slate-100">
               전략·벤치마크 비교
               <InfoTip text={[
-                '이 표의 각 행은 같은 시작 조건(가정)에서 "언제 팔았는가"만 다르게 했을 때의 결과입니다.',
-                '"국면 환전 전략" 행이 바로 아래 "거래 내역(현재 프로토콜 · 최근 30건)" 표에 나온 그 거래들의 합계입니다 — 표의 각 행이 국면(하락/중립/상승 등)에 따라 "현재→목표 비중"만큼만 환전한 기록이고, 이 비교 표는 그 거래들을 모두 더해 평균 실현환율로 요약한 것입니다.',
-                '① 유입 즉시 전액 환전은 국면을 보지 않고 돈이 들어오는 즉시 파는 비교군, ② 전혀 환전 안 함은 계속 외화로만 쌓아두는 비교군입니다. "국면 환전 전략"의 평균 실현환율이 이 둘보다 높으면, 거래 내역 표에서 국면별로 타이밍을 나눠 판 것이 무작정 즉시 팔거나 계속 안 파는 것보다 더 비싸게 팔았다는 뜻입니다.',
-                '"회사 실제 매각" 행은 실제로 집행된 매도 기록이며 시작 재고·유입 가정이 다른 실험과는 전제가 달라, 평균 실현환율(원/달러 수준)만 비교하고 금액 크기는 직접 비교하지 않습니다.',
+                '"만약 그렇게 팔았다면 평균 얼마에 팔렸을까"를 네 가지 방식으로 겨루게 한 표입니다. 시작 재고·유입액 가정은 네 방식 모두 동일합니다.',
+                '"FX 리짐 전략(가정 실험)" 행이 바로 아래 "거래 내역" 표에 나온 그 거래들의 합계입니다 — 국면(하락/중립/상승 등)에 따라 "현재→목표 비중"만큼만 환전한 기록이고, 이 행은 그 거래들을 평균 실현환율로 요약한 것입니다.',
+                '① 유입 즉시 전액 환전은 국면을 보지 않고 돈이 들어오는 즉시 파는 비교군, ② 전혀 환전 안 함은 계속 외화로만 쌓아두고 한 번도 안 파는 비교군입니다 — 둘 다 "아무 판단 없이 기계적으로 했을 때"의 대조군입니다.',
+                '"FX 리짐 전략" 행의 평균 실현환율이 ①②보다 높으면, 국면별로 타이밍을 나눠 판 것이 무작정 즉시 팔거나 계속 안 파는 것보다 더 비싸게 팔았다는 뜻입니다.',
+                '"회사 실제 매각" 행만 실제로 집행된 기록이고 나머지 세 행은 모두 같은 가정 위의 실험입니다. 시작 재고·유입 가정이 실제 회사와 다르므로 평균 실현환율(원/달러 수준)만 비교하고 금액 크기는 직접 비교하지 않습니다.',
               ]} />
             </div>
+            <div className="mb-2 text-[11px] leading-relaxed text-gray-500 dark:text-slate-400">
+              같은 가정(시작 재고·유입액)에서 &ldquo;언제 팔았는가&rdquo;만 다르게 했을 때 평균 실현환율이 어떻게 달라지는지 비교합니다.
+            </div>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[520px] text-sm">
+              <table className="w-full min-w-[560px] text-sm">
                 <thead>
                   <tr className="border-b border-gray-200 text-left text-xs text-gray-500 dark:border-slate-700 dark:text-slate-400">
-                    <th className="py-2">구분</th>
+                    <th className="py-2">비교 대상</th>
                     <th className="py-2 text-right">환전 실현액</th>
                     <th className="py-2 text-right">평균 실현환율</th>
                     <th className="py-2 text-right">기말 미환전</th>
@@ -455,15 +459,21 @@ export default function BacktestTab({
                 </thead>
                 <tbody className="tabular-nums">
                   {actual.weightedRate != null && <tr className="border-b border-gray-100 bg-emerald-50/60 dark:border-slate-800 dark:bg-emerald-900/10">
-                    <td className="py-1.5 font-semibold text-gray-900 dark:text-slate-100">회사 실제 매각</td>
+                    <td className="py-1.5">
+                      <div className="font-semibold text-gray-900 dark:text-slate-100">회사 실제 매각</div>
+                      <div className="text-[10px] font-normal text-gray-500 dark:text-slate-400">실제 집행 기록 (가정 아님)</div>
+                    </td>
                     <td className="py-1.5 text-right">{fmtKRW(actual.amount * actual.weightedRate)}</td>
                     <td className="py-1.5 text-right font-semibold text-emerald-700 dark:text-emerald-400">{fmtRate(actual.weightedRate)}</td>
                     <td className="py-1.5 text-right text-gray-400">—</td><td className="py-1.5 text-right text-gray-400">—</td>
                     <td className="py-1.5 text-right">{actual.rows.length}회</td>
                   </tr>}
-                  <Row name="국면 환전 전략" r={result} strong />
+                  <Row name="FX 리짐 전략" caption="같은 가정에서 국면별 타이밍대로 팔았다면" r={result} strong />
                   <tr className="border-b border-gray-100 dark:border-slate-800">
-                    <td className="py-1.5 text-gray-600 dark:text-slate-300">① 유입 즉시 전액 환전</td>
+                    <td className="py-1.5">
+                      <div className="text-gray-600 dark:text-slate-300">① 유입 즉시 전액 환전</div>
+                      <div className="text-[10px] font-normal text-gray-400 dark:text-slate-500">대조군 — 국면 안 보고 들어오자마자 바로 매도</div>
+                    </td>
                     <td className="py-1.5 text-right">{fmtKRW(result.immediateRealizedKRW)}</td>
                     <td className="py-1.5 text-right">{fmtRate(result.immediateWeightedAverageRate)}</td>
                     <td className="py-1.5 text-right">{Math.round(Math.min(result.totalAvailableFx, fxPayableFx)).toLocaleString()}</td>
@@ -471,7 +481,10 @@ export default function BacktestTab({
                     <td className="py-1.5 text-right">매 유입일</td>
                   </tr>
                   <tr className="border-b border-gray-100 dark:border-slate-800">
-                    <td className="py-1.5 text-gray-600 dark:text-slate-300">② 전혀 환전 안 함</td>
+                    <td className="py-1.5">
+                      <div className="text-gray-600 dark:text-slate-300">② 전혀 환전 안 함</div>
+                      <div className="text-[10px] font-normal text-gray-400 dark:text-slate-500">대조군 — 계속 외화로만 보유, 한 번도 안 팜</div>
+                    </td>
                     <td className="py-1.5 text-right">0원</td>
                     <td className="py-1.5 text-right text-gray-400">—</td>
                     <td className="py-1.5 text-right">{Math.round(result.neverEndingHoldingFx).toLocaleString()}</td>
@@ -482,7 +495,7 @@ export default function BacktestTab({
               </table>
             </div>
             {actual.weightedRate != null && result.weightedAverageRate != null && <div className="mt-2 text-xs text-gray-600 dark:text-slate-300">
-              실제 매각 평균은 알고리즘 실험보다 <strong>{actual.weightedRate - result.weightedAverageRate >= 0 ? '+' : ''}{(actual.weightedRate - result.weightedAverageRate).toFixed(1)}원</strong>입니다.
+              실제 매각 평균은 FX 리짐 전략 실험보다 <strong>{actual.weightedRate - result.weightedAverageRate >= 0 ? '+' : ''}{(actual.weightedRate - result.weightedAverageRate).toFixed(1)}원</strong>입니다.
               실제 확정손익은 <strong>{fmtKRW(actual.pnl)}</strong>이며 수수료 미포함 자료일 수 있습니다. 금액은 서로 다른 재고·유입 가정이므로 직접 성과액으로 비교하지 않습니다.
             </div>}
             {result.skippedChecks > 0 && (
@@ -571,7 +584,6 @@ export default function BacktestTab({
 function SectionDivider({ label }: { label: string }) {
   return (
     <div className="flex items-center gap-3 px-1">
-      <span className="h-px flex-1 bg-blue-200 dark:bg-blue-800" />
       <span className="shrink-0 text-xs font-bold text-blue-700 dark:text-blue-300">{label}</span>
       <span className="h-px flex-1 bg-blue-200 dark:bg-blue-800" />
     </div>
@@ -600,10 +612,13 @@ function Metric({ label, value, sub, tone, tip, muted }: {
   )
 }
 
-function Row({ name, r, strong }: { name: string; r: BacktestResult; strong?: boolean }) {
+function Row({ name, caption, r, strong }: { name: string; caption?: string; r: BacktestResult; strong?: boolean }) {
   return (
-    <tr className="border-b border-gray-100 dark:border-slate-800">
-      <td className={`py-1.5 ${strong ? 'font-semibold text-gray-900 dark:text-slate-100' : 'text-gray-600 dark:text-slate-300'}`}>{name}</td>
+    <tr className="border-b border-gray-100 bg-blue-50/50 dark:border-slate-800 dark:bg-blue-900/10">
+      <td className="py-1.5">
+        <div className={strong ? 'font-semibold text-gray-900 dark:text-slate-100' : 'text-gray-600 dark:text-slate-300'}>{name}</div>
+        {caption && <div className="text-[10px] font-normal text-gray-500 dark:text-slate-400">{caption}</div>}
+      </td>
       <td className="py-1.5 text-right">{fmtKRW(r.totalRealizedKRW)}</td>
       <td className={`py-1.5 text-right ${(r.ratePremium ?? 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
         {fmtRate(r.weightedAverageRate)}
