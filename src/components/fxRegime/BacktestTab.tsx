@@ -21,10 +21,11 @@ import { type PolicyProtocol, type RegimeSeriesPoint } from '../../lib/fxRegime'
 import { fmtKRW } from '../../lib/format'
 import type { FxTradeRecord } from '../../types'
 import {
-  runProjection, summarizeMonteCarloDraws, historicalAnnualVolPct,
-  type FxProjectionScenario, type FxProjectionResult, type MonteCarloResult,
+  runProjection, historicalAnnualVolPct,
+  type FxProjectionInput, type FxProjectionScenario, type MonteCarloResult,
 } from '../../lib/fxProjection'
 import type { FxLot } from '../../lib/fxLots'
+import type { MonteCarloWorkerMessage, MonteCarloWorkerRequest } from '../../lib/fxMonteCarlo.worker'
 
 const CARD = 'rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900'
 
@@ -86,7 +87,7 @@ export default function BacktestTab({
   const [mcProgress, setMcProgress] = useState(0)
   const [mc, setMc] = useState<MonteCarloResult | null>(null)
   const [mcLoading, setMcLoading] = useState(false)
-  const mcCancelRef = useRef(false)
+  const mcWorkerRef = useRef<Worker | null>(null)
 
   // 사용자가 직접 값을 건드리기 전까지는 최근 1년 실측 변동성을 기본값으로 따라간다
   const historicalVol = useMemo(() => Math.round(historicalAnnualVolPct(series) * 10) / 10, [series])
@@ -168,9 +169,14 @@ export default function BacktestTab({
     총손익: p.fifoTotalPnlKRW == null ? null : Math.round(p.fifoTotalPnlKRW),
   })), [projection])
 
+  function stopMcWorker() {
+    mcWorkerRef.current?.terminate()
+    mcWorkerRef.current = null
+  }
+
   // 기저 가정이 바뀌면 이전에 돌려둔 무작위 반복 결과는 더 이상 유효하지 않다 — 진행 중이면 중단한다
   useEffect(() => {
-    mcCancelRef.current = true
+    stopMcWorker()
     // eslint-disable-next-line react-hooks/set-state-in-effect -- 여러 입력값 변경 시 파생 상태(mc)를 무효화하는 의도적 리셋
     setMc(null)
     setMcLoading(false)
@@ -178,37 +184,52 @@ export default function BacktestTab({
     initialTotalKRW, initialFxHolding, monthlyInflowFx, fxPayableFx, ignoreBand, policyMinRatio,
     policyMaxRatio, protocol, checkDays, costBps, avgAcquisitionRate, initialLots, maxExposureKRW, volatilityPct])
 
+  // 탭을 떠날 때도 실행 중인 워커가 계속 백그라운드에서 도는 일이 없도록 정리한다
+  useEffect(() => stopMcWorker, [])
+
   /**
-   * 백테스트 1회조차 가볍지 않다(매 점검일마다 전체 이력을 다시 계산). N회를
-   * 한 호흡에 동기 실행하면 메인 스레드가 수 초~수십 초 멈춰 브라우저가
-   * "다운된 것처럼" 보인다(2026-08-13 사용자 리포트). 그래서 한 번에 1회씩만
-   * 실행하고 매번 setTimeout(0) 으로 브라우저에 제어권을 돌려줘, 화면이
-   * 계속 그려지고 취소 버튼도 눌리게 한다.
+   * 백테스트 1회조차 가볍지 않다(매 점검일마다 전체 이력을 다시 계산). 이전에는
+   * 메인 스레드에서 setTimeout(0) 으로 한 틱씩 양보하며 N회를 실행했지만,
+   * 실행 1회 자체가 이미 눈에 띄게 느려 반복 횟수와 무관하게 화면이 멈춘 것처럼
+   * 보였다(2026-08-13 사용자 리포트, 재발). 계산 전체를 워커로 완전히 옮겨
+   * 메인 스레드를 아예 건드리지 않는다 — 아무리 오래 걸려도 화면은 멈추지 않는다.
    */
-  async function runMonteCarlo() {
-    mcCancelRef.current = false
+  function runMonteCarlo() {
+    stopMcWorker()
     setMcLoading(true)
     setMcProgress(0)
-    const draws: FxProjectionResult[] = []
-    for (let i = 0; i < mcRuns; i++) {
-      if (mcCancelRef.current) break
-      draws.push(runProjection({
-        history: series, months: projectionMonths, scenario: projectionScenario, annualMovePct,
-        initialTotalKRW, initialFxHolding, monthlyInflowFx, fxPayableFx,
-        policyMinRatio: ignoreBand ? null : policyMinRatio,
-        policyMaxRatio: ignoreBand ? null : policyMaxRatio,
-        protocol, checkEveryDays: checkDays, costBps, avgAcquisitionRate, initialLots, maxExposureKRW,
-        randomize: true, volatilityPct,
-      }))
-      setMcProgress(i + 1)
-      await new Promise(resolve => window.setTimeout(resolve, 0))
+
+    const worker = new Worker(new URL('../../lib/fxMonteCarlo.worker.ts', import.meta.url), { type: 'module' })
+    mcWorkerRef.current = worker
+
+    const input: FxProjectionInput = {
+      history: series, months: projectionMonths, scenario: projectionScenario, annualMovePct,
+      initialTotalKRW, initialFxHolding, monthlyInflowFx, fxPayableFx,
+      policyMinRatio: ignoreBand ? null : policyMinRatio,
+      policyMaxRatio: ignoreBand ? null : policyMaxRatio,
+      protocol, checkEveryDays: checkDays, costBps, avgAcquisitionRate, initialLots, maxExposureKRW,
+      volatilityPct,
     }
-    if (!mcCancelRef.current && draws.length) setMc(summarizeMonteCarloDraws(draws))
-    setMcLoading(false)
+
+    worker.onmessage = (e: MessageEvent<MonteCarloWorkerMessage>) => {
+      const msg = e.data
+      if (msg.type === 'progress') setMcProgress(msg.done)
+      else {
+        setMc(msg.result)
+        setMcLoading(false)
+        stopMcWorker()
+      }
+    }
+    worker.onerror = () => {
+      setMcLoading(false)
+      stopMcWorker()
+    }
+    const req: MonteCarloWorkerRequest = { type: 'run', input, runs: mcRuns }
+    worker.postMessage(req)
   }
 
   function cancelMonteCarlo() {
-    mcCancelRef.current = true
+    stopMcWorker()
     setMcLoading(false)
   }
 
