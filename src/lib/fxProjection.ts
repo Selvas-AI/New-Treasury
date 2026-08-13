@@ -143,14 +143,13 @@ export interface MonteCarloResult {
 }
 
 /**
- * 같은 가정(추세·기간)을 유지한 채 일별 흔들림만 무작위로 여러 번 뽑아 실행한다.
- * "이 가정이 맞다면 결과가 이 범위 안에 있을 것이다"를 보여주는 용도이며,
- * 확률·예측이 아니라 같은 전제 위에서의 변동폭(분산)을 체감시키기 위한 실험이다.
+ * 무작위 반복 실행 결과 draws 를 p10/p50/p90 밴드와 도달 확률로 요약한다.
+ * ⚠ 백테스트 1회도 가볍지 않아(전체 이력을 매 점검일마다 다시 계산) N회를 한
+ *   번에 동기 실행하면 메인 스레드가 수 초~수십 초 멈춰 브라우저가 "다운된
+ *   것처럼" 보인다(2026-08-13 사용자 리포트). 그래서 draws 생성은 호출부
+ *   (BacktestTab)에서 한 틱씩 양보하며 만들고, 이 함수는 순수 집계만 한다.
  */
-export function runMonteCarloProjection(input: FxProjectionInput, runs = 30): MonteCarloResult {
-  const n = Math.max(5, Math.min(100, runs))
-  const draws: FxProjectionResult[] = []
-  for (let i = 0; i < n; i++) draws.push(runProjection({ ...input, randomize: true }))
+export function summarizeMonteCarloDraws(draws: FxProjectionResult[]): MonteCarloResult {
   const valid = draws.filter(d => d.result.points.length > 1)
 
   const normalized = valid.filter(d => d.bookRateNormalizedDate)
@@ -172,7 +171,7 @@ export function runMonteCarloProjection(input: FxProjectionInput, runs = 30): Mo
   }
 
   return {
-    runs: n,
+    runs: valid.length,
     normalizedCount: normalized.length,
     breakEvenCount: brokeEven.length,
     avgNormalizedMonths: avgMonths(normalized.map(d => d.bookRateNormalizedDate), normalized.map(d => d.startDate)),

@@ -10,7 +10,7 @@
  * ⚠ 계산은 fxBacktest.runBacktest() 가 전담하며, 그 안에서 실제 판정 함수
  *   evaluateRegime() 을 그대로 호출한다. 이 컴포넌트에는 판정 로직이 없다.
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis,
   CartesianGrid, Tooltip, Legend,
@@ -21,13 +21,10 @@ import { type PolicyProtocol, type RegimeSeriesPoint } from '../../lib/fxRegime'
 import { fmtKRW } from '../../lib/format'
 import type { FxTradeRecord } from '../../types'
 import {
-  runProjection, runMonteCarloProjection, historicalAnnualVolPct,
-  type FxProjectionScenario, type MonteCarloResult,
+  runProjection, summarizeMonteCarloDraws, historicalAnnualVolPct,
+  type FxProjectionScenario, type FxProjectionResult, type MonteCarloResult,
 } from '../../lib/fxProjection'
 import type { FxLot } from '../../lib/fxLots'
-
-/** 무작위 반복 실행 횟수 — 많을수록 밴드가 매끈해지지만 계산이 느려진다 */
-const MC_RUNS = 30
 
 const CARD = 'rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900'
 
@@ -85,8 +82,11 @@ export default function BacktestTab({
   const [volTouched, setVolTouched] = useState(false)
   const [volatilityInput, setVolatilityInput] = useState(8)
   const [rerollSeed, setRerollSeed] = useState(0)
+  const [mcRuns, setMcRuns] = useState(15)
+  const [mcProgress, setMcProgress] = useState(0)
   const [mc, setMc] = useState<MonteCarloResult | null>(null)
   const [mcLoading, setMcLoading] = useState(false)
+  const mcCancelRef = useRef(false)
 
   // 사용자가 직접 값을 건드리기 전까지는 최근 1년 실측 변동성을 기본값으로 따라간다
   const historicalVol = useMemo(() => Math.round(historicalAnnualVolPct(series) * 10) / 10, [series])
@@ -168,25 +168,48 @@ export default function BacktestTab({
     총손익: p.fifoTotalPnlKRW == null ? null : Math.round(p.fifoTotalPnlKRW),
   })), [projection])
 
-  // 기저 가정이 바뀌면 이전에 돌려둔 무작위 반복 결과는 더 이상 유효하지 않다
-  // eslint-disable-next-line react-hooks/set-state-in-effect -- 여러 입력값 변경 시 파생 상태(mc)를 무효화하는 의도적 리셋
-  useEffect(() => { setMc(null) }, [series, projectionMonths, projectionScenario, annualMovePct,
+  // 기저 가정이 바뀌면 이전에 돌려둔 무작위 반복 결과는 더 이상 유효하지 않다 — 진행 중이면 중단한다
+  useEffect(() => {
+    mcCancelRef.current = true
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 여러 입력값 변경 시 파생 상태(mc)를 무효화하는 의도적 리셋
+    setMc(null)
+    setMcLoading(false)
+  }, [series, projectionMonths, projectionScenario, annualMovePct,
     initialTotalKRW, initialFxHolding, monthlyInflowFx, fxPayableFx, ignoreBand, policyMinRatio,
     policyMaxRatio, protocol, checkDays, costBps, avgAcquisitionRate, initialLots, maxExposureKRW, volatilityPct])
 
-  function runMonteCarlo() {
+  /**
+   * 백테스트 1회조차 가볍지 않다(매 점검일마다 전체 이력을 다시 계산). N회를
+   * 한 호흡에 동기 실행하면 메인 스레드가 수 초~수십 초 멈춰 브라우저가
+   * "다운된 것처럼" 보인다(2026-08-13 사용자 리포트). 그래서 한 번에 1회씩만
+   * 실행하고 매번 setTimeout(0) 으로 브라우저에 제어권을 돌려줘, 화면이
+   * 계속 그려지고 취소 버튼도 눌리게 한다.
+   */
+  async function runMonteCarlo() {
+    mcCancelRef.current = false
     setMcLoading(true)
-    window.setTimeout(() => {
-      setMc(runMonteCarloProjection({
+    setMcProgress(0)
+    const draws: FxProjectionResult[] = []
+    for (let i = 0; i < mcRuns; i++) {
+      if (mcCancelRef.current) break
+      draws.push(runProjection({
         history: series, months: projectionMonths, scenario: projectionScenario, annualMovePct,
         initialTotalKRW, initialFxHolding, monthlyInflowFx, fxPayableFx,
         policyMinRatio: ignoreBand ? null : policyMinRatio,
         policyMaxRatio: ignoreBand ? null : policyMaxRatio,
         protocol, checkEveryDays: checkDays, costBps, avgAcquisitionRate, initialLots, maxExposureKRW,
-        volatilityPct,
-      }, MC_RUNS))
-      setMcLoading(false)
-    }, 30)
+        randomize: true, volatilityPct,
+      }))
+      setMcProgress(i + 1)
+      await new Promise(resolve => window.setTimeout(resolve, 0))
+    }
+    if (!mcCancelRef.current && draws.length) setMc(summarizeMonteCarloDraws(draws))
+    setMcLoading(false)
+  }
+
+  function cancelMonteCarlo() {
+    mcCancelRef.current = true
+    setMcLoading(false)
   }
 
   return (
@@ -346,13 +369,29 @@ export default function BacktestTab({
                     </label>
                     <button
                       onClick={() => { setRerollSeed(s => s + 1); setMc(null) }}
-                      className="rounded border border-gray-300 bg-white px-2.5 py-1 font-medium text-gray-700 hover:bg-gray-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-                    >🎲 다시 뽑기</button>
-                    <button
-                      onClick={runMonteCarlo}
                       disabled={mcLoading}
-                      className="rounded border border-blue-300 bg-blue-50 px-2.5 py-1 font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:border-blue-700 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50"
-                    >{mcLoading ? '계산 중…' : `📊 ${MC_RUNS}회 반복해 범위 보기`}</button>
+                      className="rounded border border-gray-300 bg-white px-2.5 py-1 font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                    >🎲 다시 뽑기</button>
+                    <label className="flex flex-col gap-1">반복 횟수
+                      <select value={mcRuns} onChange={e => { setMcRuns(Number(e.target.value)); setMc(null) }}
+                        disabled={mcLoading}
+                        className="rounded border border-gray-300 bg-white px-2 py-1 dark:border-slate-600 dark:bg-slate-800 disabled:opacity-50">
+                        <option value={10}>10회(빠름)</option>
+                        <option value={15}>15회</option>
+                        <option value={30}>30회(느림)</option>
+                      </select>
+                    </label>
+                    {mcLoading ? (
+                      <button
+                        onClick={cancelMonteCarlo}
+                        className="rounded border border-red-300 bg-red-50 px-2.5 py-1 font-medium text-red-700 hover:bg-red-100 dark:border-red-700 dark:bg-red-900/30 dark:text-red-300"
+                      >⏹ 계산 중… ({mcProgress}/{mcRuns}) 취소</button>
+                    ) : (
+                      <button
+                        onClick={runMonteCarlo}
+                        className="rounded border border-blue-300 bg-blue-50 px-2.5 py-1 font-medium text-blue-700 hover:bg-blue-100 dark:border-blue-700 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50"
+                      >📊 {mcRuns}회 반복해 범위 보기</button>
+                    )}
                   </>
                 )}
               </div>
