@@ -813,7 +813,7 @@ export default function ProtocolTab({
   const [saving, setSaving] = useState(false)
   const [msg, setMsg]       = useState<string | null>(null)
   const [err, setErr]       = useState<string | null>(null)
-  const [rulesOpen, setRulesOpen] = useState(true)
+  const [rulesOpen, setRulesOpen] = useState(false)
 
   const scalars: ScalarField[] = [
     { key: PROTOCOL_PARAM_KEYS.strongTrendER, label: '강한 추세 기준 (ER)',
