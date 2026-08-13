@@ -416,6 +416,20 @@ export default function BacktestTab({
                   </>
                 )}
               </div>
+
+              {/* "환율 가정"과 "변동성 반영"이 서로 다른 축(추세 vs 그 위의 흔들림)이라
+                  둘 다 켜져 있으면 무엇으로 그려졌는지 헷갈린다는 피드백(2026-08-13) — 항상 명시한다 */}
+              <div className="mb-3 rounded border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-[11px] text-blue-800 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-300">
+                📈 현재 그래프: <strong>
+                  {projectionScenario === 'flat' && '현재 수준 유지'}
+                  {projectionScenario === 'up' && `완만한 상승(연 ${annualMovePct}%)`}
+                  {projectionScenario === 'down' && `완만한 하락(연 ${annualMovePct}%)`}
+                  {projectionScenario === 'replay' && '최근 1년 등락 반복'}
+                </strong> 추세{randomize
+                  ? <> 위에 <strong>무작위 흔들림(변동성 {volatilityPct}%)</strong>을 더한 경로입니다. 위 &lsquo;환율 가정&rsquo;은 흔들림의 기준 추세로 계속 쓰이니, 바꾸면 무작위 경로도 함께 바뀝니다.</>
+                  : <> 그대로 매끄러운 직선입니다. 실제처럼 흔들리는 경로를 보려면 &lsquo;변동성 반영&rsquo;을 켜세요.</>}
+              </div>
+
               <div className="grid gap-2 sm:grid-cols-3">
                 <Metric label="고원가 개시 재고 소진" value={projection.openingLotClearedDate ?? '기간 내 미소진'} muted={!projection.openingLotClearedDate} />
                 <Metric label="장부환율 정상화(시장가 ±1%)" value={projection.bookRateNormalizedDate ?? '기간 내 미도달'} muted={!projection.bookRateNormalizedDate} />
