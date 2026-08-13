@@ -240,22 +240,22 @@ export default function BacktestTab({
         <div className="text-[13px] font-bold">
           이 탭은 <u>과거 실적 재현이 아닙니다</u> — 같은 조건 위에서 두 규칙을 겨루게 한 <u>실험</u>입니다.
         </div>
-        <div className="mt-2 grid gap-2 sm:grid-cols-3">
-          <div>
+        <div className="mt-2 grid gap-2 sm:grid-cols-3 sm:divide-x sm:divide-blue-200 dark:sm:divide-blue-800">
+          <div className="sm:pr-3">
             <div className="font-semibold">✔ 진짜인 것</div>
             <div className="mt-0.5 opacity-90">
               환율 시계열(한국은행 실제 고시값)과, 각 시점의 국면 판정.
               판정에는 그날까지의 자료만 씁니다(미래를 보지 않음).
             </div>
           </div>
-          <div>
+          <div className="sm:px-3">
             <div className="font-semibold">✎ 가정인 것</div>
             <div className="mt-0.5 opacity-90">
               <strong>시작 시점의 보유액·자금 규모·월 유입액은 &lsquo;오늘 입력값&rsquo;을 그대로 과거에 놓은 것</strong>입니다.
               그 시점 회사의 실제 잔고가 아닙니다.
             </div>
           </div>
-          <div>
+          <div className="sm:pl-3">
             <div className="font-semibold">👁 읽는 법</div>
             <div className="mt-0.5 opacity-90">
               <strong>금액(환전량·실현액)은 참고치</strong>입니다.
