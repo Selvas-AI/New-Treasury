@@ -640,6 +640,8 @@ export default function FxRegimePage() {
           context={ctx}
           currency={currency}
           currentSignal={signal}
+          policyMinRatio={treasuryInputs.policyMinRatio}
+          policyMaxRatio={treasuryInputs.policyMaxRatio}
           canEdit={canEdit()}
           userCode={user?.code ?? 'unknown'}
           onSave={(key, value) => params.set(key, value, null, user?.code ?? 'unknown')}

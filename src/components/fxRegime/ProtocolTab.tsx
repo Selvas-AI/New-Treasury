@@ -54,6 +54,9 @@ export interface ProtocolTabProps {
   context:   TreasuryContext
   currency:  string
   currentSignal: FxRegimeSignal | null
+  /** 화면 상단에서 정한 전사 외화 정책밴드. 미설정은 null이다. */
+  policyMinRatio: number | null
+  policyMaxRatio: number | null
   /** usePolicyParams().set */
   onSave:    (key: string, value: number) => Promise<string | null>
   onSaved:   () => void
@@ -200,6 +203,25 @@ const SCALAR_GROUPS: { key: ScalarField['group']; title: string; description: st
   },
 ]
 
+function scalarRange(key: string): { min: number; max: number; step: number } {
+  const ranges: Record<string, { min: number; max: number; step: number }> = {
+    [PROTOCOL_PARAM_KEYS.strongTrendER]: { min: 0, max: 100, step: 1 },
+    [PROTOCOL_PARAM_KEYS.weakTrendER]: { min: 0, max: 100, step: 1 },
+    [PROTOCOL_PARAM_KEYS.minTrendMovePct]: { min: 0, max: 10, step: 0.1 },
+    [PROTOCOL_PARAM_KEYS.highVolZ]: { min: 0, max: 3, step: 0.1 },
+    [PROTOCOL_PARAM_KEYS.confirmDays]: { min: 1, max: 10, step: 1 },
+    [PROTOCOL_PARAM_KEYS.rebalanceBandPct]: { min: 0, max: 20, step: 0.5 },
+    [PROTOCOL_PARAM_KEYS.kalmanQ]: { min: 0.1, max: 20, step: 0.1 },
+    [PROTOCOL_PARAM_KEYS.kalmanR]: { min: 0.1, max: 50, step: 0.5 },
+    [PROTOCOL_PARAM_KEYS.levelVhPct]: { min: 0, max: 20, step: 0.5 },
+    [PROTOCOL_PARAM_KEYS.levelHPct]: { min: 0, max: 10, step: 0.5 },
+    [PROTOCOL_PARAM_KEYS.levelLPct]: { min: -10, max: 0, step: 0.5 },
+    [PROTOCOL_PARAM_KEYS.levelVlPct]: { min: -20, max: 0, step: 0.5 },
+    [PROTOCOL_PARAM_KEYS.forceConvertDays]: { min: 0, max: 365, step: 5 },
+  }
+  return ranges[key] ?? { min: 0, max: 100, step: 1 }
+}
+
 function ScalarGroup({ group, fields, canEdit, draft, setD }: {
   group: (typeof SCALAR_GROUPS)[number]
   fields: ScalarField[]
@@ -212,7 +234,13 @@ function ScalarGroup({ group, fields, canEdit, draft, setD }: {
       <h3 className="text-xs font-bold text-gray-800 dark:text-slate-100">{group.title}</h3>
       <p className="mt-1 text-[11px] leading-relaxed text-gray-500 dark:text-slate-400">{group.description}</p>
       <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {fields.map(f => (
+        {fields.map(f => {
+          const range = scalarRange(f.key)
+          const rawSliderValue = Number(draft[f.key] ?? f.value)
+          const sliderValue = Number.isFinite(rawSliderValue)
+            ? Math.min(range.max, Math.max(range.min, rawSliderValue))
+            : Math.min(range.max, Math.max(range.min, f.value))
+          return (
           <div key={f.key} className="rounded bg-gray-50 p-2 dark:bg-slate-800">
             <div className="flex items-center text-[11px] font-medium text-gray-700 dark:text-slate-200">
               {f.label}
@@ -233,9 +261,28 @@ function ScalarGroup({ group, fields, canEdit, draft, setD }: {
               <span className="text-[11px] text-gray-500 dark:text-slate-400">{f.unit}</span>
               <span className="ml-auto text-[10px] text-blue-500 dark:text-blue-400">권장 {f.def}</span>
             </div>
+            <div className="relative mt-2 px-0.5">
+              <input
+                type="range"
+                min={range.min}
+                max={range.max}
+                step={range.step}
+                value={sliderValue}
+                disabled={!canEdit}
+                onChange={e => setD(f.key, e.target.value)}
+                className="w-full accent-blue-600 disabled:cursor-default disabled:opacity-60"
+                aria-label={`${f.label} 조정`}
+              />
+              <span
+                className="pointer-events-none absolute top-[7px] h-2.5 w-0.5 -translate-x-1/2 rounded bg-blue-500"
+                style={{ left: `${Math.min(100, Math.max(0, (f.def - range.min) / (range.max - range.min) * 100))}%` }}
+                title={`권장값 ${f.def}${f.unit}`}
+              />
+            </div>
             <div className="mt-1 text-[10px] leading-tight text-gray-400 dark:text-slate-500">{f.hint}</div>
           </div>
-        ))}
+          )
+        })}
       </div>
     </section>
   )
@@ -438,7 +485,7 @@ function AnchorPanel({ protocol, series, canEdit, onSave, onSaved, setErr }: {
   )
 }
 
-function PolicyRange({ label, help, value, min, max, recommended, onChange }: {
+function PolicyRange({ label, help, value, min, max, recommended, onChange, disabled = false }: {
   label: string
   help: string
   value: number
@@ -446,6 +493,7 @@ function PolicyRange({ label, help, value, min, max, recommended, onChange }: {
   max: number
   recommended: number
   onChange: (value: number) => void
+  disabled?: boolean
 }) {
   const clamp = (value: number) => Math.min(max, Math.max(min, value))
   return (
@@ -461,8 +509,9 @@ function PolicyRange({ label, help, value, min, max, recommended, onChange }: {
           max={max}
           step={1}
           value={value}
+          disabled={disabled}
           onChange={event => onChange(Number(event.target.value))}
-          className="min-w-0 flex-1 accent-violet-600"
+          className="min-w-0 flex-1 accent-violet-600 disabled:cursor-not-allowed disabled:opacity-50"
           aria-label={label}
         />
         <input
@@ -471,11 +520,12 @@ function PolicyRange({ label, help, value, min, max, recommended, onChange }: {
           max={max}
           step={1}
           value={value}
+          disabled={disabled}
           onChange={event => {
             const next = Number(event.target.value)
             if (Number.isFinite(next)) onChange(clamp(next))
           }}
-          className="w-16 rounded border border-gray-300 bg-white px-2 py-1 text-right text-xs font-bold tabular-nums dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+          className="w-16 rounded border border-gray-300 bg-white px-2 py-1 text-right text-xs font-bold tabular-nums disabled:cursor-not-allowed disabled:bg-gray-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:disabled:bg-slate-950"
         />
         <span className="text-xs text-gray-500 dark:text-slate-400">%</span>
       </div>
@@ -533,18 +583,23 @@ function PolicyImpact({ minTarget, neutralTarget, maxTarget, widthDelta }: {
 }
 
 /** 수준 × 추세 목표 매트릭스 편집 */
-function LevelMatrixPanel({ protocol, canEdit, draft, setD }: {
+function LevelMatrixPanel({ protocol, canEdit, draft, setD, policyMinRatio, policyMaxRatio }: {
   protocol: PolicyProtocol
   canEdit:  boolean
   draft:    Record<string, string>
   setD:     (key: string, v: string) => void
+  policyMinRatio: number | null
+  policyMaxRatio: number | null
 }) {
   const recommendedMin = DEFAULT_LEVEL_TARGETS.VH.down * 100
   const recommendedNeutral = DEFAULT_LEVEL_TARGETS.N.side * 100
   const recommendedMax = DEFAULT_LEVEL_TARGETS.VL.up * 100
-  const [minTarget, setMinTarget] = useState(protocol.levelTargets.VH.down * 100)
-  const [neutralTarget, setNeutralTarget] = useState(protocol.levelTargets.N.side * 100)
-  const [maxTarget, setMaxTarget] = useState(protocol.levelTargets.VL.up * 100)
+  const hasPolicyBand = policyMinRatio != null && policyMaxRatio != null && policyMinRatio <= policyMaxRatio
+  // 정책밴드가 비어 있으면 회사별 과거 입력값 대신 검증된 권장 구조를 출발점으로 보여준다.
+  const [minTarget, setMinTarget] = useState(hasPolicyBand ? protocol.levelTargets.VH.down * 100 : recommendedMin)
+  const [neutralTarget, setNeutralTarget] = useState(hasPolicyBand ? protocol.levelTargets.N.side * 100 : recommendedNeutral)
+  const [maxTarget, setMaxTarget] = useState(hasPolicyBand ? protocol.levelTargets.VL.up * 100 : recommendedMax)
+  const [bandApplied, setBandApplied] = useState(false)
 
   function applyScale(nextMin: number, nextNeutral: number, nextMax: number) {
     setMinTarget(nextMin)
@@ -568,6 +623,17 @@ function LevelMatrixPanel({ protocol, canEdit, draft, setD }: {
     Math.abs(maxTarget - recommendedMax) > 0.01
   const recommendedWidth = recommendedMax - recommendedMin
   const currentWidth = maxTarget - minTarget
+
+  function applyPolicyBand() {
+    if (!hasPolicyBand) return
+    const nextMin = policyMinRatio * 100
+    const nextMax = policyMaxRatio * 100
+    // 권장 구조에서 중립이 최소~최대 사이에 있던 상대 위치(15/27)를 그대로 보존한다.
+    const neutralPosition = (recommendedNeutral - recommendedMin) / (recommendedMax - recommendedMin)
+    const nextNeutral = nextMin + (nextMax - nextMin) * neutralPosition
+    applyScale(nextMin, nextNeutral, nextMax)
+    setBandApplied(true)
+  }
 
   return (
     <div className={CARD}>
@@ -610,9 +676,20 @@ function LevelMatrixPanel({ protocol, canEdit, draft, setD }: {
               '나머지 칸은 권장안에서 차지하던 상대 위치를 그대로 유지한 채 자동으로 계산됩니다. 그래서 정책표의 모양은 유지되고 전체 폭과 중심만 달라집니다.',
               '자동 조정 뒤에도 꼭 필요한 칸은 아래 표에서 따로 고칠 수 있습니다.',
             ]} />
+            {hasPolicyBand && (
+              <button
+                type="button"
+                onClick={applyPolicyBand}
+                className="ml-auto rounded-lg border border-violet-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-violet-700 hover:bg-violet-100 dark:border-violet-700 dark:bg-slate-900 dark:text-violet-300"
+              >{bandApplied ? '✓ 정책 상·하한 적용됨' : '정책 상·하한 비율 적용'}</button>
+            )}
           </div>
           <div className="mt-1 text-[11px] text-gray-600 dark:text-slate-300">
-            권장 구조 <strong>최소 15% · 중립 30% · 최대 42%</strong>를 출발점으로 사용합니다.
+            {hasPolicyBand ? (
+              <>상단 정책밴드 <strong>{(policyMinRatio * 100).toFixed(1)}%~{(policyMaxRatio * 100).toFixed(1)}%</strong>는 버튼을 눌렀을 때 최소·최대에 적용됩니다. 중립은 권장 구조의 상대 위치로 자동 계산한 뒤 정책회의 의결에 따라 따로 조정할 수 있습니다.</>
+            ) : (
+              <>정책밴드가 비어 있어 권장 구조 <strong>최소 15% · 중립 30% · 최대 42%</strong>를 기본값으로 사용합니다.</>
+            )}
             슬라이더를 움직이면 아래 15개 칸과 저장 전 미리보기가 즉시 바뀝니다.
           </div>
           <div className="mt-3 grid gap-3 md:grid-cols-3">
@@ -623,6 +700,7 @@ function LevelMatrixPanel({ protocol, canEdit, draft, setD }: {
               min={0}
               max={neutralTarget}
               recommended={recommendedMin}
+              disabled={bandApplied}
               onChange={value => applyScale(value, neutralTarget, maxTarget)}
             />
             <PolicyRange
@@ -641,6 +719,7 @@ function LevelMatrixPanel({ protocol, canEdit, draft, setD }: {
               min={neutralTarget}
               max={60}
               recommended={recommendedMax}
+              disabled={bandApplied}
               onChange={value => applyScale(minTarget, neutralTarget, value)}
             />
           </div>
@@ -655,7 +734,7 @@ function LevelMatrixPanel({ protocol, canEdit, draft, setD }: {
           {changedFromRecommended && (
             <button
               type="button"
-              onClick={() => applyScale(recommendedMin, recommendedNeutral, recommendedMax)}
+              onClick={() => { setBandApplied(false); applyScale(recommendedMin, recommendedNeutral, recommendedMax) }}
               className="mt-2 text-[11px] font-medium text-violet-700 underline underline-offset-2 hover:text-violet-900 dark:text-violet-300"
             >권장안 15% · 30% · 42%로 되돌리기</button>
           )}
@@ -727,12 +806,14 @@ function LevelMatrixPanel({ protocol, canEdit, draft, setD }: {
 }
 
 export default function ProtocolTab({
-  protocol, canEdit, userCode, series, context, currency, currentSignal, onSave, onSaved,
+  protocol, canEdit, userCode, series, context, currency, currentSignal,
+  policyMinRatio, policyMaxRatio, onSave, onSaved,
 }: ProtocolTabProps) {
   const [draft, setDraft]   = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
   const [msg, setMsg]       = useState<string | null>(null)
   const [err, setErr]       = useState<string | null>(null)
+  const [rulesOpen, setRulesOpen] = useState(true)
 
   const scalars: ScalarField[] = [
     { key: PROTOCOL_PARAM_KEYS.strongTrendER, label: '강한 추세 기준 (ER)',
@@ -840,6 +921,8 @@ export default function ProtocolTab({
         canEdit={canEdit}
         draft={draft}
         setD={setD}
+        policyMinRatio={policyMinRatio}
+        policyMaxRatio={policyMaxRatio}
       />
 
       {previewSignal && currentSignal && (
@@ -958,7 +1041,16 @@ export default function ProtocolTab({
       </details>
 
       <div className={CARD}>
-        <div className="text-sm font-semibold text-gray-800 dark:text-slate-100">⚙️ 계산 기준과 집행 규칙</div>
+        <div className="flex items-center gap-2">
+          <div className="text-sm font-semibold text-gray-800 dark:text-slate-100">⚙️ 계산 기준과 집행 규칙</div>
+          <button
+            type="button"
+            onClick={() => setRulesOpen(v => !v)}
+            aria-expanded={rulesOpen}
+            className="ml-auto rounded-md border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+          >{rulesOpen ? '▲ 규칙 접기' : '▼ 규칙 펼치기'}</button>
+        </div>
+        {rulesOpen && <>
         <div className="mt-1 text-[11px] text-gray-500 dark:text-slate-400">
           아래 값은 목표 보유비중이 아니라 <strong>국면·수준 판정 및 권고 실행 시점을 정하는 계산 상수</strong>입니다.
           권장안은 원/달러 데이터에 맞춘 <strong>안전한 출발점</strong>이지 영원한 정답이 아닙니다.
@@ -985,6 +1077,7 @@ export default function ProtocolTab({
         )}
         {msg && <div className="mt-2 text-xs text-emerald-700 dark:text-emerald-400">{msg} · 변경자 {userCode}</div>}
         {err && <div className="mt-2 text-xs text-red-600 dark:text-red-400">{err}</div>}
+        </>}
       </div>
 
       <div className="rounded-lg bg-amber-50 p-3 text-xs leading-relaxed text-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
