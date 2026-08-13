@@ -296,7 +296,7 @@ export default function BacktestTab({
                   <LineChart data={projectionChart} margin={{ top: 8, right: 8, bottom: 4, left: 8 }}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-slate-700" />
                     <XAxis dataKey="date" tick={{ fontSize: 10 }} minTickGap={50} />
-                    <YAxis yAxisId="rate" domain={['auto', 'auto']} tick={{ fontSize: 10 }} width={55} />
+                    <YAxis yAxisId="rate" domain={['auto', 'auto']} tick={{ fontSize: 10 }} width={55} tickFormatter={v => Number(v).toLocaleString()} />
                     <YAxis yAxisId="pnl" orientation="right" tick={{ fontSize: 10 }} width={55} tickFormatter={v => `${Math.round(Number(v) / 100_000_000)}억`} />
                     <Tooltip formatter={(v, n) => [n === '총손익' ? fmtKRW(Number(v)) : `${Number(v).toLocaleString()}원`, String(n ?? '')]} contentStyle={{ fontSize: 12 }} />
                     <Legend wrapperStyle={{ fontSize: 11 }} />
@@ -359,9 +359,9 @@ export default function BacktestTab({
                 <LineChart data={chart} margin={{ top: 8, right: 8, bottom: 4, left: 8 }}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-slate-700" />
                   <XAxis dataKey="date" tick={{ fontSize: 10 }} minTickGap={50} />
-                  <YAxis domain={[0, 'auto']} tick={{ fontSize: 10 }} width={65} />
+                  <YAxis domain={[0, 'auto']} tick={{ fontSize: 10 }} width={65} tickFormatter={v => `${Math.round(Number(v) / 10_000).toLocaleString()}만 ${currency}`} />
                   <Tooltip
-                    formatter={(v, n) => [typeof v === 'number' ? Math.round(v).toLocaleString() : v, String(n ?? '')]}
+                    formatter={(v, n) => [typeof v === 'number' ? `${Math.round(v).toLocaleString()} ${currency}` : v, String(n ?? '')]}
                     contentStyle={{ fontSize: 12 }}
                   />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
@@ -392,7 +392,7 @@ export default function BacktestTab({
                   <LineChart data={fifoChart} margin={{ top: 8, right: 8, bottom: 4, left: 8 }}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-slate-700" />
                     <XAxis dataKey="date" tick={{ fontSize: 10 }} minTickGap={50} />
-                    <YAxis domain={['auto', 'auto']} tick={{ fontSize: 10 }} width={56} />
+                    <YAxis domain={['auto', 'auto']} tick={{ fontSize: 10 }} width={56} tickFormatter={v => Number(v).toLocaleString()} />
                     <Tooltip formatter={(v, n) => [`${Number(v).toLocaleString()}원`, String(n ?? '')]} contentStyle={{ fontSize: 12 }} />
                     <Legend wrapperStyle={{ fontSize: 11 }} />
                     <Line type="monotone" dataKey="시장환율" stroke="#64748b" strokeWidth={1.5} dot={false} />
@@ -426,7 +426,15 @@ export default function BacktestTab({
 
           {/* 프로토콜 비교 */}
           <div className={CARD}>
-            <div className="mb-2 text-sm font-semibold text-gray-800 dark:text-slate-100">전략·벤치마크 비교</div>
+            <div className="mb-2 text-sm font-semibold text-gray-800 dark:text-slate-100">
+              전략·벤치마크 비교
+              <InfoTip text={[
+                '이 표의 각 행은 같은 시작 조건(가정)에서 "언제 팔았는가"만 다르게 했을 때의 결과입니다.',
+                '"국면 환전 전략" 행이 바로 아래 "거래 내역(현재 프로토콜 · 최근 30건)" 표에 나온 그 거래들의 합계입니다 — 표의 각 행이 국면(하락/중립/상승 등)에 따라 "현재→목표 비중"만큼만 환전한 기록이고, 이 비교 표는 그 거래들을 모두 더해 평균 실현환율로 요약한 것입니다.',
+                '① 유입 즉시 전액 환전은 국면을 보지 않고 돈이 들어오는 즉시 파는 비교군, ② 전혀 환전 안 함은 계속 외화로만 쌓아두는 비교군입니다. "국면 환전 전략"의 평균 실현환율이 이 둘보다 높으면, 거래 내역 표에서 국면별로 타이밍을 나눠 판 것이 무작정 즉시 팔거나 계속 안 파는 것보다 더 비싸게 팔았다는 뜻입니다.',
+                '"회사 실제 매각" 행은 실제로 집행된 매도 기록이며 시작 재고·유입 가정이 다른 실험과는 전제가 달라, 평균 실현환율(원/달러 수준)만 비교하고 금액 크기는 직접 비교하지 않습니다.',
+              ]} />
+            </div>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[520px] text-sm">
                 <thead>
