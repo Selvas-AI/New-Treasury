@@ -494,7 +494,7 @@ export default function FxRegimePage() {
     <div className="space-y-4 p-4">
       {/* 헤더 */}
       <div className="flex flex-wrap items-center gap-3">
-        <h1 className="text-lg font-bold text-gray-900 dark:text-slate-100">환율 국면 판정</h1>
+        <h1 className="text-lg font-bold text-gray-900 dark:text-slate-100">FX 리짐 전략</h1>
         <span className="rounded bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
           개발 전용 · 검증 중
         </span>

@@ -259,8 +259,10 @@ export default function BacktestTab({
       ) : (
         <>
           {avgAcquisitionRate > 0 && (
-            <div className={CARD}>
-              <div className="mb-1 text-sm font-semibold text-gray-800 dark:text-slate-100">앞으로의 FIFO 경로 — 가정 시뮬레이션</div>
+            <>
+              <SectionDivider label="▶ FX REGIME 알고리즘 적용 후 시뮬레이션" />
+              <div className={CARD}>
+                <div className="mb-1 text-sm font-bold text-gray-800 dark:text-slate-100">환율 추이에 따른 장부환율 정상화 예측 시뮬레이션</div>
               <div className="mb-3 text-[11px] text-gray-500 dark:text-slate-400">
                 예측값이 아니라 선택한 환율 경로가 계속된다고 가정한 실험입니다. 국면 판정은 미래 시점마다 그날까지 만들어진 값만 사용합니다.
               </div>
@@ -306,7 +308,8 @@ export default function BacktestTab({
                   </LineChart>
                 </ResponsiveContainer>
               </div>
-            </div>
+              </div>
+            </>
           )}
           {/* 성과 요약 */}
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -376,12 +379,14 @@ export default function BacktestTab({
           </div>
 
           {avgAcquisitionRate > 0 && fifoChart.length > 0 && (
-            <div className={CARD}>
+            <>
+              <SectionDivider label="▶ 예전부터 FX REGIME 알고리즘을 도입했었다면?" />
+              <div className={CARD}>
               <div className="mb-1 text-sm font-semibold text-gray-800 dark:text-slate-100">
-                동일 외화 유입 가정에서 국면 전략을 적용한 누적 손익
+                동일 외화 유입 가정에서 FX 리짐 전략을 적용한 누적 손익
               </div>
               <div className="mb-3 text-[11px] leading-relaxed text-gray-500 dark:text-slate-400">
-                현재 입력한 시작 재고와 월 유입액이 과거부터 동일하게 들어왔다고 가정하고, 각 날짜의 실제 환율에 국면 전략을 적용한 실험입니다.
+                현재 입력한 시작 재고와 월 유입액이 과거부터 동일하게 들어왔다고 가정하고, 각 날짜의 실제 환율에 FX 리짐 전략을 적용한 실험입니다.
                 유입분은 그날 환율로 새 FIFO 로트가 되고, 환전 시 가장 오래된 로트부터 소진됩니다.
                 아래 파란 총손익이 0보다 위면 이 가정에서 누적 이익, 아래면 누적 손실입니다. <strong>실제 과거 실적이나 미래 수익 보장은 아닙니다.</strong>
               </div>
@@ -421,7 +426,8 @@ export default function BacktestTab({
                 실현손익과 평가손익 사이의 이동만으로 이익이 생긴 것은 아니며, 파란 총손익이 0보다 높아질 때 이 가정에서 경제적 이익이 발생한 것입니다.
                 기말 FIFO 장부환율 <strong>{fmtRate(result.endingFifoBookRate)}</strong>, 총손익 <strong>{fmtKRW(result.endingTotalPnlKRW ?? 0)}</strong>.
               </div>
-            </div>
+              </div>
+            </>
           )}
 
           {/* 프로토콜 비교 */}
@@ -561,6 +567,16 @@ export default function BacktestTab({
 }
 
 // ── 모듈 레벨 헬퍼 (렌더 중 컴포넌트 정의 금지 — 입력 포커스 유실 전례) ──
+
+function SectionDivider({ label }: { label: string }) {
+  return (
+    <div className="flex items-center gap-3 px-1">
+      <span className="h-px flex-1 bg-blue-200 dark:bg-blue-800" />
+      <span className="shrink-0 text-xs font-bold text-blue-700 dark:text-blue-300">{label}</span>
+      <span className="h-px flex-1 bg-blue-200 dark:bg-blue-800" />
+    </div>
+  )
+}
 
 function Metric({ label, value, sub, tone, tip, muted }: {
   label: string; value: string; sub?: string; tone?: 'good' | 'bad'; tip?: string[]

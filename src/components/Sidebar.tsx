@@ -24,7 +24,7 @@ const NAV_GROUPS: NavGroup[] = [
       { to: '/dashboard', label: '통합 상황판', icon: '⊞', slug: 'dashboard' },
       { to: '/policy',    label: '자금정책',    icon: '📋', slug: 'policy'    },
       // 기본 비공개 — 사용자 관리에서 별도 메뉴 권한을 받은 계정만 표시된다.
-      { to: '/fx-regime', label: '환율 국면', icon: '🧭', slug: 'fx-regime' },
+      { to: '/fx-regime', label: 'FX 리짐 전략', icon: '🧭', slug: 'fx-regime' },
     ],
   },
   {
