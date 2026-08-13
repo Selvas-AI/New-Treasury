@@ -10,7 +10,7 @@
  * ⚠ 계산은 fxBacktest.runBacktest() 가 전담하며, 그 안에서 실제 판정 함수
  *   evaluateRegime() 을 그대로 호출한다. 이 컴포넌트에는 판정 로직이 없다.
  */
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis,
   CartesianGrid, Tooltip, Legend,
@@ -20,8 +20,14 @@ import { runBacktest, type BacktestResult } from '../../lib/fxBacktest'
 import { type PolicyProtocol, type RegimeSeriesPoint } from '../../lib/fxRegime'
 import { fmtKRW } from '../../lib/format'
 import type { FxTradeRecord } from '../../types'
-import { runProjection, type FxProjectionScenario } from '../../lib/fxProjection'
+import {
+  runProjection, runMonteCarloProjection, historicalAnnualVolPct,
+  type FxProjectionScenario, type MonteCarloResult,
+} from '../../lib/fxProjection'
 import type { FxLot } from '../../lib/fxLots'
+
+/** 무작위 반복 실행 횟수 — 많을수록 밴드가 매끈해지지만 계산이 느려진다 */
+const MC_RUNS = 30
 
 const CARD = 'rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900'
 
@@ -75,6 +81,16 @@ export default function BacktestTab({
   const [projectionMonths, setProjectionMonths] = useState(12)
   const [projectionScenario, setProjectionScenario] = useState<FxProjectionScenario>('flat')
   const [annualMovePct, setAnnualMovePct] = useState(8)
+  const [randomize, setRandomize] = useState(false)
+  const [volTouched, setVolTouched] = useState(false)
+  const [volatilityInput, setVolatilityInput] = useState(8)
+  const [rerollSeed, setRerollSeed] = useState(0)
+  const [mc, setMc] = useState<MonteCarloResult | null>(null)
+  const [mcLoading, setMcLoading] = useState(false)
+
+  // 사용자가 직접 값을 건드리기 전까지는 최근 1년 실측 변동성을 기본값으로 따라간다
+  const historicalVol = useMemo(() => Math.round(historicalAnnualVolPct(series) * 10) / 10, [series])
+  const volatilityPct = volTouched ? volatilityInput : historicalVol
 
   const startDate = from || presets[0]?.from || ''
 
@@ -138,9 +154,12 @@ export default function BacktestTab({
     policyMinRatio: ignoreBand ? null : policyMinRatio,
     policyMaxRatio: ignoreBand ? null : policyMaxRatio,
     protocol, checkEveryDays: checkDays, costBps, avgAcquisitionRate, initialLots, maxExposureKRW,
+    randomize, volatilityPct,
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- rerollSeed 는 참조하지 않지만 "다시 뽑기" 클릭 시 재계산을 강제하기 위한 트리거
   }), [series, projectionMonths, projectionScenario, annualMovePct, initialTotalKRW,
     initialFxHolding, monthlyInflowFx, fxPayableFx, ignoreBand, policyMinRatio,
-    policyMaxRatio, protocol, checkDays, costBps, avgAcquisitionRate, initialLots, maxExposureKRW])
+    policyMaxRatio, protocol, checkDays, costBps, avgAcquisitionRate, initialLots, maxExposureKRW,
+    randomize, volatilityPct, rerollSeed])
 
   const projectionChart = useMemo(() => projection.result.points.map(p => ({
     date: p.date,
@@ -148,6 +167,27 @@ export default function BacktestTab({
     FIFO장부환율: p.fifoBookRate == null ? null : Math.round(p.fifoBookRate * 10) / 10,
     총손익: p.fifoTotalPnlKRW == null ? null : Math.round(p.fifoTotalPnlKRW),
   })), [projection])
+
+  // 기저 가정이 바뀌면 이전에 돌려둔 무작위 반복 결과는 더 이상 유효하지 않다
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- 여러 입력값 변경 시 파생 상태(mc)를 무효화하는 의도적 리셋
+  useEffect(() => { setMc(null) }, [series, projectionMonths, projectionScenario, annualMovePct,
+    initialTotalKRW, initialFxHolding, monthlyInflowFx, fxPayableFx, ignoreBand, policyMinRatio,
+    policyMaxRatio, protocol, checkDays, costBps, avgAcquisitionRate, initialLots, maxExposureKRW, volatilityPct])
+
+  function runMonteCarlo() {
+    setMcLoading(true)
+    window.setTimeout(() => {
+      setMc(runMonteCarloProjection({
+        history: series, months: projectionMonths, scenario: projectionScenario, annualMovePct,
+        initialTotalKRW, initialFxHolding, monthlyInflowFx, fxPayableFx,
+        policyMinRatio: ignoreBand ? null : policyMinRatio,
+        policyMaxRatio: ignoreBand ? null : policyMaxRatio,
+        protocol, checkEveryDays: checkDays, costBps, avgAcquisitionRate, initialLots, maxExposureKRW,
+        volatilityPct,
+      }, MC_RUNS))
+      setMcLoading(false)
+    }, 30)
+  }
 
   return (
     <div className="space-y-4">
@@ -286,6 +326,35 @@ export default function BacktestTab({
                       className="w-16 rounded border border-gray-300 bg-white px-2 py-1 text-right dark:border-slate-600 dark:bg-slate-800" />%</span>
                   </label>
                 )}
+                <label className="flex items-center gap-1.5 pb-1.5">
+                  <input type="checkbox" checked={randomize}
+                    onChange={e => { setRandomize(e.target.checked); setMc(null) }} />
+                  변동성 반영(무작위 흔들림)
+                  <InfoTip text={[
+                    '위 추세(현재 수준 유지·상승·하락 등)는 매끄러운 직선으로 그려집니다. 실제 환율은 그 추세 위에서 매일 흔들립니다.',
+                    '이 옵션을 켜면 최근 1년 실제 변동성만큼 매일 무작위로 흔들리는 경로를 만들어, "이 추세가 맞아도 결과가 이 정도는 갈릴 수 있다"를 보여줍니다.',
+                    '"다시 뽑기"는 그 무작위 경로 하나를 새로 뽑고, "N회 반복"은 여러 번 뽑아 결과 범위(밴드)를 보여줍니다.',
+                  ]} />
+                </label>
+                {randomize && (
+                  <>
+                    <label className="flex flex-col gap-1">변동성(연환산)
+                      <span><input type="number" min={1} max={40} step={0.5} value={volatilityPct}
+                        onChange={e => { setVolTouched(true); setVolatilityInput(Number(e.target.value)); setMc(null) }}
+                        className="w-16 rounded border border-gray-300 bg-white px-2 py-1 text-right dark:border-slate-600 dark:bg-slate-800" />%</span>
+                      <span className="text-[10px] font-normal text-gray-400 dark:text-slate-500">최근 1년 실측 {historicalVol}%</span>
+                    </label>
+                    <button
+                      onClick={() => { setRerollSeed(s => s + 1); setMc(null) }}
+                      className="rounded border border-gray-300 bg-white px-2.5 py-1 font-medium text-gray-700 hover:bg-gray-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                    >🎲 다시 뽑기</button>
+                    <button
+                      onClick={runMonteCarlo}
+                      disabled={mcLoading}
+                      className="rounded border border-blue-300 bg-blue-50 px-2.5 py-1 font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:border-blue-700 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50"
+                    >{mcLoading ? '계산 중…' : `📊 ${MC_RUNS}회 반복해 범위 보기`}</button>
+                  </>
+                )}
               </div>
               <div className="grid gap-2 sm:grid-cols-3">
                 <Metric label="고원가 개시 재고 소진" value={projection.openingLotClearedDate ?? '기간 내 미소진'} muted={!projection.openingLotClearedDate} />
@@ -308,6 +377,50 @@ export default function BacktestTab({
                   </LineChart>
                 </ResponsiveContainer>
               </div>
+
+              {mc && (
+                <div className="mt-4 border-t border-gray-100 pt-3 dark:border-slate-700">
+                  <div className="mb-2 text-xs font-semibold text-gray-700 dark:text-slate-200">
+                    같은 가정으로 {mc.runs}회 무작위 반복 — 총손익이 어디까지 갈렸는가
+                  </div>
+                  <div className="mb-3 grid gap-2 sm:grid-cols-2">
+                    <Metric
+                      label="장부환율 정상화 도달"
+                      value={`${mc.normalizedCount}/${mc.runs}회`}
+                      sub={mc.avgNormalizedMonths != null ? `도달한 경로 평균 ${mc.avgNormalizedMonths.toFixed(1)}개월` : '기간 내 도달한 경로 없음'}
+                    />
+                    <Metric
+                      label="총손익 흑자 전환 도달"
+                      value={`${mc.breakEvenCount}/${mc.runs}회`}
+                      sub={mc.avgBreakEvenMonths != null ? `도달한 경로 평균 ${mc.avgBreakEvenMonths.toFixed(1)}개월` : '기간 내 도달한 경로 없음'}
+                      tone={mc.breakEvenCount >= mc.runs / 2 ? 'good' : 'bad'}
+                    />
+                  </div>
+                  <div className="h-56">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart
+                        data={mc.band.map(b => ({ date: b.date, 상위10: b.pnlP90, 중앙값: b.pnlP50, 하위10: b.pnlP10 }))}
+                        margin={{ top: 8, right: 8, bottom: 4, left: 8 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-slate-700" />
+                        <XAxis dataKey="date" tick={{ fontSize: 10 }} minTickGap={50} />
+                        <YAxis tick={{ fontSize: 10 }} width={60} tickFormatter={v => `${Math.round(Number(v) / 100_000_000)}억`} />
+                        <Tooltip formatter={(v, n) => [fmtKRW(Number(v)), String(n ?? '')]} contentStyle={{ fontSize: 12 }} />
+                        <Legend wrapperStyle={{ fontSize: 11 }} />
+                        <Line type="monotone" dataKey="상위10" stroke="#059669" strokeDasharray="4 3" strokeWidth={1.25} dot={false} connectNulls />
+                        <Line type="monotone" dataKey="중앙값" stroke="#2563eb" strokeWidth={2.25} dot={false} connectNulls />
+                        <Line type="monotone" dataKey="하위10" stroke="#dc2626" strokeDasharray="4 3" strokeWidth={1.25} dot={false} connectNulls />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="mt-2 text-[11px] leading-relaxed text-gray-500 dark:text-slate-400">
+                    같은 가정(추세·기간)에서 일별 흔들림만 무작위로 {mc.runs}번 다시 뽑아 실행한 결과입니다.
+                    파란 선은 {mc.runs}개 경로의 중앙값, 초록·빨강 점선은 각각 상위 10%·하위 10% 지점입니다.
+                    이 폭이 넓을수록 같은 가정이라도 실제로 어떻게 흔들리느냐에 따라 결과가 크게 갈릴 수 있다는 뜻입니다.
+                    확률이나 예측이 아니라 변동폭을 체감하기 위한 실험입니다.
+                  </div>
+                </div>
+              )}
               </div>
             </>
           )}

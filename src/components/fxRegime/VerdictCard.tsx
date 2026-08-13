@@ -83,6 +83,14 @@ export default function VerdictCard({
           <div className="mt-0.5 text-base font-bold tabular-nums text-gray-900 dark:text-slate-50">
             {verdict.order}
           </div>
+          {verdict.expectedRatioAfter != null && (
+            <div className="mt-2 flex items-center gap-1.5 border-t border-gray-100 pt-2 text-xs tabular-nums text-gray-600 dark:border-slate-700 dark:text-slate-300">
+              <span className="font-medium text-gray-500 dark:text-slate-400">환전 후 예상 외화 보유 비중</span>
+              <span>{(verdict.currentRatio * 100).toFixed(1)}%</span>
+              <span className="text-gray-400 dark:text-slate-500">→</span>
+              <span className="font-bold text-blue-700 dark:text-blue-400">{(verdict.expectedRatioAfter * 100).toFixed(1)}%</span>
+            </div>
+          )}
         </div>
       )}
 

@@ -31,6 +31,10 @@ export interface Verdict {
   caveat: string | null
   /** 강조 색조 */
   tone: 'act' | 'hold' | 'warn'
+  /** 이번 환전을 집행하면 남는 예상 외화 보유 비중 (0~1). 실제 환전이 없으면 null */
+  expectedRatioAfter: number | null
+  /** 현재 외화 보유 비중 (0~1) — expectedRatioAfter 와 나란히 비교 표시용 */
+  currentRatio: number
 }
 
 export interface VerdictInput {
@@ -88,6 +92,11 @@ export function buildVerdict(input: VerdictInput): Verdict {
     const execFx = cappedByBudget ? allowedFx : requestedFx
     const execKRW = execFx * rate
 
+    // suggestedTradeKRW = (목표비중 − 현재비중) × 총자금 이므로 역산하면 총자금을 구할 수 있다
+    const ratioGap = d.appliedTargetRatio - d.currentRatio
+    const totalFundKRW = Math.abs(ratioGap) > 1e-9 ? d.suggestedTradeKRW / ratioGap : 0
+    const expectedRatioAfter = totalFundKRW > 0 ? Math.max(0, d.currentRatio - execKRW / totalFundKRW) : null
+
     // 실현손익
     let pnlNote: string | null = null
     if (avgCostRate > 0) {
@@ -111,6 +120,8 @@ export function buildVerdict(input: VerdictInput): Verdict {
         reasons,
         caveat: '한도를 늘리지 않으면 다음 분기까지 환율 변동 위험을 그대로 안고 갑니다.',
         tone: 'warn',
+        expectedRatioAfter: null,
+        currentRatio: d.currentRatio,
       }
     }
 
@@ -126,6 +137,8 @@ export function buildVerdict(input: VerdictInput): Verdict {
         ? `나머지 ${currency} ${num(requestedFx - execFx)} 는 다음 분기로 이월됩니다.`
         : null,
       tone: 'act',
+      expectedRatioAfter,
+      currentRatio: d.currentRatio,
     }
   }
 
@@ -144,6 +157,8 @@ export function buildVerdict(input: VerdictInput): Verdict {
       headline: '지금은 파는 구간이 아닙니다. 환전을 미룹니다.',
       order: '이번 유입분은 환전하지 않고 보유합니다.',
       reasons, caveat, tone: 'hold',
+      expectedRatioAfter: null,
+      currentRatio: d.currentRatio,
     }
   }
 
@@ -159,5 +174,7 @@ export function buildVerdict(input: VerdictInput): Verdict {
     reasons,
     caveat: '국면이 바뀌면 이 화면의 결론도 바뀝니다. 매일 한 번만 확인하시면 됩니다.',
     tone: 'hold',
+    expectedRatioAfter: null,
+    currentRatio: d.currentRatio,
   }
 }
