@@ -158,7 +158,8 @@ VITE_GAS_API_URL=https://script.google.com/macros/s/AKfycbwZ.../exec
 
 ## 7. 세션별 완료 작업 이력
 
-> 환율 국면/FIFO 작업은 `docs/기획/환율국면_인수인계_세션24.md`를 읽은 뒤 최신 변경분 `환율국면_인수인계_세션25.md`를 이어서 읽을 것.
+> 환율 국면/FIFO 작업은 `docs/기획/환율국면_인수인계_세션24.md` → `환율국면_인수인계_세션25.md` 순으로 읽고,
+> **FX 리짐 정책 이관(세션26차) 이후 작업은 `docs/기획/인수인계_세션26.md` §5(다음 작업)에서 시작할 것.**
 
 ### 2026-08-12 세션23차 A (환율 정책 프로토콜 정리)
 
@@ -1318,6 +1319,10 @@ baf8ef9 fix: 투자 집행 연동 저장 실패 수정 + 자산 구분(운용/�
 - **`docs/db/fx_trade_history.sql`** — 외화매매거래 이력 (이전 세션)
 - **`docs/db/user_password_policy.sql`** ⭐ — `treasury_users.must_change_password` 컬럼 (세션18차 비밀번호 정책). **실행 필요**. 미실행 시 마스터의 "비번초기화" 버튼은 Auth 비밀번호는 바꾸지만 강제변경 플래그 갱신이 실패(컬럼 없음) — Edge Function은 500 반환.
 - **`docs/db/cashflow_plan_items.sql`** ⭐ — `cashflow_plan_items` 테이블 (세션19차 주간예측 항목별 입력). **실행 필요**. 미실행 시 주간예측 탭 "+ 추가"가 `Could not find the table 'public.cashflow_plan_items'` 에러로 실패 (앱 크래시는 없음, 안내 메시지만 표시).
+- **`docs/db/cashflow_plan_items_currency.sql`** ⭐ — `cashflow_plan_items.currency` 컬럼 (세션26차, 주간예측 통화 대응 + 리짐 운영 가정 자동 산출). **실행 완료** (2026-08-18 사용자 확인, 주간예측 항목 추가/삭제 실화면 검증 완료).
+- **`docs/db/policy_decision_regime_metric.sql`** ⭐ — `policy_decisions.linked_metric` CHECK 제약에 `fx_regime_gap` 추가 (세션26차 Phase 4). **실행 완료** (2026-08-18 사용자 확인).
+- **`docs/db/fx_trade_history_regime_order_type.sql`** ⭐⭐ — `fx_trade_history.order_type` CHECK 제약에 `regime` 추가 (세션26차 Phase 4 **누락분**, 2026-08-18 실화면 검증에서 발견). **실행 완료** (2026-08-18 사용자 확인).
+- **`docs/db/policy_params_override_audit.sql`** ⭐ — `policy_params.overridden_by/at/note` (세션26차 Phase 2, 정책 정정 감사 추적). **실행 완료** (2026-08-18 사용자 확인).
 - **`docs/db/fx_rate_history.sql`** ⭐ — 일별 환율 이력 테이블 (세션21차 환율 국면 판정·동적 헷지 시뮬레이터 Phase 1). **실행 필요**. 미실행 시 백필/조회가 테이블 부재로 실패(앱 크래시는 없음). ⚠ 함께 필요: ① ECOS_API_KEY 로테이션 ② `Code.gs` 재배포(`?type=fxhistory` 신규 라우트 + `fetchEcosRates_` 날짜 반환 변경).
 - **`docs/db/closed_date_migration.sql`** ⭐⭐ — `loans`/`investments.closed_date` 컬럼 (세션19차 상환 후 과거 이력 소급변경 버그 fix). **실행 완료** (세션19차 중 사용자 확인).
 - **`docs/db/policy_decision_rules_migration.sql`** ⭐ — `policy_decisions.linked_metric`/`target_operator`/`target_value` 컬럼 (세션19차 정책 이행 통제 Phase 1). **실행 완료** (세션19차 중 사용자 확인, 대시보드/자금일보 자동 노출까지 end-to-end 검증 완료).
@@ -1897,6 +1902,352 @@ MMDA는 수시입출식이라 **환전 가능성은 보통예금과 동일**, �
 
 **⚠ 적용 필요 SQL (사용자 실행)**: `docs/db/fx_lot_mmda_migration.sql` 신규 +
 `fx_ledger_edit_rpc.sql` · `fx_fifo_trade_rpc.sql` 재실행
+
+---
+
+### 2026-08-14 세션26차 (FX 리짐 모델 정책 채택 → 자금정책 이관 Phase 1)
+
+2026-08-14 정책회의에서 **FX 리짐 모델을 FX 정책 모델로 채택**. 전체 이관 계획은
+`docs/기획/FX리짐_정책이관_계획.md` 참조 (Phase 1~4). 이번 세션은 Phase 1 완료.
+
+#### 결정된 구조 — 대체가 아니라 계층
+```
+한도(밴드)는 리스크 모델(σ×Z)이, 시점과 금액은 리짐이 정한다.
+/fx-regime  = 실무 일상 화면(매일)     — 정책값은 읽기 전용
+/policy › FX = 정책 기준 + 모니터링    — 여기서만 정책값 편집
+```
+기존 손실허용 한도 모델은 폐기하지 않고 **한도 계산기**로 존치(Phase 3에서 서브탭 분리).
+
+#### ⭐ 소유권 원칙 — 가정은 정책, 사실은 실무
+사용자 결정: **실무자가 독단으로 바꾸는 일은 없어야 한다.**
+| 소유 | 항목 |
+|---|---|
+| `policy` | 정책 밴드, 앵커·수준임계·5×3 목표표·국면판정 등 프로토콜, **월 외화 유입 가정**, **결제 버퍼**, 분기 손실실현 한도 |
+| `ops` | 이번 분기 기실현 손실, 매각 체결환율, FIFO 로트 등록 |
+| `treasury` | 총자금, 전사 바구니, 통화별 보유액, FIFO 장부환율, ECOS 환율 이력 |
+
+월 유입·결제 버퍼가 정책 소유인 이유: 버퍼 하한을 통해 **권고 환전액을 직접 움직인다**.
+버퍼를 250만→500만불로 올리면 하한이 올라가 "환전 불필요"가 나온다. 실무가 만지면 안 되는 레버.
+
+#### [CRITICAL] 실무 입력이 localStorage 에만 있어 정책회의가 정정할 수 없었다 ⭐
+```
+증상: 정책회의가 리짐 화면의 운영 가정(월유입·결제버퍼·손실한도·정책밴드)을
+      볼 수도 고칠 수도 없었다. 담당자 PC마다 값이 달라도 아무도 몰랐다.
+원인: fxRegimeInputs.ts 가 `fx_regime_inputs_{법인}_{통화}` 키로 localStorage 에만 저장.
+      서버에 값이 없으니 정정 대상 자체가 존재하지 않았다. (충돌 문제가 아니라 저장 위치 문제)
+해결: 전부 policy_params(법인 단위)로 이관 + 소유권을 코드에 고정(FIELD_OWNER).
+      신규 키 — fx_ops_monthly_inflow_{cur} / fx_ops_payable_{cur} /
+                fx_ops_loss_cap / fx_ops_loss_used
+      정책 밴드는 기존 fx_target_min/max 를 그대로 공유(드디어 연결됨).
+금지: localStorage 로 되돌리지 말 것.
+```
+
+#### [CRITICAL] 정책 밴드 단위 불일치 — %(20) vs 0~1(0.20)
+`fx_target_min/max` 는 DB 에 **%** 로, 리짐 엔진은 **0~1** 로 쓴다.
+변환은 `fxRegimeInputs.pctToRatio` **한 곳에만** 둔다. 두 군데서 나누면 20% 가 2000% 로 들어간다.
+
+#### [CRITICAL] 수동 입력 모드가 잠금 우회 경로였다
+```
+증상 가능성: 정책 필드를 잠가도 `수동 입력` 토글로 총자금·보유액까지 임의값으로 바꾼 뒤
+      그 결과로 권고를 받을 수 있었다.
+해결: InputSource 를 'manual'|'treasury' → **'live'|'simulation'** 으로 재정의.
+      live = Treasury 실데이터 + 정책 파라미터 (권고가 나오는 유일한 경로, 기본값)
+      simulation = 저장 안 함(새로고침 시 소멸) + 헤더/패널 경고 배너 + 되돌리기 버튼
+      updateInputs 는 simulation 이 아니면 **아무 일도 하지 않는다**(어댑터 레벨 차단).
+금지: live 모드에서 편집 가능한 입력을 다시 만들지 말 것.
+```
+
+#### 변경 파일
+- `src/lib/fxRegimeInputs.ts` — 전면 재작성. `FIELD_OWNER`/`ownerOf()`/`FX_OPS_PARAM_KEYS`
+  공개, `useFxTreasuryInputs(source, company, currency, treasuryValues, **params**)` 로 시그니처 변경.
+  ⚠ usePolicyParams 의 get/set 은 메모이즈되어 있지 않아 매 렌더 새 참조 → deps 에 넣으면
+  렌더 루프. ref + primitive deps 패턴으로 회피(CLAUDE.md §10).
+- `src/pages/FxRegimePage.tsx` — 필드별 소유 배지(🔒정책/🏦조회/✏️실무), live 모드 잠금,
+  시뮬레이션 배너, `자금정책 관리에서 변경 →` 링크, 밴드 미설정 경고.
+  실무 입력(기실현 손실)만 onBlur 서버 저장(`saveOpsInput`).
+- `src/components/policy/FxRegimeOpsCard.tsx` (신규) — 정책회의 전용 편집 카드.
+  통화별 월유입/결제버퍼 + 밴드 상·하한 + 분기 손실한도, 변경분만 일괄 저장.
+  공통 `NumInput` 재사용(미설정 null 구분용 `ParamInput` 래퍼).
+- `src/components/policy/FxPolicyTab.tsx` — 위 카드 마운트(요약 배너 직후).
+
+#### 검증
+tsc 0 errors · 변경 파일 lint 0 errors/0 warnings · Vitest 235/235 · 국면 엔진 50/50.
+⚠ `pnpm build` 는 이 PC 환경에서 `fs.copyFileSync` 가 EPERM 으로 막혀 public 자산 복사
+단계에서 실패한다(754 모듈 번들링 자체는 성공, `cp` 는 정상 동작 — 코드 문제 아님).
+
+### 2026-08-14 세션26차 Phase 2 (정책 화면 정식 신설 + 판정 SSOT 통합)
+
+#### ⭐ useFxRegime — 판정 경로 단일화
+`src/hooks/useFxRegime.ts` 신규. 환율 이력 → 프로토콜 조립 → TreasuryContext 구성 →
+`evaluateRegime` 까지 **전 경로를 한 훅에** 모았다. 실무 화면(/fx-regime)과 정책 화면이
+같은 숫자를 봐야 하는데, 계산이 두 곳에 복제되면 반드시 갈라진다(세션19차 6.2% vs 27.9% 사고).
+```
+useFxRegime(company, currency, source='live', autoSync=false)
+  → { params, policyData, fxLots, hist, inputs, series, protocol, ctx, signal,
+      latestRate, fxPayableFx, fxPayableKRW, availableFx, validPolicyBand, basket }
+```
+⚠ `autoSync` 는 **실무 화면만 true**. 정책 화면까지 켜면 같은 ECOS/GAS 호출이 중복된다
+(세션17차 UrlFetch 할당량 폭발 재발 위험).
+금지: 화면에서 목표비중을 다시 계산하지 말 것 — 판정은 `evaluateRegime` 한 경로뿐이다.
+
+#### FX 정책 탭 3서브탭 재편
+| 서브탭 | 내용 | 편집 |
+|---|---|---|
+| `① 🧭 리짐 이행 현황` | 국면·수준·목표 게이지(밴드 오버레이), 권고액, 환전 가능 재고 vs 권고액, 손실한도 소진율, 미완료 매각 지시 D-day | 읽기 |
+| `② 🎯 정책 기준` | `FxRegimeOpsCard`(밴드·운영가정) + `ProtocolTab`(앵커·수준임계·5×3 목표표) | **유일한 편집 지점** |
+| `③ 📐 한도 · 집행` | 기존 σ×Z 한도 모델 + 매각 지시 워크플로우 (그대로) | 기존과 동일 |
+
+- 리짐 서브탭은 **활성일 때만 마운트**한다 — 환율 이력·FIFO 로트·법인 실데이터 조회가
+  딸려 있어 보이지도 않는 탭에서 미리 돌리면 낭비다. (조건부 렌더로 훅 실행 자체를 막음)
+- `ProtocolTab` 은 실무 화면(`FxRegimePage`)에서 **제거**했다. 탭이 4개 → 3개
+  (`현재 국면 / 환전 판단 / 규칙 검증`). 실무 화면에 정책 편집 UI를 되살리지 말 것.
+- 모니터링 카드는 **재고 부족과 실무 미이행을 구분**한다. 정기예금 만기 전 금액 때문에
+  권고액을 다 집행할 수 없는 경우를 "미이행"으로 읽으면 담당자에게 부당하다.
+
+#### override 감사 추적
+`docs/db/policy_params_override_audit.sql` ⭐ (**실행 필요**) —
+`policy_params` 에 `overridden_by` / `overridden_at` / `override_note` 추가(전부 nullable).
+`usePolicyParams.set(key, value, text, updatedBy, audit?)` 5번째 인자로 사유를 넘긴다.
+⚠ 컬럼이 없는 환경에서는 PostgREST 가 스키마 오류를 반환하므로 **감사 필드를 빼고 1회 재시도**한다
+— 사유 기록보다 의결값 반영이 우선이기 때문. 미적용 상태에서도 저장은 정상 동작하고 사유만 남지 않는다.
+소유권은 코드(`FIELD_OWNER`)에 고정이라 `value_source` 컬럼은 두지 않았고, 정정 해제 기능도 없다.
+
+#### 검증
+tsc 0 errors · 신규 파일 lint 0 errors/0 warnings(전체 src 0 errors) · Vitest 235/235 · 엔진 50/50.
+
+### 2026-08-14 세션26차 Phase 3 (한도 계산기 분리 + 자동저장 제거)
+
+#### FX 정책 서브탭 4개로 확정
+`① 🧭 리짐 이행 현황 / ② 🎯 정책 기준 / ③ 📐 한도 계산기 / ④ 🧾 매각 집행`
+계산기(참고안 생성)와 집행(실제 돈이 나가는 워크플로우)을 나눴다 — 한 화면에 있으면
+계산 결과가 곧 확정인 것처럼 읽힌다.
+
+#### [CRITICAL] Target Band 자동저장 제거 ⭐
+```
+기존: 🎯 자동설정 버튼 → window.confirm 한 번 → fx_target_min/max 즉시 저장.
+문제: 리짐 채택 후 밴드는 리짐 목표비중을 가두는 **제약**이 됐다. 계산기가 단독으로
+      확정하면 정책회의를 거치지 않고 판정 결과가 바뀐다.
+변경: 3단계로 분리.
+      📐 권고 밴드 계산 (계산만) → 📥 정책 기준으로 불러오기 (②탭 초안으로 인계)
+      → ②탭에서 사유와 함께 의결 저장 (여기서만 DB 반영)
+금지: 계산기에서 params.set('fx_target_min'|'fx_target_max', ...) 을 직접 호출하지 말 것.
+```
+
+#### 초안 인계는 effect+setState 가 아니라 useMemo 병합으로
+```
+부모 FxPolicyTab 이 bandDraft state 를 들고, 자식 FxRegimeOpsCard 가
+effectiveDraft = { ...(incomingBand ?? {}), ...userDraft } 로 병합한다(사용자 편집 우선).
+effect 로 setDraft 하면 ① 캐스케이드 렌더 ② 사용자가 값을 지워도 계산기 값이 되살아남.
+부모 초안은 저장 성공·되돌리기 때만 비운다 — 서브탭을 오가도 초안이 살아남게.
+⚠ onConsumeBand 는 useCallback 필수(자식 deps 에 들어감).
+```
+
+#### 검증
+tsc 0 errors · 신규/변경 파일 lint 0 errors·0 warnings(전체 src 0 errors, 69 warnings=기존 수준)
+· Vitest 235/235 · 엔진 50/50.
+
+### 2026-08-14 세션26차 Phase 4 (리짐 이행 통제 — 스냅샷·미이행 감지·집행 경로)
+
+#### ⭐ 판정 스냅샷 — 대시보드에서 엔진을 돌리지 않기 위한 장치
+```
+문제 ① 대시보드·자금일보는 전 사용자가 여는 화면인데, 리짐 판정에는 환율 이력
+        1,000여 건 + FIFO 로트 조회가 필요하다. 매번 돌릴 수 없다.
+문제 ② "권고가 언제 처음 났는지" 기록이 없어 미이행 경과일을 셀 수 없었다
+        (매각 지시로 등록되기 전까지 권고는 어디에도 저장되지 않음).
+해결  src/lib/fxRegimeSnapshot.ts — 실무 화면이 판정할 때 결과 요약만 policy_params 에
+      남기고, 다른 화면은 그 숫자만 읽는다.
+      키: fx_regime_snap_{target|current|suggest|since|asof}_{cur}
+      since 규칙: 조치 불필요→권고=오늘로 설정 / 권고 지속=유지(경과일 증가) /
+                  권고→조치 불필요=삭제. 변경 없으면 아무것도 쓰지 않는다.
+금지: 시뮬레이션 모드에서 스냅샷을 쓰지 말 것 — 가정값이 전사 경보로 번진다.
+      (FxRegimePage 의 sync effect 는 inputSource==='live' 를 먼저 확인한다)
+검증: 단위 테스트 6건 (fxRegimeSnapshot.test.ts) — since 전이 규칙 전부 커버.
+```
+
+#### checkFx(밴드 준수) vs checkFxRegimeTarget(목표 이행) — 다른 위반이다
+`checkFx` 는 정책 밴드 안에 있는지, `checkFxRegimeTarget` 은 오늘 국면이 지시한
+목표까지 줄였는지를 본다. **밴드 안에 있어도 리짐 목표를 초과 보유할 수 있다.**
+의결 규칙에도 `linked_metric: 'fx_regime_gap'`(목표 대비 초과 보유 %p)을 추가했다.
+통화가 여럿이면 가장 큰 초과 폭으로 판정하고, 스냅샷이 없으면 위반 없음으로 본다(오탐 방지).
+**DDL**: `docs/db/policy_decision_regime_metric.sql` ⭐ (CHECK 제약 교체, **실행 필요**)
+
+#### 미이행 노출 — 1영업일 유예
+대시보드 이슈 티커(`fx_regime_{법인}_{통화}`)와 자금일보 `PendingRegimeBanner`.
+당일 발생한 권고까지 경보로 올리면 노이즈라 **1영업일 지난 것만** 노출한다.
+`makeIssueKey` 에 `'fx_regime'`, `issueLink` 에 `/fx-regime/{법인}` 매핑 추가.
+
+#### order_type='regime' + 권고 → 매각 지시 등록
+- `src/lib/fxOrderType.ts` — 라벨 SSOT. 기존엔 대시보드·자금일보가 삼항 연산자로
+  두 종류만 구분해, 새 유형이 "한도초과 매각"으로 잘못 표시될 상태였다.
+- 실무 화면 `환전 판단` 탭에 `이 권고로 매각 지시 등록` — 기존 발의→승인→완료
+  워크플로우에 그대로 태운다(기한 +3영업일, 환율 무관 실행).
+  ⚠ 승인은 **화면 안 미리보기 패널**로 받는다. `window.confirm` 은 크롬이 반복
+  대화상자를 차단하면 즉시 false 를 반환해 "눌러도 아무 일 없는" 상태가 된다(세션24차 실사고).
+  live 모드 + 편집 권한일 때만 노출한다.
+
+#### 검증
+tsc 0 errors · 전체 src lint 0 errors(69 warnings=기존 수준) · Vitest **241/241**(신규 6건)
+· 엔진 50/50.
+
+### 2026-08-14 세션26차 — 브라우저 실동작 검증 (playwright)
+
+메디아나 법인·master 계정으로 `/policy` › FX 정책 4개 서브탭을 실제로 열어 확인했다.
+(읽기 전용 확인 — 저장 버튼은 누르지 않음. `/fx-regime` 은 스냅샷 **쓰기**가 발생하므로
+사용자 승인 전까지 열지 않았다.)
+
+| 서브탭 | 결과 |
+|---|---|
+| ① 리짐 이행 현황 | 정상 — 국면 5-B(강한 하락·저변동성) · 수준 중립 · 목표 25.0% vs 현재 29.5% · 권고 매도 41.5억(USD 2,933,716) · 환전 가능 재고 USD 8,088,438(보유 14,088,438 중 정기예금 제외) |
+| ② 정책 기준 | 정상 — 운영 가정 표 + 밴드 25/30 + ProtocolTab(수준×추세 매트릭스) |
+| ③ 한도 계산기 | 정상 — `📐 권고 밴드 계산` 버튼, 실효한도 275.6억 |
+| ④ 매각 집행 | 정상 — 매각 지시 관리 + 통화별 상한 표(EUR 초과 → 매도 발의) |
+
+실측이 Phase 4 설계를 그대로 확인해줬다: **현재 29.5% 는 정책 밴드(25~30%) 안이지만
+리짐 목표 25.0% 는 초과**한다 — `checkFx`(밴드)와 `checkFxRegimeTarget`(목표)을 분리한 이유.
+
+#### [BUG] 검증에서 발견해 고친 것 2건
+```
+① 폴백값이 통화를 가리지 않고 적용됐다
+   defaultsFor(company) 가 메디아나면 **모든 통화**에 월 300만·버퍼 250만을 적용했다.
+   실측된 건 USD 수급뿐이라 EUR·JPY·GBP 의 버퍼 하한이 근거 없이 올라간다(= 환전을 덜 함).
+   → regimeOpsFallback(company, currency) 로 USD 에만 적용.
+② 화면(0)과 엔진(300만)이 달랐다
+   정책 기준 탭은 params.get() 을 직접 읽어 미설정이면 0 으로 보였는데, 판정에는 폴백이
+   들어간다. 회의체가 실제 적용값을 알 수 없다.
+   → placeholder 에 "3,000,000 (기본값 적용 중)" 으로 노출 + 안내문 추가.
+```
+
+#### [CRITICAL] 국채 자동 시세갱신 — 3중 결함, 되살리면 이력이 파괴될 뻔했다 ⭐
+```
+증상: 앱 로드 때마다 법인 수만큼 400.
+  GET /rest/v1/investments?...&product=eq.국채&order=start.asc → 400
+
+결함 ① 컬럼명   : 실제 컬럼은 start_date 인데 order=start → PostgREST 400.
+       그 400 이 catch{} 에 삼켜져 **국채 갱신이 죽은 줄도 몰랐다**(수년치 무동작).
+결함 ② 매핑 누락 : restSelect 는 **DB 행(snake_case)** 을 그대로 준다. 코드가
+       b.bondTicker/b.priceDate/b.bondQty 로 읽어 전부 undefined → 필터 전량 탈락.
+       restUpdate 에도 camelCase(bondPrice/priceDate)를 그대로 보내 없는 컬럼 400.
+결함 ③ ⚠⚠ 이력 파괴 : 조회된 **모든 행**을 돌며 같은 최신 기준가로 UPDATE 했다.
+       국채는 기준일마다 새 행이 쌓이는 구조다(실측: 메디아나 KR103502GF39 72건).
+       ①②만 고쳐 되살렸다면 **72건 전부가 같은 날짜·같은 가격으로 뭉개져**
+       일별 기준가 이력이 소멸했을 것이다. 400 으로 죽어 있던 게 사고를 막아준 셈.
+
+해결: order→start_date / investFromDb·investToDb 매핑 관통 /
+      **getLatestBonds() 로 종목별 최신 1건만** 보고, 그 기준일 행이 없으면
+      **새 행 INSERT**(지분 갱신과 동일 패턴). catch 에 console.warn 추가.
+금지: 국채를 기존 행 UPDATE 로 갱신하지 말 것 — 날짜별 이력 테이블이다.
+검증: 수정 후 실제 앱 로드에서 메디아나 2026-08-13 기준가 6910 행 1건 INSERT 성공
+      (72→73건, 종목별 1건만). 콘솔 400 도 사라짐.
+```
+
+### 2026-08-14 세션26차 — /fx-regime 실화면 검증 (쓰기 포함, 사용자 승인)
+
+| 확인 항목 | 결과 |
+|---|---|
+| 판정 스냅샷 기록 | POST policy_params 13건 — 법인·통화별 4~5키, 폭주 없음 |
+| 정책 소유 필드 잠금 | 숫자 입력 10개 중 **9개 비활성** (열린 1개 = 실무 입력 `이번 분기 실현 손실`) |
+| 매각 지시 등록 | 버튼 → 확인 패널(USD 2,933,715 · 매도 1,415 · 장부 1,481.949 · 예상 환차손 −2.0억 · 리짐 권고 매각 · 기한 +3영업일) → **취소로 종료(제출 안 함)** |
+| 시뮬레이션 모드 | `🧪 실제 권고가 아닙니다` 배너 정상 |
+| 런타임 오류 | 없음 |
+
+### 2026-08-14 세션26차 — 주간예측 통화 대응 + 운영 가정 자동 산출
+
+계획서 §9 미결이던 "월 유입·결제 버퍼 자동 산출" 완료.
+`cashflow_plan_items` 에 **통화 컬럼이 없어**(전부 원화 전제) 외화 원금을 도출할 수 없던 것이 원인이었다.
+
+- **DDL** `docs/db/cashflow_plan_items_currency.sql` ⭐ (**실행 필요**) —
+  `currency text not null default 'KRW'`. 기존 행은 전부 원화로 간주(현재 동작 동일).
+- `WeekCashflowModal` — 통화 선택 추가. ⚠ **원화만 억원 단위 입력**(×1e8),
+  외화는 **원금 그대로** 저장한다. 외화를 억원 배율로 저장하면 결제 버퍼가 1억배 틀어진다.
+- `useCashflowPlan.sumBy` — 주별 합계(cashflow_plan.inflow/outflow)는 원화 기준이라
+  외화 항목은 `useFx().toKRW` 로 환산해 더한다.
+- `src/lib/cashflowFxDerive.ts` (신규, 테스트 6건) —
+  `월 유입 = 향후 12주 유입 ÷ 3` / `결제 버퍼 = 13주 이내 유출 합계`.
+  정책 기준 탭의 `📥 주간예측에서 산출` 버튼이 **초안만 채운다**(한도 계산기와 같은 원칙).
+  계획이 0건인 통화는 건드리지 않는다 — 0 으로 덮으면 기존 의결값이 날아간다.
+
+#### [BUG] 로컬 자정 Date + toISOString = 하루 밀림 ⭐
+```
+addWeeks 를 new Date('2026-08-10T00:00:00') 로 만들면 **로컬 자정**이라
+toISOString() 이 KST(+9) 기준 전날(2026-08-09)을 반환한다.
+→ 기준 주 자체가 "과거"로 걸러져 유입이 통째로 빠졌다(테스트가 잡아냄).
+해결: Date.UTC 로 계산.
+⚠ 단, get12Weeks/getMonday 는 **이미** 이 시프트를 가진 채 week_start 를 저장해 왔다.
+  저장·조회가 같은 함수라 자체적으로는 일관되므로 "고치면" 오히려 어긋난다.
+  → 산출 기준 주는 반드시 get12Weeks()[0] 을 그대로 쓸 것.
+```
+
+### 2026-08-18 세션26차 2일차 — 남은 작업 실화면 검증 중 CRITICAL 버그 3건 발견·수정
+
+사용자 승인 하에 §5 남은 작업(경보 실동작·주간예측 산출·매각 지시 제출)을 실제로 진행하며 발견.
+
+#### [CRITICAL] ① 판정 스냅샷 since 리셋 — 미이행 경과일이 매번 오늘로 초기화되던 버그
+```
+증상: /fx-regime 재방문 시마다 since(권고 최초 발생일)가 오늘 날짜로 리셋됨.
+      메디아나 USD since 2026-08-14 → 8/18 재방문 시 8/18 로 되돌아감(실사고, 실데이터 확인).
+원인: usePolicyDashboard 의 loading 초기값이 false 다. 마운트 첫 렌더는 fetch effect가
+      아직 시작되기도 전이라 loading=false·raw=EMPTY(totalFundKRW=0 등)인데,
+      hist(환율 이력)가 먼저 준비되면 이 첫 렌더에서 signal 이 나온다.
+      → ctx 가 0 기반이라 "가짜 조치 불필요"(suggest=0) 신호가 먼저 기록되어 since 삭제
+      → 뒤이어 진짜 신호가 오면 prevSuggest=0 으로 보여 since 가 오늘로 재설정.
+      단순 !loading 체크로는 "로딩 시작 전"과 "로딩 완료 후"를 구분 못해 1차 수정도 재발.
+해결: policyData/fxLots/hist 의 loading 이 **한 번이라도 true 였다가 false 로 돌아온** 상태를
+      법인·통화 스코프별로 추적하는 ref 가드(sawTreasuryLoadingRef)를 추가.
+      "로딩을 실제로 거쳤다"는 사실이 확인된 뒤에만 스냅샷을 쓴다.
+      (src/pages/FxRegimePage.tsx — treasuryReady 계산부 참조)
+데이터 복구: 메디아나 fx_regime_snap_since_usd 를 사고 이전 확인값 2026-08-14 로 REST PATCH 복구.
+검증: 재검증 결과 이후 재방문에서도 since 유지, 대시보드 티커 "리짐 권고 미이행 1영업일차: USD"·
+      자금일보 배너 정상 노출 확인(1영업일=8/17 광복절 대체공휴일 반영, 계산 정상).
+금지: 훅의 loading 초기값을 신뢰해 "지금 로딩 중이 아니다 = 데이터가 준비됐다"로 판단하지 말 것.
+      마운트 직후 첫 렌더는 항상 의심할 것.
+```
+
+#### [CRITICAL] ② DailyReportPage 전체 크래시 — fmtKRW 미import
+```
+증상: /daily-report/{법인}/{날짜} 접속 시 완전 백지 화면. 콘솔:
+      ReferenceError: fmtKRW is not defined (PendingRegimeBanner 컴포넌트)
+원인: Phase 4 에서 PendingRegimeBanner 를 추가하며 fmtKRW 사용 코드만 넣고
+      import { fmtKRW } from '../lib/format' 를 빠뜨렸다. React 에러 바운더리가 없어
+      배너 하나의 런타임 에러가 자금일보 작성 화면 전체를 백지로 만들었다.
+      ⚠ 이 세션 내내 여러 차례 tsc --noEmit 을 돌렸는데도 잡히지 않았다 — 원인 미상
+      (파일 상태 불일치 가능성). 실브라우저 구동 없이는 발견 못 했을 결함.
+해결: import 추가 한 줄. 재검증 결과 정상 렌더 + 배너 정상 노출.
+교훈: tsc/lint 통과가 "화면이 뜬다"를 보장하지 않는다. 신규 컴포넌트를 추가한 화면은
+      반드시 실브라우저로 최소 1회 열어볼 것 — 이번 세션 초반 검증에서도 이 화면은
+      URL 직접 접근을 시도하지 않고 넘어갔던 사각지대였다.
+```
+
+#### [CRITICAL] ③ order_type='regime' 을 저장하는 DDL을 누락 — 매각 지시 등록 100% 실패
+```
+증상: /fx-regime 환전 판단 탭에서 "이 권고로 매각 지시 등록" 실제 제출 시:
+      "new row for relation \"fx_trade_history\" violates check constraint
+       \"fx_trade_history_order_type_check\""
+원인: order_type CHECK 제약(세션20차, threshold/discretionary 만 허용)을
+      Phase 4 구현 때 확장하지 않고 코드에서만 'regime' 값을 내보냈다.
+해결: docs/db/fx_trade_history_regime_order_type.sql 신규 작성.
+      ⚠⚠ 아직 미실행 — **다음 세션 최우선 확인 사항**. INSERT 자체가 거부되므로
+      정리해야 할 이상 데이터는 없다(제출 실패, DB 반영 없음).
+```
+
+#### [해결] cashflow_plan_items RLS 쓰기 차단 — 재확인 결과 정상 (2026-08-18)
+```
+2026-08-18 세션26차 2일차 당시 주간예측 항목 추가(POST) 시 401
+"new row violates row-level security policy for table \"cashflow_plan_items\""
+관측됨 — 원인 불명으로 사용자 확인 대기 상태로 남겨뒀었다.
+
+이후 사용자가 Supabase 대시보드 Table Editor에서 직접 확인: cashflow_plan_items
+테이블 뱃지가 "RLS disabled" + "UNRESTRICTED"로, 원 DDL(docs/db/cashflow_plan_items.sql
+의 disable row level security)대로 정상 상태였다. 로컬 dev 서버(pnpm dev)에서 주간예측
+탭 "+ 추가"로 실제 항목 추가 → 저장 성공, 이후 삭제도 성공 확인. 401의 원인은 RLS가
+아니었던 것으로 결론(일시적 문제였거나 그 사이 이미 정리됐을 가능성 — 재현 안 됨).
+```
+
+#### 남은 것
+- FX 리짐 이관 Phase 1~4 + 후속 3건 + CRITICAL 버그 3건 + cashflow_plan_items RLS 건 모두 해결 완료.
+- ⚠ **`docs/db/fx_trade_history_regime_order_type.sql`, `cashflow_plan_items_currency.sql`,
+  `policy_decision_regime_metric.sql`, `policy_params_override_audit.sql` — 2026-08-18 사용자가 전부 실행 완료.**
+- 법인별 운영 가정(월 유입/결제 버퍼) 실제 값 입력 — 재무팀 의사결정 필요, 에이전트가 대신할 수 없음.
+- ECOS_API_KEY 로테이션, 기타 미적용 마이그레이션 다수 — 전부 사용자 전용 작업(대시보드/CLI 접근 필요).
 
 ---
 

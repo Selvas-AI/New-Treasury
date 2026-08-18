@@ -26,8 +26,13 @@ import { useDailyReportAttachments } from '../hooks/useDailyReportAttachments'
 import { useCompanies } from '../hooks/useCompanies'
 import { usePageCompany } from '../hooks/usePageCompany'
 import { usePolicyDecisionsByCompany } from '../hooks/usePolicyDecisions'
+import { usePolicyParams } from '../hooks/usePolicyParams'
+import { readAllRegimeSnapshots, pendingDays } from '../lib/fxRegimeSnapshot'
+import { REGIME_CURRENCIES } from '../lib/fxRegimeInputs'
+import { orderTypeLabel } from '../lib/fxOrderType'
 import { useFxTradeHistory } from '../hooks/useFxTradeHistory'
 import { bizDaysBetween } from '../lib/bizDay'
+import { fmtKRW } from '../lib/format'
 import type { Company, DailyRecord } from '../types'
 
 
@@ -262,6 +267,48 @@ function PendingDecisionsBanner({ company }: { company: string }) {
   )
 }
 
+/**
+ * 리짐 권고 미이행 배너 (세션26차 Phase 4)
+ *
+ * ⚠ 여기서 국면 엔진을 돌리지 않는다 — 실무 화면(/fx-regime)이 판정할 때 남긴
+ *   스냅샷(policy_params 의 fx_regime_snap_*)만 읽는다. 자금일보는 매일 여는
+ *   화면이라 환율 이력 전체 조회를 얹으면 안 된다.
+ */
+function PendingRegimeBanner({ company }: { company: string }) {
+  const params = usePolicyParams(company || null)
+  const today = todayStr()
+  const pending = readAllRegimeSnapshots(params, REGIME_CURRENCIES)
+    .map(s => ({ snap: s, days: pendingDays(s, today, bizDaysBetween) }))
+    .filter(x => x.days != null && x.days >= 1)
+  if (pending.length === 0) return null
+
+  return (
+    <div className="no-print mx-6 mt-3 px-4 py-2.5 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg shrink-0">
+      <p className="text-xs font-semibold text-amber-800 dark:text-amber-300 mb-1.5">
+        🧭 환율 국면 권고 미이행 {pending.length}건 — 환전 또는 매각 지시 등록이 필요합니다
+      </p>
+      <ul className="space-y-1">
+        {pending.map(({ snap, days }) => (
+          <li key={snap.currency} className="text-xs text-amber-800 dark:text-amber-300 flex items-start gap-1.5">
+            <span className="shrink-0">·</span>
+            <span>
+              <span className="font-medium">{snap.currency} 권고 매도 {fmtKRW(snap.suggestKRW)}</span>
+              <span className="text-amber-600 dark:text-amber-400">
+                {' '}— {days}영업일 경과 ({snap.since} 발생, 판정일 {snap.asOf})
+              </span>
+              {snap.targetPct != null && snap.currentPct != null && (
+                <span className="text-amber-600 dark:text-amber-400">
+                  {' '}· 목표 {snap.targetPct}% / 현재 {snap.currentPct}%
+                </span>
+              )}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 // ── 정책 이행 통제(세션20차 Phase 3) — 외화 매각 지시 이행 기한 배너 ─────────
 // 재량 매각(정책회의 판단)/한도초과 매각 모두 "등록일+3영업일, 환율 무관 실행"이
 // 원칙이므로, 기한이 임박·초과한 매각 지시를 자금일보 작성 화면에도 노출한다.
@@ -282,7 +329,7 @@ function PendingSellOrdersBanner({ company }: { company: string }) {
       <ul className="space-y-1">
         {pending.map(t => {
           const dday = bizDaysBetween(today, t.due_date!)
-          const typeLabel = t.order_type === 'discretionary' ? '재량 매각' : '한도초과 매각'
+          const typeLabel = orderTypeLabel(t.order_type)
           return (
             <li key={t.id} className="text-xs text-red-700 dark:text-red-300 flex items-start gap-1.5">
               <span className="shrink-0">·</span>
@@ -946,6 +993,7 @@ export default function DailyReportPage() {
 
       {/* ── 정책 이행 통제(세션20차 Phase 1/3): 미이행 의결사항·매각 지시 확인 배너 ─────── */}
       <PendingDecisionsBanner company={resolvedCompany} />
+      <PendingRegimeBanner company={resolvedCompany} />
       <PendingSellOrdersBanner company={resolvedCompany} />
 
       {/* ── 메인 콘텐츠 ─────────────────────────────────────── */}

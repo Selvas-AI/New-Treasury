@@ -42,6 +42,12 @@ function fromDb(row: DbRow): InvestmentRecord {
 //   "Could not find the 'start' column of 'investments'" 오류가 난다.
 //   외부에서 직접 insert 할 일이 있으면 반드시 investToDb() 를 거칠 것.
 export { toDb as investToDb }
+/**
+ * DB 행(snake_case) → InvestmentRecord(camelCase).
+ * ⚠ restSelect 는 **DB 행 그대로** 반환한다. 이 매퍼를 거치지 않고 row.bondTicker 처럼
+ *   읽으면 전부 undefined 가 되어 조용히 빈 결과가 된다(세션26차 autoRefreshPrices 실사고).
+ */
+export { fromDb as investFromDb }
 function toDb(record: Partial<InvestmentRecord>): DbRow {
   const row: DbRow = { ...record }
   // insert 시 id가 undefined/null이면 DB auto-generate를 위해 제거

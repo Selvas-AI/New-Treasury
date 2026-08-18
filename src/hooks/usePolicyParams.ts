@@ -41,27 +41,56 @@ export function usePolicyParams(company: Company | null) {
     return data.find(p => p.param_key === key)?.param_text ?? null
   }
 
-  /** upsert — param_value 또는 param_text */
+  /** 특정 키의 정정 감사 정보 (마이그레이션 미적용 시 전부 null) */
+  function getMeta(key: string): Pick<PolicyParam, 'overridden_by' | 'overridden_at' | 'override_note'> | null {
+    const row = data.find(p => p.param_key === key)
+    if (!row) return null
+    return {
+      overridden_by:  row.overridden_by ?? null,
+      overridden_at:  row.overridden_at ?? null,
+      override_note:  row.override_note ?? null,
+    }
+  }
+
+  /**
+   * upsert — param_value 또는 param_text
+   *
+   * @param audit 정책회의 정정 기록 (사유). 넘기면 overridden_* 컬럼도 함께 쓴다.
+   *   ⚠ `docs/db/policy_params_override_audit.sql` 미적용 환경에서는 해당 컬럼이 없어
+   *     PostgREST 가 스키마 오류를 반환한다 → **감사 필드를 빼고 1회 재시도**한다.
+   *     값 저장 자체가 실패하면 안 되기 때문(사유 기록보다 의결값 반영이 우선).
+   */
   async function set(
     key: string,
     value: number | null,
     text: string | null,
     updatedBy: string,
+    audit?: { note?: string | null },
   ): Promise<string | null> {
     if (!company) return '법인이 선택되지 않았습니다.'
+    const now = new Date().toISOString()
     // ⚠️ on_conflict 필수 — policy_params는 (company, param_key) UNIQUE.
     // 미지정 시 PostgREST가 PK(id)로 충돌 판정 → 기존 파라미터 갱신이
     // unique 위반(409)으로 실패하고 저장값이 이전값으로 되돌아감(예: 신뢰도 90% 복귀).
-    const { error: err } = await restUpsert('policy_params', {
+    const base = {
       company, param_key: key, param_value: value, param_text: text,
-      updated_by: updatedBy, updated_at: new Date().toISOString(),
-    }, false, 'company,param_key')
+      updated_by: updatedBy, updated_at: now,
+    }
+    const row = audit
+      ? { ...base, overridden_by: updatedBy, overridden_at: now, override_note: audit.note ?? null }
+      : base
+
+    let { error: err } = await restUpsert('policy_params', row, false, 'company,param_key')
+    if (err && audit && /column|schema cache/i.test(err.message)) {
+      // 감사 컬럼이 아직 없는 환경 — 값만 저장하고 사유는 포기한다.
+      ({ error: err } = await restUpsert('policy_params', base, false, 'company,param_key'))
+    }
     if (err) return err.message
     await fetch()
     return null
   }
 
-  return { data, loading, error, refetch: fetch, get, getText, set }
+  return { data, loading, error, refetch: fetch, get, getText, getMeta, set }
 }
 
 /**

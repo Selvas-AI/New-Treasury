@@ -1,7 +1,8 @@
 import { useState, useCallback, useEffect } from 'react'
 import { restSelect, restUpsert, restInsert, restUpdate, restDelete } from '../lib/supabase'
 import { generateUUID } from '../lib/format'
-import type { Company } from '../types'
+import { useFx } from './useFx'
+import type { Company, FxCode } from '../types'
 
 export interface CashflowPlanRow {
   id:         string
@@ -21,6 +22,13 @@ export interface CashflowPlanItem {
   direction:  'in' | 'out'
   category:   string
   amount:     number
+  /**
+   * 통화 코드. 기본 'KRW'.
+   * ⚠ 외화는 **외화 원금**으로 저장한다(원화 환산액이 아니다).
+   *   주별 합계(cashflow_plan.inflow/outflow)는 원화 기준이라 집계 시 환산한다.
+   *   docs/db/cashflow_plan_items_currency.sql
+   */
+  currency:   string
   memo:       string
   created_by: string
   created_at: string
@@ -32,6 +40,7 @@ export interface CashflowItemInput {
   direction:  'in' | 'out'
   category:   string
   amount:     number
+  currency?:  string
   memo?:      string
 }
 
@@ -55,13 +64,26 @@ export function get12Weeks(from: Date = new Date()): string[] {
   })
 }
 
-function sumBy(items: CashflowPlanItem[], week_start: string, direction: 'in' | 'out'): number {
+/**
+ * 주별 합계 — cashflow_plan.inflow/outflow 는 **원화** 기준이다.
+ * 외화 항목은 집계 시점 환율로 환산해 더한다(toKRW 미주입 시 원금 그대로 — 레거시 동작).
+ */
+function sumBy(
+  items: CashflowPlanItem[], week_start: string, direction: 'in' | 'out',
+  toKRW?: (amount: number, code: string) => number,
+): number {
   return items
     .filter(i => i.week_start === week_start && i.direction === direction)
-    .reduce((s, i) => s + (i.amount || 0), 0)
+    .reduce((s, i) => {
+      const amt = i.amount || 0
+      const cur = (i.currency ?? 'KRW').toUpperCase()
+      return s + (cur === 'KRW' || !toKRW ? amt : toKRW(amt, cur))
+    }, 0)
 }
 
 export function useCashflowPlan(company: Company | null) {
+  // 외화 계획 항목을 주별 원화 합계에 반영하기 위한 환율. 공유 캐시라 추가 호출 비용은 없다.
+  const fx = useFx()
   const [data,    setData]    = useState<CashflowPlanRow[]>([])
   const [items,   setItems]   = useState<CashflowPlanItem[]>([])
   const [loading, setLoading] = useState(false)
@@ -89,8 +111,9 @@ export function useCashflowPlan(company: Company | null) {
   /** 주별 합계(inflow/outflow)를 items 배열로부터 재계산해 cashflow_plan에 반영 */
   async function syncAggregateFrom(itemsList: CashflowPlanItem[], week_start: string, userLabel: string): Promise<string | null> {
     if (!company) return '법인이 선택되지 않았습니다.'
-    const inflow  = sumBy(itemsList, week_start, 'in')
-    const outflow = sumBy(itemsList, week_start, 'out')
+    const toKRW = (amt: number, code: string) => fx.toKRW(amt, code as FxCode)
+    const inflow  = sumBy(itemsList, week_start, 'in',  toKRW)
+    const outflow = sumBy(itemsList, week_start, 'out', toKRW)
     const { error: err } = await restUpsert('cashflow_plan', {
       company, week_start, inflow, outflow,
       created_by: userLabel, updated_at: new Date().toISOString(),
@@ -124,10 +147,11 @@ export function useCashflowPlan(company: Company | null) {
   /** 항목 추가 — 저장 성공 시 해당 주 합계 자동 재계산 */
   async function addItem(
     week_start: string, direction: 'in' | 'out', category: string, amount: number, memo: string, userLabel: string,
+    currency = 'KRW',
   ): Promise<string | null> {
     if (!company) return '법인이 선택되지 않았습니다.'
     const newItem: CashflowPlanItem = {
-      id: generateUUID(), company, week_start, direction, category, amount, memo,
+      id: generateUUID(), company, week_start, direction, category, amount, currency, memo,
       created_by: userLabel, created_at: new Date().toISOString(),
     }
     const { error: err } = await restInsert('cashflow_plan_items', newItem)
@@ -139,7 +163,7 @@ export function useCashflowPlan(company: Company | null) {
 
   /** 항목 수정 */
   async function updateItem(
-    id: string, patch: { category?: string; amount?: number; memo?: string }, userLabel: string,
+    id: string, patch: { category?: string; amount?: number; memo?: string; currency?: string }, userLabel: string,
   ): Promise<string | null> {
     const target = items.find(i => i.id === id)
     if (!target) return '항목을 찾을 수 없습니다.'
@@ -179,7 +203,7 @@ export function useCashflowPlan(company: Company | null) {
     // 2) 신규 항목 일괄 삽입
     const newItems: CashflowPlanItem[] = rows.map(r => ({
       id: generateUUID(), company, week_start: r.week_start, direction: r.direction,
-      category: r.category, amount: r.amount, memo: r.memo ?? '',
+      category: r.category, amount: r.amount, currency: r.currency ?? 'KRW', memo: r.memo ?? '',
       created_by: userLabel, created_at: new Date().toISOString(),
     }))
     const { error: insErr } = await restInsert('cashflow_plan_items', newItems)

@@ -2,41 +2,41 @@
  * FxRegimePage — 환율 국면 판정 대시보드
  *
  * 세션21차 신규. docs/기획/환율국면_동적헷지_시뮬레이터.md Phase 3
+ * 세션26차 개편: docs/기획/FX리짐_정책이관_계획.md
  *
- * ⚠ 현재 개발 전용(App.tsx 에서 import.meta.env.DEV 게이트).
- *    실데이터 검증 + 정책회의 보고를 마친 뒤 프로덕션에 노출한다.
+ * ⭐ 이 화면은 **실무 일상 화면**이다 — 매일 국면을 보고 환전 여부를 판단한다.
+ *    정책 기준(밴드·프로토콜·운영 가정)은 **자금정책 관리 › FX 정책**에서만 편집하고,
+ *    여기서는 🔒 배지와 함께 읽기 전용으로 보여준다.
+ *    메뉴 접근은 `fx-regime` 슬러그를 명시 허용한 계정만 가능하다(기본 비공개).
  *
  * 구성:
  *   ① 데이터 수집 패널 — ECOS 백필 / 최신 보충 (이력이 없으면 자동으로 펼침)
  *   ② 국면 판정 카드   — 현재 국면 · 목표 비율 · 권고 조치
  *   ③ 지표 · 차트      — 원시 종가 + 칼만 평활 + 볼린저 밴드
  *
- * 자금 컨텍스트는 fxRegimeInputs 어댑터를 통해 법인별 수동 입력한다.
- * Treasury 실데이터 연동은 시그니처만 남기고 현재 범위에서는 비활성이다.
+ * 판정 경로는 useFxRegime 훅 하나로 정책 화면과 공유한다 — 화면별로 다시 계산하지 말 것.
  */
-import { useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Link } from 'react-router-dom'
 import {
   ResponsiveContainer, ComposedChart, Line, Area, XAxis, YAxis,
   CartesianGrid, Tooltip, Legend,
 } from 'recharts'
 import { useAuth } from '../hooks/useAuth'
 import { usePageCompany } from '../hooks/usePageCompany'
-import { usePolicyParams } from '../hooks/usePolicyParams'
-import { usePolicyDashboard } from '../hooks/usePolicyDashboard'
-import { useFxLots } from '../hooks/useFxLots'
 import { useFxTradeHistory } from '../hooks/useFxTradeHistory'
+import { useFxRegime } from '../hooks/useFxRegime'
 import {
-  useFxHistory, backfillFxHistory, syncLatestFxHistory,
+  backfillFxHistory, syncLatestFxHistory,
   type BackfillProgress,
 } from '../hooks/useFxHistory'
 import {
-  evaluateRegime, kalmanSmooth, bollinger, protocolFromParams,
+  kalmanSmooth, bollinger,
   TREND_LABEL, VOL_LABEL, CLAMP_LABEL,
-  type RegimeSeriesPoint, type TrendCode, type VolCode,
+  type TrendCode, type VolCode,
 } from '../lib/fxRegime'
 import { buildChartNarrative } from '../lib/fxChartNarrative'
 import InfoTip from '../components/common/InfoTip'
-import ProtocolTab from '../components/fxRegime/ProtocolTab'
 import BacktestTab from '../components/fxRegime/BacktestTab'
 import NarrativeModal from '../components/fxRegime/NarrativeModal'
 import DecisionTab from '../components/fxRegime/DecisionTab'
@@ -44,8 +44,11 @@ import VerdictCard from '../components/fxRegime/VerdictCard'
 import { buildVerdict } from '../lib/fxVerdict'
 import { lossBudget, bepStats } from '../lib/fxPnl'
 import { fmtKRW } from '../lib/format'
+import { syncRegimeSnapshot } from '../lib/fxRegimeSnapshot'
+import { addBizDays, todayStr } from '../lib/bizDay'
 import {
-  useFxTreasuryInputs,
+  REGIME_CURRENCIES as CURRENCIES,
+  type FieldOwner,
   type FxTreasuryInputAdapter,
   type FxTreasuryInputs,
   type InputSource,
@@ -54,25 +57,21 @@ import {
 /**
  * 탭 순서 = **의사결정 흐름**을 따른다.
  *
- *   ① 현재 국면   진단   — 무슨 일이 벌어지고 있나        (매일)
- *   ② 환전 판단   집행   — 이번에 실제로 얼마를 팔 것인가  (권고 발생 시)
- *   ③ 정책 프로토콜 기준 — 우리 규칙은 무엇인가            (분기)
- *   ④ 시뮬레이션   검증   — 그 규칙이 옳은가              (정책 변경 시)
+ *   ① 현재 국면 진단 — 무슨 일이 벌어지고 있나        (매일)
+ *   ② 환전 판단 집행 — 이번에 실제로 얼마를 팔 것인가  (권고 발생 시)
+ *   ③ 규칙 검증      — 그 규칙이 옳은가               (정책 변경 검토 시)
  *
- * 앞 두 개는 실무자가 매일 쓰는 화면, 뒤 두 개는 회의체가 주기적으로 보는 화면이다.
- * 사용 빈도와 논리 순서가 일치한다.
+ * ⚠ 세션26차: 정책 프로토콜(기준) 탭은 **자금정책 관리 › FX 정책**으로 이관했다.
+ *   실무 화면은 정책을 조회만 하고 바꾸지 않는다 — 여기에 편집 UI를 되살리지 말 것.
  */
-type TabKey = 'regime' | 'decision' | 'protocol' | 'backtest'
+type TabKey = 'regime' | 'decision' | 'backtest'
 const TABS: { key: TabKey; label: string; hint: string }[] = [
-  { key: 'regime',   label: '① 📊 현재 국면',    hint: '진단 — 무슨 일이 벌어지고 있나' },
-  { key: 'decision', label: '② 💰 환전 판단',    hint: '집행 — 이번에 얼마를 팔 것인가' },
-  { key: 'protocol', label: '③ 🎯 정책 프로토콜', hint: '기준 — 우리 규칙은 무엇인가' },
+  { key: 'regime',   label: '① 📊 현재 국면', hint: '진단 — 무슨 일이 벌어지고 있나' },
+  { key: 'decision', label: '② 💰 환전 판단', hint: '집행 — 이번에 얼마를 팔 것인가' },
   // ⚠ "시뮬레이션"은 과거 재현을 연상시켜 실적으로 오독된다.
   //   실제로는 동일 조건 위에서 규칙끼리 겨루는 실험이므로 "규칙 검증"으로 부른다.
-  { key: 'backtest', label: '④ ⚖️ 규칙 검증',   hint: '검증 — 그 규칙이 옳은가 (과거 실적 재현 아님)' },
+  { key: 'backtest', label: '③ ⚖️ 규칙 검증', hint: '검증 — 그 규칙이 옳은가 (과거 실적 재현 아님)' },
 ]
-
-const CURRENCIES = ['USD', 'EUR', 'JPY', 'GBP'] as const
 
 /** 추세 코드별 강조색 — 국내 관행(상승=빨강 / 하락=파랑) */
 const TREND_TONE: Record<TrendCode, string> = {
@@ -92,13 +91,15 @@ const TREND_TONE: Record<TrendCode, string> = {
  *
  * ⚠ 모듈 레벨에 정의할 것 — 렌더 함수 안에 두면 매 렌더 remount 되어 포커스가 유실된다.
  */
-function NumField({ value, onChange, disabled, placeholder, allowEmpty = false }: {
+function NumField({ value, onChange, disabled, placeholder, allowEmpty = false, onCommit }: {
   value:       number | null
   onChange:    (v: number | null) => void
   disabled?:   boolean
   placeholder?: string
   /** true 면 빈 값을 null 로 전달 (정책 밴드처럼 미설정을 구분해야 하는 항목) */
   allowEmpty?: boolean
+  /** 포커스가 빠질 때 확정값을 전달 — 서버 저장이 필요한 필드에 사용 */
+  onCommit?:   (v: number | null) => void
 }) {
   const [draft, setDraft] = useState<string | null>(null)
 
@@ -126,41 +127,54 @@ function NumField({ value, onChange, disabled, placeholder, allowEmpty = false }
         const n = Number(cleaned)
         if (Number.isFinite(n) && n >= 0) onChange(Math.round(n * 100) / 100)
       }}
-      onBlur={() => setDraft(null)}
-      className="mt-1 w-full rounded border border-gray-300 bg-white px-2 py-1.5 text-right text-sm tabular-nums dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+      onBlur={() => { setDraft(null); onCommit?.(value) }}
+      className="mt-1 w-full rounded border border-gray-300 bg-white px-2 py-1.5 text-right text-sm tabular-nums
+                 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-500
+                 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100
+                 dark:disabled:bg-slate-800/60 dark:disabled:text-slate-400"
     />
   )
 }
 
-function TreasuryInputPanel({ source, onSourceChange, inputs, currency, canEdit, basket }: {
+function TreasuryInputPanel({ source, onSourceChange, inputs, currency, canEdit, basket, userLabel, company }: {
   source: InputSource
   onSourceChange: (source: InputSource) => void
   inputs: FxTreasuryInputAdapter
   currency: string
   canEdit: boolean
   basket: { code: string; nativeAmount: number; krwAmount: number }[]
+  userLabel: string
+  company: string
 }) {
-  const [imported, setImported] = useState(false)
   // 모든 탭에 공통으로 붙는 큰 입력 영역이므로 기본은 접어 결과 화면을 넓게 쓴다.
   const [open, setOpen] = useState(false)
+  // 실무 입력(사실 기록)은 서버 저장이라 낙관적 표시를 위해 로컬 초안을 둔다.
+  const [lossDraft, setLossDraft] = useState<number | null>(null)
+  const [saveMsg, setSaveMsg] = useState<string | null>(null)
+
+  const sim = source === 'simulation'
   const setNumber = (key: keyof FxTreasuryInputs, v: number | null) => {
     inputs.updateInputs({ [key]: v ?? 0 })
   }
 
+  /** 정책 소유 필드 — 실데이터 모드에서는 잠긴다. 시뮬레이션에서만 값을 바꿔볼 수 있다. */
+  const locked = !sim
+
+  async function saveLoss(v: number | null) {
+    if (v == null || v === inputs.realizedLossThisQuarterKRW) return
+    const err = await inputs.saveOpsInput({ realizedLossThisQuarterKRW: v }, userLabel)
+    setSaveMsg(err ? `저장 실패: ${err}` : '저장되었습니다')
+    if (err) setLossDraft(null)
+  }
+
   return (
-    <div className={CARD}>
+    <div className={`${CARD} ${sim ? 'ring-2 ring-amber-400 dark:ring-amber-500' : ''}`}>
       <div className="flex flex-wrap items-center gap-2">
         <div className="text-sm font-semibold text-gray-800 dark:text-slate-100">💰 자금·정책 입력</div>
         {!open && (
           <div className="text-[11px] text-gray-500 dark:text-slate-400">
             총자금 {fmtKRW(inputs.totalFundKRW)} · 외화비중 {(inputs.totalFundKRW > 0 ? inputs.portfolioFxHoldingKRW / inputs.totalFundKRW * 100 : 0).toFixed(1)}% · 밴드 {inputs.policyMinRatio == null ? '—' : `${(inputs.policyMinRatio * 100).toFixed(1)}%`}~{inputs.policyMaxRatio == null ? '—' : `${(inputs.policyMaxRatio * 100).toFixed(1)}%`}
           </div>
-        )}
-        {open && source === 'manual' && canEdit && (
-          <button type="button" onClick={() => { inputs.importTreasuryAmounts(); setImported(true) }}
-            className="rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-300">
-            {imported ? '✓ Treasury 금액 반영됨' : 'Treasury 주요 금액 불러오기'}
-          </button>
         )}
         <button type="button" onClick={() => setOpen(v => !v)}
           className="ml-auto rounded-md border border-gray-200 px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
@@ -170,76 +184,121 @@ function TreasuryInputPanel({ source, onSourceChange, inputs, currency, canEdit,
         <div className="flex rounded-lg bg-gray-100 p-0.5 text-xs dark:bg-slate-800">
           <button
             type="button"
-            onClick={() => onSourceChange('manual')}
-            className={`rounded-md px-3 py-1.5 ${source === 'manual' ? 'bg-white font-semibold text-blue-600 shadow-sm dark:bg-slate-700 dark:text-blue-400' : 'text-gray-500'}`}
-          >수동 입력</button>
-          <button type="button" onClick={() => onSourceChange('treasury')}
-            className={`rounded-md px-3 py-1.5 ${source === 'treasury' ? 'bg-white font-semibold text-blue-600 shadow-sm dark:bg-slate-700 dark:text-blue-400' : 'text-gray-500'}`}>
-            Treasury 연동
+            onClick={() => onSourceChange('live')}
+            className={`rounded-md px-3 py-1.5 ${!sim ? 'bg-white font-semibold text-blue-600 shadow-sm dark:bg-slate-700 dark:text-blue-400' : 'text-gray-500'}`}
+          >실데이터</button>
+          <button type="button" onClick={() => onSourceChange('simulation')}
+            className={`rounded-md px-3 py-1.5 ${sim ? 'bg-white font-semibold text-amber-600 shadow-sm dark:bg-slate-700 dark:text-amber-400' : 'text-gray-500'}`}>
+            🧪 시뮬레이션
           </button>
         </div>
       </div>
+
+      {/* 시뮬레이션 모드 경고 — 이 화면의 모든 수치가 가정값이 된다 */}
+      {sim && (
+        <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-900/25 dark:text-amber-200">
+          <strong>🧪 시뮬레이션 — 실제 권고가 아닙니다.</strong>
+          <span>값을 바꿔도 저장되지 않으며 새로고침하면 사라집니다. 집행 판단은 실데이터 모드에서만 하세요.</span>
+          {inputs.simulationDirty && (
+            <button type="button" onClick={inputs.resetSimulation}
+              className="ml-auto rounded border border-amber-400 px-2 py-1 font-medium hover:bg-amber-100 dark:hover:bg-amber-900/40">
+              실데이터로 되돌리기
+            </button>
+          )}
+        </div>
+      )}
+
       {open && <>
       <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        <InputField label="정책 기준 총자금" unit="원">
-          <NumField value={inputs.totalFundKRW} disabled={!canEdit || source === 'treasury'}
+        <InputField label="정책 기준 총자금" unit="원" owner="treasury">
+          <NumField value={inputs.totalFundKRW} disabled={locked}
             onChange={v => setNumber('totalFundKRW', v)} />
         </InputField>
-        <InputField label="전사 외화 바구니" unit="원 환산">
-          <NumField value={inputs.portfolioFxHoldingKRW} disabled={!canEdit || source === 'treasury'}
+        <InputField label="전사 외화 바구니" unit="원 환산" owner="treasury">
+          <NumField value={inputs.portfolioFxHoldingKRW} disabled={locked}
             onChange={v => setNumber('portfolioFxHoldingKRW', v)} />
         </InputField>
-        <InputField label={`${currency} 보유액`} unit={currency}>
-          <NumField value={inputs.fxHoldingFx} disabled={!canEdit || source === 'treasury'}
+        <InputField label={`${currency} 보유액`} unit={currency} owner="treasury">
+          <NumField value={inputs.fxHoldingFx} disabled={locked}
             onChange={v => setNumber('fxHoldingFx', v)} />
         </InputField>
-        <InputField label="월 외화 유입액" unit={currency}>
-          <NumField value={inputs.monthlyInflowFx} disabled={!canEdit}
+        <InputField label="월 외화 유입액" unit={currency} owner="policy">
+          <NumField value={inputs.monthlyInflowFx} disabled={locked}
             onChange={v => setNumber('monthlyInflowFx', v)} />
         </InputField>
-        <InputField label="향후 3개월 결제 버퍼" unit={currency}>
-          <NumField value={inputs.fxPayableFx} disabled={!canEdit}
+        <InputField label="향후 3개월 결제 버퍼" unit={currency} owner="policy">
+          <NumField value={inputs.fxPayableFx} disabled={locked}
             onChange={v => setNumber('fxPayableFx', v)} />
         </InputField>
-        <InputField label="정책 밴드 하한" unit="%">
-          <NumField allowEmpty disabled={!canEdit} placeholder="미설정"
+        <InputField label="정책 밴드 하한" unit="%" owner="policy">
+          <NumField allowEmpty disabled={locked} placeholder="미설정"
             value={inputs.policyMinRatio == null ? null : inputs.policyMinRatio * 100}
             onChange={v => inputs.updateInputs({
               policyMinRatio: v == null ? null : Math.min(1, Math.max(0, v / 100)),
             })} />
         </InputField>
-        <InputField label="정책 밴드 상한" unit="%">
-          <NumField allowEmpty disabled={!canEdit} placeholder="미설정"
+        <InputField label="정책 밴드 상한" unit="%" owner="policy">
+          <NumField allowEmpty disabled={locked} placeholder="미설정"
             value={inputs.policyMaxRatio == null ? null : inputs.policyMaxRatio * 100}
             onChange={v => inputs.updateInputs({
               policyMaxRatio: v == null ? null : Math.min(1, Math.max(0, v / 100)),
             })} />
         </InputField>
-        <InputField label="평균 취득환율" unit={`원/${currency}`}>
-          <NumField value={inputs.avgAcquisitionRate} disabled={!canEdit || source === 'treasury'}
+        <InputField label="평균 취득환율" unit={`원/${currency}`} owner="treasury">
+          <NumField value={inputs.avgAcquisitionRate} disabled={locked}
             onChange={v => setNumber('avgAcquisitionRate', v)} />
         </InputField>
-        <InputField label="분기 손실 실현 한도" unit="원">
-          <NumField value={inputs.quarterLossCapKRW} disabled={!canEdit}
+        <InputField label="분기 손실 실현 한도" unit="원" owner="policy">
+          <NumField value={inputs.quarterLossCapKRW} disabled={locked}
             onChange={v => setNumber('quarterLossCapKRW', v)} />
         </InputField>
-        <InputField label="이번 분기 실현 손실" unit="원">
-          <NumField value={inputs.realizedLossThisQuarterKRW} disabled={!canEdit}
-            onChange={v => setNumber('realizedLossThisQuarterKRW', v)} />
+        <InputField label="이번 분기 실현 손실" unit="원" owner="ops">
+          <NumField
+            value={lossDraft ?? inputs.realizedLossThisQuarterKRW}
+            disabled={sim ? false : !canEdit}
+            onChange={v => {
+              if (sim) { setNumber('realizedLossThisQuarterKRW', v); return }
+              setLossDraft(v ?? 0); setSaveMsg(null)
+            }}
+            onCommit={sim ? undefined : v => void saveLoss(v)}
+          />
         </InputField>
       </div>
+      {saveMsg && (
+        <div className={`mt-2 text-[11px] ${saveMsg.startsWith('저장 실패') ? 'text-red-600 dark:text-red-400' : 'text-emerald-700 dark:text-emerald-300'}`}>
+          {saveMsg}
+        </div>
+      )}
+      {!sim && (
+        <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg bg-blue-50 px-3 py-2 text-[11px] text-blue-800 dark:bg-blue-900/25 dark:text-blue-200">
+          🔒 <strong>정책</strong> 표시 항목은 정책회의 의결값입니다 — 이 화면에서 변경할 수 없습니다.
+          🏦 <strong>조회</strong> 항목은 Treasury 실데이터입니다.
+          <Link to={`/policy/${encodeURIComponent(company)}`}
+            className="ml-auto rounded border border-blue-300 px-2 py-1 font-medium hover:bg-blue-100 dark:border-blue-700 dark:hover:bg-blue-900/40">
+            자금정책 관리에서 변경 →
+          </Link>
+        </div>
+      )}
       <div className="mt-3 rounded-lg border border-gray-200 p-3 dark:border-slate-700">
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs"><strong>전사 외화 포트폴리오 바구니</strong><span>정책비중 {(inputs.totalFundKRW>0?inputs.portfolioFxHoldingKRW/inputs.totalFundKRW*100:0).toFixed(1)}% · 밴드 {inputs.policyMinRatio==null?'—':`${(inputs.policyMinRatio*100).toFixed(1)}%`}~{inputs.policyMaxRatio==null?'—':`${(inputs.policyMaxRatio*100).toFixed(1)}%`}</span></div>
         <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">{basket.map(row=><div key={row.code} className={`rounded p-2 ${row.code===currency?'bg-blue-50 ring-1 ring-blue-300 dark:bg-blue-900/20':'bg-gray-50 dark:bg-slate-800'}`}><div className="text-[11px] font-semibold">{row.code}</div><div className="text-xs tabular-nums">{row.nativeAmount.toLocaleString()}</div><div className="text-[10px] text-gray-500">{fmtKRW(row.krwAmount)} · 바구니의 {inputs.portfolioFxHoldingKRW>0?(row.krwAmount/inputs.portfolioFxHoldingKRW*100).toFixed(1):'0.0'}%</div></div>)}</div>
         <div className="mt-2 text-[11px] text-gray-500">정책밴드는 이 바구니 전체를 총자금으로 나눈 값입니다. 통화 탭은 그중 어떤 통화를 실제로 환전할지 판단하며, 정기예금 등 잠긴 금액은 집행 가능액에서 다시 제외됩니다.</div>
       </div>
       <div className="mt-2 text-[11px] text-gray-500 dark:text-slate-400">
-        {source === 'manual' ? '법인·통화별 브라우저에 자동 저장됩니다. Treasury 주요 금액 불러오기는 금액과 FIFO 장부환율만 복사하며 정책·운영 가정은 유지합니다.' : '총자금·외화잔액·FIFO 장부환율은 Treasury 조회값입니다. 정책밴드와 나머지 운영 가정은 이 화면의 수동 입력값을 사용합니다.'}
-        평균 취득환율을 넣으면 환전 시 실현손익을 함께 계산합니다(취득원가 이하 매도를 막지는 않습니다).
+        {sim
+          ? '실험용 가정값입니다. 저장되지 않으며 실제 권고·매각 지시에 반영되지 않습니다.'
+          : '총자금·외화잔액·FIFO 장부환율은 Treasury 조회값이고, 정책 밴드와 운영 가정은 정책회의 의결값(policy_params)입니다.'}
+        평균 취득환율은 FIFO 잔존 장부환율이며, 환전 시 실현손익을 함께 계산합니다(취득원가 이하 매도를 막지는 않습니다).
       </div>
-      {source === 'treasury' && (
+      {!sim && (
         <div className="mt-1 text-[11px] text-blue-700 dark:text-blue-300">
           정책밴드는 모든 통화의 원화환산 합계 ÷ 전사 총자금으로 계산합니다. {currency} 탭은 바구니 전체 비중을 유지하면서 해당 통화의 환전 시점과 집행 가능 재고를 판단합니다.
+        </div>
+      )}
+      {!sim && inputs.policyMinRatio == null && inputs.policyMaxRatio == null && (
+        <div className="mt-2 text-xs text-amber-700 dark:text-amber-300">
+          ⚠ 정책 밴드가 설정되지 않았습니다 — 목표 비중에 정책 상·하한 제약이 걸리지 않습니다.
+          자금정책 관리 &gt; FX 정책에서 밴드를 의결·저장하세요.
         </div>
       )}
       {inputs.policyMinRatio != null && inputs.policyMaxRatio != null && inputs.policyMinRatio > inputs.policyMaxRatio && (
@@ -257,10 +316,40 @@ function TreasuryInputPanel({ source, onSourceChange, inputs, currency, canEdit,
   )
 }
 
-function InputField({ label, unit, children }: { label: string; unit: string; children: ReactNode }) {
+/** 필드 소유 주체 배지 — 누가 이 값을 바꿀 수 있는지 화면에서 바로 보이게 한다 */
+const OWNER_BADGE: Record<FieldOwner, { label: string; title: string; cls: string }> = {
+  policy: {
+    label: '🔒 정책',
+    title: '정책회의 의결값 — 자금정책 관리에서만 변경할 수 있습니다.',
+    cls: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
+  },
+  treasury: {
+    label: '🏦 조회',
+    title: 'Treasury 실데이터 조회값 — 직접 편집할 수 없습니다.',
+    cls: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300',
+  },
+  ops: {
+    label: '✏️ 실무',
+    title: '실무 입력 항목 — 실제 발생한 사실을 기록합니다.',
+    cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+  },
+}
+
+function InputField({ label, unit, owner, children }: {
+  label: string; unit: string; owner: FieldOwner; children: ReactNode
+}) {
+  const badge = OWNER_BADGE[owner]
   return (
     <label className="text-xs text-gray-600 dark:text-slate-300">
-      <span className="flex justify-between gap-2"><span>{label}</span><span className="text-gray-400">{unit}</span></span>
+      <span className="flex items-center justify-between gap-2">
+        <span className="flex items-center gap-1">
+          {label}
+          <span title={badge.title} className={`rounded px-1 py-px text-[9px] font-semibold ${badge.cls}`}>
+            {badge.label}
+          </span>
+        </span>
+        <span className="text-gray-400">{unit}</span>
+      </span>
       {children}
     </label>
   )
@@ -296,33 +385,64 @@ export default function FxRegimePage() {
   // 근거 영역은 기본 접힘 — 결론만 보고 나가는 것이 정상 사용 경로다
   const [detailsOpen, setDetailsOpen] = useState(false)
 
-  const hist   = useFxHistory(currency, { autoSync: true })
-  const params = usePolicyParams(company)
-  const policyData = usePolicyDashboard(company)
-  const fxLots = useFxLots(company, currency)
+  // ⭐ 실제 권고는 실데이터 모드에서만 나온다. 시뮬레이션은 저장되지 않는 실험 모드다.
+  //    (세션26차 — 수동 입력으로 총자금까지 바꿔 권고를 만들 수 있던 잠금 우회 경로 차단)
+  const [inputSource, setInputSource] = useState<InputSource>('live')
   const actualTradeHistory = useFxTradeHistory(company)
-  // Treasury 화면과 같은 잔액을 기본으로 사용한다. 수동값은 비교·가정용으로 유지한다.
-  const [inputSource, setInputSource] = useState<InputSource>('treasury')
-  const latestDaily = policyData.latestDaily as unknown as Record<string, unknown> | null
-  const dailyFxField = `fx_${currency.toLowerCase()}`
-  // daily.fx_usd 등 통화별 필드는 외화 원금이다. fx_krw만 전 통화 원화환산 합계다.
-  const operatingFxNative = Number(latestDaily?.[dailyFxField] ?? 0)
-  const treasuryNativeHolding = operatingFxNative +
-    policyData.investments.filter(i => i.available === '가용' && i.currency === currency)
-      .reduce((sum, i) => sum + (i.amount || 0), 0)
-  const treasuryValues = useMemo<Partial<FxTreasuryInputs>>(() => ({
-    totalFundKRW: policyData.fxPolicyDenominator,
-    fxHoldingFx: fxLots.totalAmount > 0 ? fxLots.totalAmount : treasuryNativeHolding,
-    portfolioFxHoldingKRW: policyData.fxPortfolioHoldings,
-    avgAcquisitionRate: fxLots.bookRate ?? 0,
-  }), [policyData.fxPolicyDenominator, policyData.fxPortfolioHoldings, treasuryNativeHolding, fxLots.totalAmount, fxLots.bookRate])
-  const treasuryInputs = useFxTreasuryInputs(inputSource, company, currency, treasuryValues)
-  const portfolioBasket = useMemo(() => {
-    if (inputSource === 'treasury') return Object.entries(policyData.fxByCurrency)
-      .map(([code, row]) => ({ code, ...row }))
-    const krwAmount = treasuryInputs.fxHoldingFx * (hist.data[hist.data.length - 1]?.rate ?? 0)
-    return [{ code: currency, nativeAmount: treasuryInputs.fxHoldingFx, krwAmount }]
-  }, [inputSource, policyData.fxByCurrency, treasuryInputs.fxHoldingFx, hist.data, currency])
+
+  // 판정 전 경로는 useFxRegime 하나로 통일한다 — 정책 화면과 같은 숫자를 봐야 한다.
+  const {
+    hist, inputs: treasuryInputs, series, protocol, ctx, signal,
+    fxPayableFx, fxPayableKRW, availableFx, basket: portfolioBasket, fxLots, params,
+    policyData,
+  } = useFxRegime(company, currency, inputSource, true)
+
+  // ── 판정 스냅샷 기록 (Phase 4) ────────────────────────────────────
+  // 대시보드·자금일보는 환율 이력 전체를 돌릴 수 없으므로, 실무 화면이 판정할 때
+  // 결과 요약만 policy_params 에 남긴다. 이게 "권고 미이행 경과일"의 기산점이 된다.
+  // ⚠ 시뮬레이션 값은 절대 기록하지 않는다 — 가정값이 전사 경보로 번진다.
+  //
+  // ⚠⚠ [실사고] 2026-08-18 재검증 중 발견 — 로딩 중 값으로 쓰면 since 가 오늘로 리셋된다.
+  //   hist(환율 이력)와 policyData/fxLots(Treasury 실데이터)는 **서로 다른 속도로** 로드된다.
+  //   series.length 가 30 을 넘어 signal 이 먼저 나오면, 그 시점 ctx.totalFundKRW 등은
+  //   아직 policyData 가 로딩 중이라 0(fallback)이다 → suggestKRW=0 인 "가짜 조치 불필요"
+  //   신호가 먼저 기록되어 since 가 삭제되고, 뒤이어 실제 신호가 오면 prevSuggest=0 으로
+  //   보여 since 가 **오늘**로 재설정된다 — 실제로는 4영업일째 미이행이던 권고가
+  //   1일차로 리셋되는 사고였다(메디아나 USD, since 8/14 → 8/18 로 되돌아감).
+  //   반드시 policyData·fxLots·hist 가 전부 로딩을 끝낸 뒤에만 스냅샷을 쓴다.
+  //
+  //   ⚠⚠ 1차 수정(단순 !loading 체크)으로 재검증했더니 **재발**했다 — 원인은
+  //   usePolicyDashboard 의 loading 초기값이 **false** 라는 것. 마운트 첫 렌더는
+  //   effect(fetch)가 아직 시작되기도 전이라 loading=false·raw=EMPTY 상태이고,
+  //   hist 가 이미 캐시로 준비돼 있으면 이 첫 렌더에서 signal 이 나온다 — 즉
+  //   "!loading" 만으로는 로딩 시작 전과 로딩 완료 후를 구분하지 못한다.
+  //   → 법인/통화가 바뀔 때마다 리셋되는 "로딩 중이었던 적이 있다" 플래그로 gate 한다.
+  const treasuryLoadingNow = policyData.loading || fxLots.loading || hist.loading
+  const sawTreasuryLoadingRef = useRef(false)
+  const treasuryScopeRef = useRef(`${company}|${currency}`)
+  if (treasuryScopeRef.current !== `${company}|${currency}`) {
+    treasuryScopeRef.current = `${company}|${currency}`
+    sawTreasuryLoadingRef.current = false   // 법인·통화 전환 시 새 로딩 사이클을 다시 확인해야 한다
+  }
+  if (treasuryLoadingNow) sawTreasuryLoadingRef.current = true
+  const treasuryReady = sawTreasuryLoadingRef.current && !treasuryLoadingNow
+  const snapWrittenRef = useRef<string>('')
+  useEffect(() => {
+    if (inputSource !== 'live' || !signal || !canEdit() || !treasuryReady) return
+    const suggest = signal.decision.actionRequired && signal.decision.suggestedTradeKRW < 0
+      ? -signal.decision.suggestedTradeKRW : 0
+    // 같은 판정을 중복 기록하지 않기 위한 렌더 단위 가드 (DB 레벨 비교는 sync 내부에서 한 번 더)
+    const stamp = `${company}|${currency}|${signal.asOf}|${Math.round(suggest)}`
+    if (snapWrittenRef.current === stamp) return
+    snapWrittenRef.current = stamp
+    void syncRegimeSnapshot(params, currency, {
+      targetPct:  signal.decision.appliedTargetRatio == null ? null
+        : Math.round(signal.decision.appliedTargetRatio * 1000) / 10,
+      currentPct: Math.round(signal.decision.currentRatio * 1000) / 10,
+      suggestKRW: suggest,
+      asOf:       signal.asOf,
+    }, todayStr(), user?.label ?? user?.code ?? 'system')
+  }, [inputSource, signal, company, currency, params, canEdit, user, treasuryReady])
 
   // ── 수집 상태 ──────────────────────────────────────────────────────
   const [busy, setBusy]         = useState(false)
@@ -366,54 +486,37 @@ export default function FxRegimePage() {
     } finally { setBusy(false) }
   }
 
-  // ── 국면 판정 ──────────────────────────────────────────────────────
-  const series: RegimeSeriesPoint[] = useMemo(
-    () => hist.data.map(p => ({ date: p.date, rate: p.rate })),
-    [hist.data],
-  )
-
-  // 향후 3개월 외화 결제 예정액.
-  // ⚠ 원화가 아니라 **USD 원금**으로 저장한다 — 실제 채무는 "250만불"이지 "X원"이 아니라서,
-  //   원화로 굳혀두면 환율이 오를수록 버퍼가 과소평가되고, 정작 방어가 필요한 국면에
-  //   하한이 낮아지는 역효과가 난다. 표시·계산 시점에 현재 환율로 환산한다.
-  // TODO: cashflow_plan_items 의 외화 출금 계획에서 자동 산출 (현재는 정책 파라미터 수동 입력)
-  const fxPayableFx = treasuryInputs.fxPayableFx
-  const latestRate = series[series.length - 1]?.rate ?? 0
-  const fxPayableKRW = fxPayableFx * latestRate
-  const fxHoldingKRW = treasuryInputs.portfolioFxHoldingKRW
-  const validPolicyBand = treasuryInputs.policyMinRatio == null ||
-    treasuryInputs.policyMaxRatio == null ||
-    treasuryInputs.policyMinRatio <= treasuryInputs.policyMaxRatio
-
-  const ctx = useMemo(() => ({
-    totalFundKRW: treasuryInputs.totalFundKRW,
-    fxHoldingKRW,
-    // ⚠ 0 이면 버퍼 하한이 사라져 알고리즘이 전량 매도를 제안할 수 있다.
-    fxPayableKRW,
-    policyMaxRatio: validPolicyBand ? treasuryInputs.policyMaxRatio : null,
-    policyMinRatio: validPolicyBand ? treasuryInputs.policyMinRatio : null,
-    // 정책밴드 상한과 중복되는 고정 원화 노출 한도는 사용하지 않는다.
-    maxExposureKRW: null,
-    avgAcquisitionRate: treasuryInputs.avgAcquisitionRate > 0 ? treasuryInputs.avgAcquisitionRate : null,
-    // 실시간 판정에는 "마지막 환전 이후 경과일" 이력이 없다 — 시간 기반 강제 환전은
-    // 백테스트에서만 활성화된다. (매매 이력 연동 시 fx_trade_history 에서 산출 가능)
-    daysSinceLastConvert: null,
-  }), [treasuryInputs.totalFundKRW, fxHoldingKRW, fxPayableKRW,
-    treasuryInputs.policyMaxRatio, treasuryInputs.policyMinRatio, validPolicyBand,
-    treasuryInputs.avgAcquisitionRate])
-
   const avgAcqRate = treasuryInputs.avgAcquisitionRate
 
-  // 프로토콜은 policy_params 에서 조립 — 값이 없으면 코드 기본값 (protocolFromParams)
-  const protocol = useMemo(
-    () => protocolFromParams(k => params.get(k)),
-    [params],
-  )
-
-  const signal = useMemo(
-    () => (series.length >= 30 ? evaluateRegime(series, ctx, protocol, currency) : null),
-    [series, ctx, protocol, currency],
-  )
+  /**
+   * 리짐 권고를 매각 지시로 등록 (세션26차 Phase 4).
+   * 기존 워크플로우(발의 → 승인 → 완료)를 그대로 쓰고, 발생 경로만 `regime` 으로 구분한다.
+   * 기한은 다른 매각 지시와 동일하게 **등록일 +3영업일**(환율과 무관하게 실행).
+   */
+  const registerRegimeOrder = useCallback(async (amountFx: number): Promise<string | null> => {
+    if (!signal || amountFx <= 0) return '등록할 금액이 없습니다.'
+    const rate = signal.indicators.close
+    const acq  = treasuryInputs.avgAcquisitionRate > 0 ? treasuryInputs.avgAcquisitionRate : null
+    const today = todayStr()
+    const { error } = await actualTradeHistory.propose({
+      company, trade_date: today, currency, direction: 'sell',
+      amount_fx: amountFx,
+      acq_rate: acq,
+      trade_rate: rate,
+      fx_pnl: acq != null ? Math.round((rate - acq) * amountFx) : null,
+      amount_krw: Math.round(rate * amountFx),
+      memo: `리짐 권고 자동 등록 — 국면 ${signal.regime.code}`
+        + `${signal.level ? ` · 수준 ${signal.level.label}` : ''}`
+        + ` · 목표 ${(signal.decision.appliedTargetRatio * 100).toFixed(1)}%`
+        + ` / 현재 ${(signal.decision.currentRatio * 100).toFixed(1)}% (판정일 ${signal.asOf})`,
+      created_by: user?.label ?? user?.code ?? 'unknown',
+      due_date: addBizDays(today, 3),
+      order_type: 'regime',
+    })
+    if (error) return error.message ?? '등록 실패'
+    await actualTradeHistory.load()
+    return null
+  }, [signal, treasuryInputs.avgAcquisitionRate, company, currency, actualTradeHistory, user])
 
   // ── 차트 데이터 (최근 180 영업일) ──────────────────────────────────
   const chart = useMemo(() => {
@@ -448,7 +551,6 @@ export default function FxRegimePage() {
     const rate = signal.indicators.close
     const suggestedKRW = signal.decision.actionRequired && signal.decision.suggestedTradeKRW < 0
       ? -signal.decision.suggestedTradeKRW : 0
-    const availableFx = fxLots.totalAmount > 0 ? fxLots.availableAmount : treasuryInputs.fxHoldingFx
     const requestedFx = rate > 0 ? Math.min(suggestedKRW / rate, availableFx) : 0
     const budget = lossBudget(
       treasuryInputs.quarterLossCapKRW,
@@ -471,7 +573,7 @@ export default function FxRegimePage() {
     })
   }, [signal, currency, series, treasuryInputs.quarterLossCapKRW,
       treasuryInputs.realizedLossThisQuarterKRW, treasuryInputs.fxHoldingFx,
-      treasuryInputs.avgAcquisitionRate, fxLots.totalAmount, fxLots.availableAmount])
+      treasuryInputs.avgAcquisitionRate, availableFx])
 
   // 차트 자동 해석 — 지표값을 평이한 문장으로 변환 (fxChartNarrative)
   const narrative = useMemo(() => {
@@ -495,9 +597,11 @@ export default function FxRegimePage() {
       {/* 헤더 */}
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-lg font-bold text-gray-900 dark:text-slate-100">FX 리짐 전략</h1>
-        <span className="rounded bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
-          개발 전용 · 검증 중
-        </span>
+        {inputSource === 'simulation' && (
+          <span className="rounded bg-amber-500 px-2 py-0.5 text-[11px] font-bold text-white">
+            🧪 시뮬레이션 — 실제 권고 아님
+          </span>
+        )}
         <div className="ml-auto flex gap-1">
           {CURRENCIES.map(c => (
             <button
@@ -618,6 +722,8 @@ export default function FxRegimePage() {
         currency={currency}
         canEdit={canEdit()}
         basket={portfolioBasket}
+        userLabel={user?.label ?? user?.code ?? 'unknown'}
+        company={company}
       />
 
       {tab === 'decision' && (
@@ -626,26 +732,13 @@ export default function FxRegimePage() {
           series={series}
           currency={currency}
           holdingFx={treasuryInputs.fxHoldingFx}
-          availableFx={fxLots.totalAmount > 0 ? fxLots.availableAmount : treasuryInputs.fxHoldingFx}
+          availableFx={availableFx}
           avgCostRate={treasuryInputs.avgAcquisitionRate}
           quarterCapKRW={treasuryInputs.quarterLossCapKRW}
           usedLossKRW={treasuryInputs.realizedLossThisQuarterKRW}
-        />
-      )}
-
-      {tab === 'protocol' && (
-        <ProtocolTab
-          protocol={protocol}
-          series={series}
-          context={ctx}
-          currency={currency}
-          currentSignal={signal}
-          policyMinRatio={treasuryInputs.policyMinRatio}
-          policyMaxRatio={treasuryInputs.policyMaxRatio}
-          canEdit={canEdit()}
-          userCode={user?.code ?? 'unknown'}
-          onSave={(key, value) => params.set(key, value, null, user?.code ?? 'unknown')}
-          onSaved={() => void params.refetch()}
+          // 시뮬레이션 값으로 실제 매각 지시를 만들면 안 된다 — live 모드에서만 노출한다.
+          onRegisterOrder={inputSource === 'live' && canEdit() && signal
+            ? registerRegimeOrder : undefined}
         />
       )}
 

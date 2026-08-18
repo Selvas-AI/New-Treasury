@@ -5,7 +5,22 @@
 import { useState } from 'react'
 import { IN_CATEGORIES, OUT_CATEGORIES } from '../../lib/dailyReportCategories'
 import { fmtKRW } from '../../lib/format'
+import { REGIME_CURRENCIES } from '../../lib/fxRegimeInputs'
 import type { CashflowPlanItem } from '../../hooks/useCashflowPlan'
+
+/**
+ * 계획 항목의 통화 (세션26차).
+ * ⚠ 원화는 **억원 단위**로 입력받아 원 단위로 저장하고, 외화는 **원금 그대로** 저장한다.
+ *   외화를 억원 배율로 저장하면 리짐의 결제 버퍼 산출이 1억배로 틀어진다.
+ */
+const PLAN_CURRENCIES = ['KRW', ...REGIME_CURRENCIES] as const
+const isKrw = (c: string) => (c ?? 'KRW').toUpperCase() === 'KRW'
+/** 입력 단위 배율 — 원화만 억원 → 원 변환 */
+const unitScale = (c: string) => (isKrw(c) ? 1e8 : 1)
+/** 금액 표시 — 원화는 억/만 포맷, 외화는 통화 코드 + 원금 */
+function fmtPlanAmount(amount: number, currency: string): string {
+  return isKrw(currency) ? fmtKRW(amount) : `${currency} ${amount.toLocaleString()}`
+}
 
 // 평가손익(투자자산평가)은 자금일보 자동생성 전용 — 계획 입력 대상에서 제외
 const PLAN_IN_CATEGORIES  = IN_CATEGORIES.filter(c => c.code !== 'invest_eval_in')
@@ -17,8 +32,8 @@ interface Props {
   items:      CashflowPlanItem[]
   readOnly:   boolean
   onClose:    () => void
-  onAdd:      (category: string, amount: number, memo: string) => Promise<string | null>
-  onUpdate:   (id: string, patch: { category?: string; amount?: number; memo?: string }) => Promise<string | null>
+  onAdd:      (category: string, amount: number, memo: string, currency: string) => Promise<string | null>
+  onUpdate:   (id: string, patch: { category?: string; amount?: number; memo?: string; currency?: string }) => Promise<string | null>
   onRemove:   (id: string) => Promise<string | null>
 }
 
@@ -27,21 +42,26 @@ export default function WeekCashflowModal({
 }: Props) {
   const categories = direction === 'in' ? PLAN_IN_CATEGORIES : PLAN_OUT_CATEGORIES
   const [category, setCategory] = useState(categories[0]?.code ?? '')
+  const [currency, setCurrency] = useState<string>('KRW')
   const [amount,   setAmount]   = useState('')
   const [memo,     setMemo]     = useState('')
   const [saving,   setSaving]   = useState(false)
   const [err,      setErr]      = useState<string | null>(null)
   const [editId,   setEditId]   = useState<string | null>(null)
 
-  const total = items.reduce((s, i) => s + i.amount, 0)
+  // 통화가 섞이면 단순 합산이 무의미하다 — 원화 합계와 통화별 합계를 따로 보여준다.
+  const krwTotal = items.filter(i => isKrw(i.currency)).reduce((s, i) => s + i.amount, 0)
+  const fxTotals = items.filter(i => !isKrw(i.currency)).reduce<Record<string, number>>((m, i) => {
+    m[i.currency] = (m[i.currency] ?? 0) + i.amount; return m
+  }, {})
   const label = direction === 'in' ? '입금' : '출금'
   const accent = direction === 'in' ? 'blue' : 'red'
 
   async function handleAdd() {
-    const amt = (parseFloat(amount) || 0) * 1e8
+    const amt = (parseFloat(amount) || 0) * unitScale(currency)
     if (!amt || amt <= 0) { setErr('금액을 입력하세요.'); return }
     setSaving(true); setErr(null)
-    const e = await onAdd(category, amt, memo)
+    const e = await onAdd(category, amt, memo, currency)
     setSaving(false)
     if (e) { setErr(e); return }
     setAmount(''); setMemo('')
@@ -62,7 +82,9 @@ export default function WeekCashflowModal({
           <div>
             <h3 className="font-semibold text-gray-800 dark:text-slate-100 text-sm">{weekLabel} · {label} 상세</h3>
             <p className={`text-xs mt-0.5 font-medium ${accent === 'blue' ? 'text-blue-600 dark:text-blue-400' : 'text-red-600 dark:text-red-400'}`}>
-              합계 {fmtKRW(total)}
+              합계 {fmtKRW(krwTotal)}
+              {Object.entries(fxTotals).map(([c, v]) =>
+                <span key={c} className="ml-2">· {c} {v.toLocaleString()}</span>)}
             </p>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:text-slate-500 dark:hover:text-slate-300 text-lg leading-none">✕</button>
@@ -76,7 +98,12 @@ export default function WeekCashflowModal({
                 className="flex-1 text-xs border border-gray-300 dark:border-slate-600 rounded-lg px-2 py-1.5 bg-white dark:bg-slate-700 text-gray-800 dark:text-white">
                 {categories.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
               </select>
-              <input type="number" step="0.1" placeholder="금액(억원)" value={amount}
+              <select value={currency} onChange={e => setCurrency(e.target.value)}
+                className="w-20 text-xs border border-gray-300 dark:border-slate-600 rounded-lg px-2 py-1.5 bg-white dark:bg-slate-700 text-gray-800 dark:text-white">
+                {PLAN_CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <input type="number" step={isKrw(currency) ? '0.1' : '1'}
+                placeholder={isKrw(currency) ? '금액(억원)' : `금액(${currency})`} value={amount}
                 onChange={e => setAmount(e.target.value)}
                 className="w-28 text-xs text-right border border-gray-300 dark:border-slate-600 rounded-lg px-2 py-1.5 bg-white dark:bg-slate-700 text-gray-800 dark:text-white" />
             </div>
@@ -115,7 +142,7 @@ export default function WeekCashflowModal({
                       {item.memo && <p className="text-[11px] text-gray-400 dark:text-slate-500 truncate">{item.memo}</p>}
                     </div>
                     <span className={`text-xs font-medium tabular-nums ${accent === 'blue' ? 'text-blue-600 dark:text-blue-400' : 'text-red-600 dark:text-red-400'}`}>
-                      {fmtKRW(item.amount)}
+                      {fmtPlanAmount(item.amount, item.currency)}
                     </span>
                     {!readOnly && (
                       <div className="flex gap-1.5 shrink-0">
@@ -147,7 +174,8 @@ function ItemEditRow({ item, categories, onCancel, onSave }: {
   onSave: (patch: { category: string; amount: number; memo: string }) => void
 }) {
   const [category, setCategory] = useState(item.category)
-  const [amount,   setAmount]   = useState(String(item.amount / 1e8))
+  // 통화는 이 행에서 바꾸지 않는다(카테고리·금액 수정용). 단위만 통화에 맞춘다.
+  const [amount,   setAmount]   = useState(String(item.amount / unitScale(item.currency)))
   const [memo,     setMemo]     = useState(item.memo)
 
   return (
@@ -163,7 +191,7 @@ function ItemEditRow({ item, categories, onCancel, onSave }: {
       <div className="flex gap-1.5">
         <input type="text" placeholder="메모" value={memo} onChange={e => setMemo(e.target.value)}
           className="flex-1 text-xs border border-gray-300 dark:border-slate-600 rounded px-2 py-1 bg-white dark:bg-slate-700 text-gray-800 dark:text-white" />
-        <button onClick={() => onSave({ category, amount: (parseFloat(amount) || 0) * 1e8, memo })}
+        <button onClick={() => onSave({ category, amount: (parseFloat(amount) || 0) * unitScale(item.currency), memo })}
           className="text-[11px] bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700">저장</button>
         <button onClick={onCancel} className="text-[11px] text-gray-400 px-1.5 py-1">취소</button>
       </div>

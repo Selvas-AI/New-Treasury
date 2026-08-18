@@ -8,6 +8,7 @@
  */
 import type { PolicyRealData } from '../hooks/usePolicyDashboard'
 import type { PolicyParamReader } from '../hooks/usePolicyParams'
+import type { PolicyLinkedMetric } from '../types'
 
 export type StatusLevel = 'ok' | 'warn' | 'over' | 'na'
 export const CONCENTRATION_LIMIT = 30
@@ -59,13 +60,38 @@ export function checkConcentration(data: PolicyRealData) {
   return { status, maxPct, bank, total }
 }
 
+/**
+ * 리짐 목표 대비 초과 보유 폭 (%p) — 세션26차 Phase 4
+ *
+ * `checkFx` 는 **정책 밴드 준수**를 본다(밴드 안에 있는가).
+ * 이 함수는 **리짐 목표 이행**을 본다(오늘 국면이 지시한 목표까지 줄였는가).
+ * 둘은 다른 위반이다 — 밴드 안이어도 리짐 목표를 초과 보유할 수 있다.
+ *
+ * ⚠ 실시간 판정이 아니라 실무 화면이 남긴 스냅샷을 읽는다(fxRegimeSnapshot).
+ *   대시보드에서 환율 이력 전체를 돌릴 수 없기 때문. 스냅샷이 없으면 'na'.
+ */
+export function checkFxRegimeTarget(snap: {
+  targetPct: number | null; currentPct: number | null; suggestKRW: number; asOf: string | null
+} | null) {
+  if (!snap || snap.targetPct == null || snap.currentPct == null) {
+    return { status: 'na' as StatusLevel, gapPct: null as number | null, suggestKRW: 0, asOf: null as string | null }
+  }
+  const gapPct = snap.currentPct - snap.targetPct       // 양수 = 목표보다 많이 들고 있음
+  const status: StatusLevel = snap.suggestKRW <= 0 ? 'ok'
+    : gapPct > 5 ? 'over'
+    : 'warn'
+  return { status, gapPct, suggestKRW: snap.suggestKRW, asOf: snap.asOf }
+}
+
 /** 의결사항의 linked_metric/target_operator/target_value 규칙을 현재 실측값과 비교 */
 export function checkDecisionRule(
-  linkedMetric: 'fx_ratio' | 'loan_ratio' | 'liquidity',
+  linkedMetric: PolicyLinkedMetric,
   targetOperator: 'lte' | 'gte',
   targetValue: number,
   data: PolicyRealData,
   params: PolicyParamReader,
+  /** fx_regime_gap 판정에 필요한 통화별 스냅샷 (없으면 위반 없음으로 본다) */
+  regimeSnapshots?: { currency: string; targetPct: number | null; currentPct: number | null; suggestKRW: number }[],
 ): { violated: boolean; current: number; label: string } {
   let current: number
   let label: string
@@ -75,6 +101,14 @@ export function checkDecisionRule(
   } else if (linkedMetric === 'loan_ratio') {
     current = checkLoan(data, params).ratio
     label = '차입 비율'
+  } else if (linkedMetric === 'fx_regime_gap') {
+    // 통화가 여럿이면 **가장 큰 초과 폭**으로 판정한다 — 한 통화라도 목표를 크게
+    // 넘고 있으면 의결 미이행이기 때문.
+    const gaps = (regimeSnapshots ?? [])
+      .filter(s => s.targetPct != null && s.currentPct != null)
+      .map(s => (s.currentPct as number) - (s.targetPct as number))
+    current = gaps.length ? Math.max(...gaps) : 0
+    label = '리짐 목표 대비 초과 보유(%p)'
   } else {
     current = data.operatingCash
     label = '유동성(원화 현금성)'

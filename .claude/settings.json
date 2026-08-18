@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e ' *)",
+      "Bash(grep -n \"^- \\\\*\\\\*\\\\`docs/db/\" CLAUDE.md)",
+      "Bash(rm -f _v12.mjs)",
+      "Bash(netstat -ano)",
+      "Read(//c/Users/ATTEMPTGT/AppData/Local/Temp/claude/d--workspace-claude-New-Treasury/15ac96b5-a7cd-4911-85fe-09ae6045b555/tasks/**)"
+    ]
+  }
+}

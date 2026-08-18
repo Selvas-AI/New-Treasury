@@ -17,6 +17,7 @@
  *   화폐성 외화항목은 매 결산기 마감환율로 평가되어 **팔지 않아도 손익에 반영**된다.
  *   따라서 팔든 안 팔든 손실은 이미 있다. 나란히 보여 주지 않으면 매도만 유독 나빠 보인다.
  */
+import { useState } from 'react'
 import {
   pnlSnapshot, bepStats, lossBudget,
 } from '../../lib/fxPnl'
@@ -35,6 +36,11 @@ export interface DecisionTabProps {
   avgCostRate:   number
   quarterCapKRW: number
   usedLossKRW:   number
+  /**
+   * 권고를 매각 지시로 등록한다 (fx_trade_history 발의, order_type='regime').
+   * 없으면 등록 UI를 감춘다 — 조회 전용 계정.
+   */
+  onRegisterOrder?: (amountFx: number) => Promise<string | null>
 }
 
 const num = (v: number) => Math.round(v).toLocaleString()
@@ -44,6 +50,7 @@ const toneCls = (v: number) =>
 
 export default function DecisionTab({
   signal, series, currency, holdingFx, availableFx, avgCostRate, quarterCapKRW, usedLossKRW,
+  onRegisterOrder,
 }: DecisionTabProps) {
 
   if (!signal) {
@@ -266,6 +273,17 @@ export default function DecisionTab({
         )}
       </div>
 
+      {/* 매각 지시 등록 — 권고를 워크플로우에 태우는 지점 (세션26차 Phase 4) */}
+      {onRegisterOrder && budget.allowedFx > 0 && (
+        <RegisterOrderPanel
+          currency={currency}
+          allowedFx={budget.allowedFx}
+          rate={rate}
+          avgCostRate={avgCostRate}
+          onRegister={onRegisterOrder}
+        />
+      )}
+
       {/* 결론 */}
       <div className="rounded-lg border-l-4 border-gray-800 bg-gray-50 p-3 text-xs leading-relaxed text-gray-700 dark:border-slate-300 dark:bg-slate-800 dark:text-slate-200">
         <strong>이 탭을 읽는 순서</strong>
@@ -275,6 +293,83 @@ export default function DecisionTab({
           최종 실행은 <strong>기존 외화 매각 지시 워크플로우(발의 → 승인 → 완료)</strong>를 거칩니다.
         </div>
       </div>
+    </div>
+  )
+}
+
+
+/**
+ * 권고 → 매각 지시 등록 패널.
+ *
+ * ⚠ window.confirm 을 쓰지 않는다 — 크롬이 반복 대화상자를 차단하면 즉시 false 를
+ *   반환해 "버튼을 눌러도 아무 일도 안 일어나는" 상태가 된다(세션24차 실사고).
+ *   화면 안에서 내용을 보여주고 명시적으로 승인받는다.
+ */
+function RegisterOrderPanel({ currency, allowedFx, rate, avgCostRate, onRegister }: {
+  currency: string; allowedFx: number; rate: number; avgCostRate: number
+  onRegister: (amountFx: number) => Promise<string | null>
+}) {
+  const [confirming, setConfirming] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
+
+  const amount = Math.floor(allowedFx)
+  const pnl = avgCostRate > 0 ? (rate - avgCostRate) * amount : null
+
+  async function run() {
+    setBusy(true)
+    const err = await onRegister(amount)
+    setBusy(false)
+    setConfirming(false)
+    setMsg(err ? { ok: false, text: `등록 실패: ${err}` } : {
+      ok: true, text: '매각 지시로 등록했습니다 — 승인 후 완료 처리하세요(기한 3영업일).',
+    })
+  }
+
+  return (
+    <div className={CARD}>
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="text-sm font-semibold text-gray-800 dark:text-slate-100">🧾 매각 지시 등록</div>
+        <span className="text-[11px] text-gray-500 dark:text-slate-400">
+          권고를 발의 → 승인 → 완료 워크플로우에 태웁니다 (기한: 등록일 +3영업일)
+        </span>
+        {!confirming && !msg && (
+          <button type="button" onClick={() => setConfirming(true)}
+            className="ml-auto rounded-lg bg-orange-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-orange-700">
+            이 권고로 매각 지시 등록
+          </button>
+        )}
+      </div>
+
+      {confirming && (
+        <div className="mt-3 rounded-lg border border-orange-200 bg-orange-50 p-3 text-xs dark:border-orange-800 dark:bg-orange-950/30">
+          <div className="font-semibold text-orange-800 dark:text-orange-300">등록 내용을 확인하세요</div>
+          <ul className="mt-1.5 space-y-0.5 text-orange-800 dark:text-orange-300">
+            <li>· 통화 · 금액: <strong>{currency} {num(amount)}</strong> (분기 손실 한도 내 집행 가능액)</li>
+            <li>· 매도 예정 환율: {rate.toLocaleString()}원 · 장부환율 {avgCostRate > 0 ? avgCostRate.toLocaleString() : '—'}</li>
+            {pnl != null && (
+              <li>· 예상 환차{pnl >= 0 ? '익' : '손'}: <strong>{signed(pnl)}</strong></li>
+            )}
+            <li>· 구분: 리짐 권고 매각 · 이행 기한: 등록일 +3영업일 (환율과 무관하게 실행)</li>
+          </ul>
+          <div className="mt-2 flex gap-2">
+            <button type="button" onClick={() => setConfirming(false)} disabled={busy}
+              className="rounded border border-orange-300 px-3 py-1.5 font-medium text-orange-700 dark:border-orange-700 dark:text-orange-300">
+              취소
+            </button>
+            <button type="button" onClick={() => void run()} disabled={busy}
+              className="rounded bg-orange-600 px-3 py-1.5 font-semibold text-white hover:bg-orange-700 disabled:opacity-50">
+              {busy ? '등록 중…' : '매각 지시 등록'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {msg && (
+        <div className={`mt-2 text-xs ${msg.ok ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-600 dark:text-red-400'}`}>
+          {msg.text}
+        </div>
+      )}
     </div>
   )
 }

@@ -1,0 +1,400 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>왜 이 엔진을 만들었나 — 문제 발견에서 알고리즘 탄생까지</title><style>
+:root{--n:#07182f;--b:#2563eb;--s:#38bdf8;--i:#12213a;--m:#64748b;--l:#dbe4ef;--a:#d97706;--r:#dc2626;--g:#059669;--bg:#f1f5f9}
+*{box-sizing:border-box}
+html{scroll-snap-type:y mandatory;scroll-behavior:smooth}
+body{margin:0;background:#e9eff6;font-family:Pretendard,"Malgun Gothic",sans-serif;color:var(--i)}
+.slide{height:100vh;min-height:700px;scroll-snap-align:start;padding:5vh 6vw;display:flex;flex-direction:column;justify-content:center;position:relative;background:#fff;overflow-y:auto;overflow-x:hidden;border-bottom:1px solid var(--l)}
+.dark{background:linear-gradient(135deg,#06162d,#102b53);color:#fff}
+.warn{background:linear-gradient(135deg,#2b0f10,#4a1518);color:#fff}
+.eye{font-size:13px;letter-spacing:.17em;color:var(--b);font-weight:900}
+.dark .eye,.dark .accent{color:#7dd3fc}
+.warn .eye,.warn .accent{color:#fca5a5}
+h1{font-size:clamp(42px,4.6vw,66px);line-height:1.14;letter-spacing:-.045em;margin:18px 0 24px;max-width:1250px}
+h2{font-size:clamp(33px,3vw,46px);line-height:1.17;letter-spacing:-.04em;margin:10px 0 26px}
+.lead{font-size:clamp(18px,1.7vw,25px);line-height:1.55;color:var(--m);max-width:1150px}
+.dark .lead,.warn .lead{color:#cbd5e1}
+h1,h2,.lead,.step,.row span,.card p{word-break:keep-all}
+.accent{color:var(--b)}
+.footer{position:absolute;bottom:20px;left:6vw;right:6vw;display:flex;justify-content:space-between;color:#94a3b8;font-size:12px}
+.flow{display:flex;align-items:stretch;gap:10px}
+.step{flex:1;padding:18px 10px;background:var(--bg);border-radius:15px;font-size:16px;font-weight:800;line-height:1.35;display:flex;flex-direction:column;justify-content:center;text-align:center}
+.dark .step{background:#17335b}
+.warn .step{background:#5c1f22}
+.arrow{align-self:center;color:var(--s);font-size:26px;font-weight:900}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:4vw;align-items:center}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
+.card{background:var(--bg);border-radius:18px;padding:24px 26px}
+.dark .card{background:#17335b}
+.warn .card{background:#5c1f22}
+.card b{font-size:19px;display:block;margin-bottom:9px}
+.card p{font-size:16px;line-height:1.55;color:var(--m);margin:0}
+.dark .card p,.warn .card p{color:#cbd5e1}
+.formula{font-size:clamp(26px,2.7vw,39px);line-height:1.4;font-weight:900;letter-spacing:-.03em}
+.formula b{color:var(--b)}
+.dark .formula b,.warn .formula b{color:#7dd3fc}
+.note{padding:15px 20px;border-left:5px solid var(--a);background:#fff7ed;font-size:17px;line-height:1.5;margin-top:22px}
+.dark .note{background:#172554;border-color:var(--s)}
+.warn .note{background:#5c1f22;border-color:#fca5a5}
+.callout{font-size:clamp(26px,2.9vw,40px);font-weight:900;line-height:1.38}
+.stack{display:flex;flex-direction:column;gap:11px}
+.row{display:grid;grid-template-columns:180px 1fr;gap:20px;align-items:center;border-bottom:1px solid var(--l);padding:11px 0}
+.dark .row,.warn .row{border-color:#334155}
+.row b{font-size:18px}
+.row span{font-size:16px;color:var(--m);line-height:1.45}
+.dark .row span,.warn .row span{color:#cbd5e1}
+.matrix{width:100%;border-collapse:separate;border-spacing:7px;font-size:17px}
+.matrix th{color:#94a3b8;padding:5px;font-size:15px}
+.matrix td{background:var(--bg);padding:12px;text-align:center;border-radius:9px;font-weight:850}
+.matrix .sell{background:#fee2e2;color:#b91c1c}
+.matrix .hold{background:#dbeafe;color:#1d4ed8}
+.matrix .neutral{background:#ecfdf5;color:#047857}
+.big{font-size:clamp(46px,5vw,74px);font-weight:900;letter-spacing:-.045em;line-height:1.05}
+.bad{color:var(--r)}.good{color:var(--g)}
+.dark .good{color:#4ade80}.dark .bad{color:#fca5a5}
+.mini{font-size:14px;color:var(--m);line-height:1.45}
+.dark .mini,.warn .mini{color:#94a3b8}
+.chain{display:flex;flex-direction:column;gap:9px}
+.link{padding:14px 20px;border-radius:12px;background:var(--bg);font-size:18px;font-weight:800;line-height:1.4;position:relative}
+.warn .link{background:#5c1f22}
+.link .tag{display:inline-block;min-width:30px;color:#fca5a5;font-weight:900;margin-right:8px}
+.decision{font-size:clamp(21px,2.2vw,31px);line-height:1.4;border-bottom:1px solid #334155;padding:13px 0}
+.decision b{color:#7dd3fc}
+@media(max-width:900px){
+.grid2,.grid3{grid-template-columns:1fr}
+.flow{display:flex;flex-direction:column}
+.arrow{transform:rotate(90deg)}
+.slide{height:auto;min-height:100vh;padding:58px 28px 72px;overflow:visible}
+.matrix{font-size:13px}
+.row{grid-template-columns:1fr}
+}
+</style></head><body>
+
+<!-- 01 표지 -->
+<section class="slide dark">
+<div class="eye">SELVAS TREASURY · 왜 이 엔진을 만들었나</div>
+<h1>지난 6개월,<br>우리는 정책을 준수했고,<br><span class="accent">약 3억의 실현 이익</span>을 달성했습니다.<br>그런데,<br>지금은 <span class="accent">그보다 큰 손실</span>을<br>우려하고 있습니다.</h1>
+<p class="lead">이 자료는 무엇이 잘못되고 있었는지,<br>어디서 생각을 뒤집었는지를 따라갑니다.</p>
+<div class="footer"><span>문제 발견에서 알고리즘 탄생까지</span><span>01</span></div>
+</section>
+
+<!-- 02 Act1 시작 -->
+<section class="slide">
+<div class="eye">ACT 1 · 문제의 발생</div>
+<h2>1부 — 잘 지킨 정책에 어떤 허점이 있었나</h2>
+<p class="lead">지난 6개월 간, 메디아나는 정책회의의 의결에 따라<br>때마다 외화를 팔아 실제 실현 이익을 냈습니다.<br>7월 이후, 급격한 하락시장에서 우리는 정책의 허점을 목도하게 되었습니다.</p>
+<div class="grid3" style="margin-top:36px">
+<div class="card"><b>정책은 있었다</b><p>외화 비중 상·하한이 정해져 있었고 정책회의에서 승인받았습니다.</p></div>
+<div class="card"><b>실행도 했다</b><p>3~6월 12차례 매각, 실현이익 2억 9,551만원. 같은 기간 매입은 0건.</p></div>
+<div class="card"><b>그런데 결과가</b><p>보유 비중은 오히려 늘었고, 장부 평균환율은 계속 올라갔습니다.</p></div>
+</div>
+<div class="footer"><span>1부 도입</span><span>02</span></div>
+</section>
+
+<!-- 03 순유입 -->
+<section class="slide">
+<div class="eye">발견 ①</div>
+<h2>팔아도 줄지 않았습니다 — 매달 새 외화가 들어오기 때문입니다</h2>
+<div class="grid2">
+<div>
+<div class="big">12건 매각<br><span style="font-size:.55em;color:#94a3b8">vs</span><br>0건 매수</div>
+<p class="lead" style="margin-top:18px">회사는 외화를 사서 보유하는 구조가 아닙니다.<br>수출 대금으로 <b>매달 평균 약 200만 달러가 자동으로 들어옵니다.</b></p>
+</div>
+<div class="card">
+<b>그래서 실제로 벌어진 일</b>
+<p>지난 6개월 간, 800만 달러를 팔았는데, 같은 기간 <b>1,507만 달러가 새로 들어왔습니다.</b> 순증 약 700만 달러입니다.<br><br>즉 "언제 팔까"를 고민하는 동안에도 재고는 계속 쌓이고 있었습니다. 파는 속도가 들어오는 속도를 따라가지 못한 것입니다.</p>
+</div>
+</div>
+<div class="note">이것이 첫 번째 오해였습니다. 우리는 <b>매매 타이밍 문제</b>라고 생각했지만, 실제로는 <b>재고 관리 문제</b>였습니다.</div>
+<div class="footer"><span>순유입 구조의 발견</span><span>03</span></div>
+</section>
+
+<!-- 04 고환율 구간 -->
+<section class="slide">
+<div class="eye">발견 ②</div>
+<h2>가장 비쌀 때 가장 많이 들고 있었습니다</h2>
+<div class="grid2">
+<div class="stack">
+<div class="row"><b>2026년 7월 2일</b><span>원/달러 1,554.4원 — 최근 3년 최고 수준</span></div>
+<div class="row"><b>이 시점 보유</b><span>외화 자산이 전사 총자금의 27.5% 수준까지 확대</span></div>
+<div class="row"><b>판단 근거</b><span>"오르는 추세다" → 더 오를 수 있으니 보유 유지</span></div>
+</div>
+<div class="card">
+<b>왜 이렇게 되었나</b>
+<p>당시 판단 기준은 <b>추세</b>였습니다. 오르는 중이면 보유, 내리는 중이면 매도.<br><br>그런데 환율이 오르면 보유 외화의 원화 환산액도 함께 커집니다. 아무것도 하지 않아도 <b>비중이 저절로 늘어납니다.</b><br><br>추세만 보는 규칙은 이 순간 "더 들고 있어라"라고 말합니다.</p>
+</div>
+</div>
+<div class="note">비쌀수록 많이 들고, 쌀수록 적게 드는 구조. <b>정확히 반대로 움직이고 있었습니다.</b></div>
+<div class="footer"><span>추세 단독 판단의 역설</span><span>04</span></div>
+</section>
+
+<!-- 05 하락 -->
+<section class="slide warn">
+<div class="eye">발생 ③</div>
+<h2>그리고 환율이 내려왔습니다</h2>
+<div class="grid2">
+<div><div class="big">1,554원<br><span style="font-size:.4em;color:#fca5a5">↓ 40일</span><br><span class="bad">1,415원</span></div></div>
+<div>
+<p class="lead">40일 만에 <b>139원</b>이 빠졌습니다. 보유 외화가 1,507만 달러이므로 <b>환율이 1원 움직일 때마다 원화 환산액이 약 1,500만원씩 흔들립니다.</b></p>
+<div class="note" style="margin-top:24px">이 하락폭이 곧 손실 금액은 아닙니다. 회계상 손익은 고점이 아니라 <b>장부 환율과 비교해</b> 산출됩니다.<br>다만 K-IFRS 1021호에 따라 외화 자산은 <b>팔지 않아도 결산일 환율로 재평가</b>되므로, 이 하락은 그대로 재무제표에 반영됩니다.</div>
+</div>
+</div>
+<div class="footer"><span>하락 국면 진입</span><span>05</span></div>
+</section>
+
+<!-- 06 장부평균 상승 -->
+<section class="slide warn">
+<div class="eye">발생 ④</div>
+<h2>더 나쁜 일 — 잘 판 것이 장부를 더 나쁘게 만들었습니다</h2>
+<div class="grid2">
+<div class="card">
+<b>FIFO(선입선출)의 함정</b>
+<p>회사는 오래된 외화부터 처분합니다. 그런데 <b>오래된 외화일수록 싼 환율에 들어온 것</b>입니다.<br><br>싼 것부터 팔아 이익을 냈다는 말은, 곧 <b>비싼 것만 장부에 남았다</b>는 말과 같습니다.</p>
+</div>
+<div>
+<div class="formula">현재 시장 <b>1,415원</b><br>남은 장부 평균 <b class="bad">1,476.07원</b></div>
+<p class="lead" style="margin-top:18px">이제 무엇을 팔아도 <b>손실이 확정</b>됩니다. 매각할수록 손익계산서가 나빠집니다.</p>
+</div>
+</div>
+<div class="footer"><span>장부 평균환율 상승</span><span>06</span></div>
+</section>
+
+<!-- 07 교착 -->
+<section class="slide warn">
+<div class="eye">문제의 완성</div>
+<h2>결국 아무것도 결정할 수 없는 상태가 되었습니다</h2>
+<div class="chain">
+<div class="link"><span class="tag">①</span>정책대로 잘 운영하고, 상승기에 매각해 차익을 실현했다</div>
+<div class="link"><span class="tag">②</span>그런데 순유입 구조라 팔아도 재고가 줄지 않았다</div>
+<div class="link"><span class="tag">③</span>고환율 구간에서 총자금 대비 외화 비중이 오히려 확대되었다</div>
+<div class="link"><span class="tag">④</span>환율 하락기를 맞아 평가손실이 급격히 늘었다</div>
+<div class="link"><span class="tag">⑤</span>FIFO로 싼 물량이 먼저 빠져 장부 평균환율이 올라갔다</div>
+<div class="link"><span class="tag">⑥</span><b>언제 팔지, 얼마에 팔아야 적정한지, 몇 %를 팔지 아무도 답할 수 없다</b></div>
+</div>
+<div class="note">매번 회의에서 처음부터 다시 논쟁했습니다. 근거가 사람마다 달랐기 때문에 결정이 늦어지고, 늦어진 만큼 손실이 커졌습니다. <b>이것이 우리가 풀어야 할 진짜 문제였습니다.</b></div>
+<div class="footer"><span>의사결정 교착</span><span>07</span></div>
+</section>
+
+<!-- 08 Act2 시작 -->
+<section class="slide dark">
+<div class="eye">ACT 2 · 발상의 전환</div>
+<h1>2부 — 질문을 바꾸자<br><span class="accent">답이 나왔습니다</span></h1>
+<p class="lead">우리는 지난 6개월 동안 "언제 팔아야 하는가"를 물었습니다. 이 질문에는 답이 없습니다.<br><b class="accent">"미래 환율"</b>을 알아야 답할 수 있기 때문입니다.</p>
+<div class="footer"><span>2부 도입</span><span>08</span></div>
+</section>
+
+<!-- 09 질문 뒤집기 -->
+<section class="slide">
+<div class="eye">전환 ①</div>
+<h2>“언제 팔까”를 버리고 “얼마를 남길까”로 바꿨습니다</h2>
+<div class="grid2">
+<div class="card" style="background:#fef2f2">
+<b class="bad">기존 질문 — 답할 수 없음</b>
+<p><b>“지금 팔아야 하나?”</b><br><br>답하려면 내일 환율을 알아야 합니다. 아무도 모르므로 결국 직감과 논쟁으로 결정됩니다.<br><br>그리고 팔지 않기로 하면 <b>아무 기록도 남지 않습니다.</b></p>
+</div>
+<div class="card" style="background:#eff6ff">
+<b class="accent">새 질문 — 항상 답할 수 있음</b>
+<p><b>“지금 가격 수준에서 외화를 총자금의 몇 %만 남길 것인가?”</b><br><br>미래를 몰라도 답할 수 있습니다. 현재 가격이 싼지 비싼지만 알면 됩니다.<br><br>목표 비중과 현재 비중의 차이가 곧 <b>환전할 금액</b>입니다.</p>
+</div>
+</div>
+<div class="note">질문을 바꾸는 순간 <b>예측 문제가 재고 관리 문제로 바뀝니다.</b> 재고 관리는 규칙으로 자동화할 수 있습니다.</div>
+<div class="footer"><span>질문의 재정의</span><span>09</span></div>
+</section>
+
+<!-- 10 손실을 줄이는 행동 -->
+<section class="slide">
+<div class="eye">전환 ②</div>
+<h2>그렇다면 어떤 행동이 손실을 가장 줄일까요</h2>
+<div class="grid2">
+<div class="callout">쌀 때 <span class="accent">더 남기고</span><br>비쌀 때 <span class="accent">더 줄인다</span></div>
+<div class="stack">
+<div class="row"><b>환율이 쌀 때</b><span>지금 팔면 손해입니다. 외화를 더 들고 있다가 오를 때 팔면 <b>환차익</b>이 됩니다.</span></div>
+<div class="row"><b>환율이 비쌀 때</b><span>지금 팔면 이익입니다. 많이 팔아 <b>이익을 확정</b>하고, 남은 재고를 줄여 하락 위험도 줄입니다.</span></div>
+<div class="row"><b>부수 효과</b><span>싼 값에 산 물량이 재고에 쌓이므로 <b>장부 평균환율이 스스로 내려갑니다.</b></span></div>
+</div>
+</div>
+<div class="note">시장에서는 당연한 원칙입니다. 문제는 이것을 <b>기분이 아니라 규칙으로</b> 실행하는 방법이었습니다.</div>
+<div class="footer"><span>행동 원칙의 확정</span><span>10</span></div>
+</section>
+
+<!-- 11 싸다/비싸다 기준 -->
+<section class="slide">
+<div class="eye">전환 ③ · 첫 번째 난제</div>
+<h2>그런데 “싸다·비싸다”는 무엇을 기준으로 판단합니까</h2>
+<div class="grid2">
+<div>
+<p class="lead">1,415원은 싼 걸까요, 비싼 걸까요?<br><br>어제 1,400원이었다면 비쌉니다. 지난달 1,550원이었다면 쌉니다. <b>기준점이 없으면 같은 숫자가 정반대로 해석됩니다.</b></p>
+<div class="note">그래서 기준점을 하나 고정했습니다. 이것을 <b>앵커(anchor)</b>라고 부릅니다.</div>
+</div>
+<div class="card">
+<b>앵커를 찾는 법</b>
+<p>과거 3년 중 <b>환율이 가장 조용했던 60일 구간</b>을 한국은행 ECOS API를 통해 찾습니다. <br>위아래 폭이 좁고 방향성도 없던 기간, <br>즉 시장이 "이 정도가 적정하다"고 합의했던 구간입니다.<br><br>현 시뮬레이션 상 채택된 앵커는 <b>1,453.3원</b> (2025년 1~3월 박스권)입니다.(2순위 앵커)<br><br><span class="mini">앵커는 매일 바뀌면 기준 역할을 못 하므로 <b>고정</b>합니다. 변경은 정책회의 승인 사항입니다.</span></p>
+</div>
+</div>
+<div class="footer"><span>앵커 — 가격 기준점</span><span>11</span></div>
+</section>
+
+<!-- 12 수준 5단계 -->
+<section class="slide">
+<div class="eye">전환 ④</div>
+<h2>앵커와 비교하면 오늘 가격에 이름을 붙일 수 있습니다</h2>
+<div class="grid2">
+<div>
+<div class="formula">수준 =<br><b>(오늘 환율 − 1,453.3) ÷ 1,453.3</b></div>
+<p class="lead" style="margin-top:18px">±3%와 ±8%를 경계로 다섯 단계로 나눕니다. 오늘 1,415원은 앵커 대비 -2.64% — <b>중립(N)</b>입니다.</p>
+</div>
+<table class="matrix">
+<tr><th>수준</th><th>앵커 대비</th><th>해석</th></tr>
+<tr><td>VH</td><td>+8% 이상 (1,570원↑)</td><td class="sell">매우 비쌈</td></tr>
+<tr><td>H</td><td>+3% 이상 (1,497원↑)</td><td class="sell">비쌈</td></tr>
+<tr><td>N</td><td>−3% ~ +3%</td><td class="neutral">중립</td></tr>
+<tr><td>L</td><td>−3% 이하 (1,410원↓)</td><td class="hold">쌈</td></tr>
+<tr><td>VL</td><td>−8% 이하 (1,337원↓)</td><td class="hold">매우 쌈</td></tr>
+</table>
+</div>
+<div class="note">이제 "비싸니까 줄이자"가 <b>느낌이 아니라 계산 결과</b>가 됩니다. 누가 봐도 같은 답이 나옵니다.</div>
+<div class="footer"><span>가격 수준 5단계</span><span>12</span></div>
+</section>
+
+<!-- 13 두번째 난제: 방향 -->
+<section class="slide">
+<div class="eye">전환 ⑤ · 두 번째 난제</div>
+<h2>수준만으로는 부족했습니다 — 속도를 정할 수 없기 때문입니다</h2>
+<div class="grid2">
+<div class="card">
+<b>같은 “비쌈”이지만 상황이 다르다</b>
+<p><b>비싼데 계속 오르는 중</b><br>→ 조금 더 기다려도 됩니다. 서둘러 다 팔면 더 오를 때 아쉽습니다.<br><br><b>비싼데 꺾이기 시작함</b><br>→ 지금이 마지막 기회일 수 있습니다. 더 많이 팔아야 합니다.</p>
+</div>
+<div>
+<div class="callout"><span class="accent">수준</span>이 방향을 정하고<br><span class="accent">추세</span>가 속도를 정한다</div>
+<p class="lead" style="margin-top:20px">그래서 두 번째 축으로 <b>추세</b>를 넣었습니다. 단, 추세는 <b>혼자서는 결정권이 없습니다.</b> 팔지 말지는 수준이 정하고, 추세는 그 강도만 조절합니다.</p>
+</div>
+</div>
+<div class="note">1부에서 손실이 났던 이유가 바로 이것입니다. 당시에는 <b>추세에게 결정권을 줬습니다.</b> 순서를 바로잡은 것이 이번 개선의 핵심입니다.</div>
+<div class="footer"><span>수준 × 추세 — 역할 분리</span><span>13</span></div>
+</section>
+
+<!-- 14 노이즈 3장치 -->
+<section class="slide dark">
+<div class="eye">전환 ⑥ · 세 번째 난제</div>
+<h2>“추세”를 기계가 오해하지 않게 만드는 세 가지 장치</h2>
+<div class="grid3">
+<div class="card">
+<b>① 흔들림 걸러내기</b>
+<p>하루짜리 급등락에 반응하지 않도록 가격을 부드럽게 다듬어 방향을 봅니다.<br><br><span class="mini">비유 — 자동차 속도계가 노면 요철마다 튀지 않게 잡아주는 것과 같습니다. 약 2일 정도 반응이 늦어지는 대신 헛신호가 사라집니다.</span></p>
+</div>
+<div class="card">
+<b>② 너무 작은 움직임 무시</b>
+<p>20일 동안 총 1.5%도 움직이지 않았다면, 아무리 방향이 곧아도 <b>횡보</b>로 처리합니다.<br><br><span class="mini">비유 — 20일 동안 3원 오른 것을 "완벽한 상승 추세"라고 부르면 안 됩니다. 방향뿐 아니라 거리도 봐야 합니다.</span></p>
+</div>
+<div class="card">
+<b>③ 이틀 연속일 때만 인정</b>
+<p>오늘 판정이 바뀌어도 바로 실행하지 않습니다. <b>이틀 연속 같은 판정</b>이 나와야 국면을 전환합니다.<br><br><span class="mini">비유 — 하루 열이 났다고 바로 입원하지 않는 것과 같습니다. 잦은 매매와 수수료를 막습니다.</span></p>
+</div>
+</div>
+<p class="lead" style="margin-top:28px">이 세 장치가 없으면 엔진은 매일 다른 말을 합니다. <b>일관성이야말로 이 시스템의 존재 이유입니다.</b></p>
+<div class="footer"><span>잡음 제거 장치</span><span>14</span></div>
+</section>
+
+<!-- 15 매트릭스 -->
+<section class="slide">
+<div class="eye">알고리즘의 탄생</div>
+<h2>두 축을 교차하면 표 하나가 남습니다 — 이것이 엔진의 전부입니다</h2>
+<table class="matrix">
+<tr><th>현재 가격 수준</th><th>상승 추세</th><th>횡보</th><th>하락 추세</th></tr>
+<tr><td>VH · 매우 비쌈</td><td>22%</td><td>18%</td><td class="sell">15%</td></tr>
+<tr><td>H · 비쌈</td><td>26%</td><td>24%</td><td class="sell">20%</td></tr>
+<tr><td>N · 중립</td><td class="neutral">30%</td><td class="neutral">30%</td><td class="neutral">30%</td></tr>
+<tr><td>L · 쌈</td><td>36%</td><td>34%</td><td class="hold">32%</td></tr>
+<tr><td>VL · 매우 쌈</td><td class="hold">42%</td><td>40%</td><td>38%</td></tr>
+</table>
+<div class="note">숫자는 <b>파는 비율이 아니라 환전 후 남길 외화 비중</b>입니다. "15%"는 15%를 팔라는 뜻이 아니라 <b>15%만 남기고 나머지를 환전하라</b>는 뜻입니다. 세로로 읽으면 비쌀수록 적게 남기고, 가로로 읽으면 하락 신호일수록 더 줄입니다.</div>
+<div class="footer"><span>5 × 3 정책 매트릭스</span><span>15</span></div>
+</section>
+
+<!-- 16 폭 -->
+<section class="slide">
+<div class="eye">왜 하필 15~42%인가</div>
+<h2>폭은 취향이 아니라 측정 결과로 정했습니다</h2>
+<div class="grid3">
+<div class="card"><b>너무 넓으면</b><p>극단 구간에서 한 번에 대규모 환전이 발생합니다. 실행 부담과 시장 충격이 커집니다.</p></div>
+<div class="card" style="background:#eff6ff"><b class="accent">15 ~ 42% (채택)</b><p>고점 구간에서 실제로 행동이 나오고, 저점에서 충분히 회복 여력을 남기는 구간입니다.</p></div>
+<div class="card"><b>너무 좁으면</b><p>목표와 현재의 차이가 거래 기준(3%p)에 못 미쳐 <b>엔진이 아무 행동도 하지 않습니다.</b></p></div>
+</div>
+<div class="note">실측 확인: 폭을 24~34%로 좁히자 성과가 <b class="bad">−46.0원</b>으로 무너졌고, 26~33%까지 좁히자 <b class="bad">거래가 한 건도 발생하지 않았습니다.</b> <br>좁힐수록 안전해 보이지만, 실제로는 시스템이 꺼지는 것과 같습니다.</div>
+<div class="footer"><span>밴드 폭의 근거</span><span>16</span></div>
+</section>
+
+<!-- 17 검증 -->
+<section class="slide dark">
+<div class="eye">검증</div>
+<h2>실제 환율 데이터로, 같은 조건에서 두 방식을 겨루게 했습니다</h2>
+<div class="grid2">
+<div>
+<div class="card">
+<b class="bad">기존 — 추세만 보고 판단</b>
+<p>오르는 중이면 보유, 내리는 중이면 매도. <b>기준가(앵커) 개념이 없어</b> "지금이 비싼가"는 애초에 판단에 들어가지 않습니다.</p>
+</div>
+</div>
+<div>
+<div class="card">
+<b class="good">개선 — 수준 축 도입</b>
+<p>오늘 가격이 <b>기준점(앵커) 대비 얼마나 비싼지</b>를 함께 봅니다. 비쌀수록 더 팔고, 쌀수록 덜 파는 구조입니다.</p>
+</div>
+</div>
+</div>
+<div class="note" style="margin-top:20px">
+<b>검증 방법</b> — 변동성이 컸던 구간, 최근 장기 구간, 실제 매각 시기 논쟁이 있었던 구간까지 성격이 다른 여러 기간에 두 방식을 각각 적용해 <b>가중평균 실현환율이 그 기간의 평균 환율보다 높았는지</b>로 비교합니다. 각 시점의 판정은 그 시점까지의 자료만 사용해, 미래를 미리 보고 계산한 결과가 아닙니다.
+</div>
+<p class="lead" style="margin-top:20px">앵커·정책표 값은 정책회의 승인에 따라 계속 조정됩니다. <br><b>최신 검증 수치는 규칙검증 화면에서 그때그때 다시 확인합니다.</b></p>
+<div class="footer"><span>검증 방법론</span><span>17</span></div>
+</section>
+
+<!-- 18 제약 -->
+<section class="slide">
+<div class="eye">그러나 알고리즘이 최종 결정권자는 아닙니다</div>
+<h2>모델의 답은 회사의 네 가지 제약을 통과해야 권고가 됩니다</h2>
+<div class="stack">
+<div class="row"><b>① 결제 버퍼</b><span>앞으로 지급해야 할 외화(현재 약 300만 달러)는 무슨 일이 있어도 남깁니다. <b>가장 우선순위가 높습니다.</b></span></div>
+<div class="row"><b>② 정책밴드</b><span>경영진이 승인한 외화 비중 상·하한을 벗어나는 제안은 나올 수 없습니다.</span></div>
+<div class="row"><b>③ 90일 강제 환전</b><span>"싸니까 기다린다"가 무기한 이어지지 않도록, 90일이 지나면 중립 비중까지 환전합니다.</span></div>
+<div class="row"><b>④ 3%p 완충폭</b><span>목표와 현재 차이가 3%p 미만이면 거래하지 않습니다. 잔손질로 수수료가 새는 것을 막습니다.</span></div>
+</div>
+<div class="note">그리고 정기예금에 묶인 외화는 만기 전까지 <b>실행 가능 금액에서 제외</b>합니다. 비중 계산에는 포함되지만 지금 팔 수는 없기 때문입니다.</div>
+<div class="footer"><span>회사 제약 우선</span><span>18</span></div>
+</section>
+
+<!-- 19 실행 -->
+<section class="slide">
+<div class="eye">실행</div>
+<h2>비중이 금액이 되고, 금액이 실제 매각 기록이 됩니다</h2>
+<div class="flow">
+<div class="step">목표 비중과<br>현재 비중의 차이</div>
+<div class="arrow">→</div>
+<div class="step">× 전사 총자금<br><span class="mini">= 환전 권고액</span></div>
+<div class="arrow">→</div>
+<div class="step">즉시 환전 가능<br>재고까지만</div>
+<div class="arrow">→</div>
+<div class="step">오래된 것부터<br>FIFO 소진</div>
+<div class="arrow">→</div>
+<div class="step">실현손익 기록<br><span class="mini">장부 자동 갱신</span></div>
+</div>
+<div class="grid2" style="margin-top:32px">
+<div class="card"><b>예시로 보면</b><p>총자금 1,000억, 현재 외화 300억(30%), 목표 15%<br>→ (30% − 15%) × 1,000억 = <b>150억원 환전 후보</b></p></div>
+<div class="card"><b>손실이 나도 막지 않습니다</b><p>장부가보다 낮게 파는 경우에도 자동 차단하지 않습니다. <br>손실 금액을 화면에 명확히 표시하되, <b>정책 준수와 위험 축소가 우선</b>입니다.</p></div>
+</div>
+<div class="footer"><span>권고에서 집행까지</span><span>19</span></div>
+</section>
+
+<!-- 20 결론 -->
+<section class="slide dark">
+<div class="eye">결론</div>
+<h2>이 엔진은 환율을 맞히지 않습니다.<br><span class="accent">같은 상황에서 같은 답이 나오게 할 뿐입니다.</span></h2>
+<div class="decision">① 우리는 <b>순유입 구조</b>였고, 그래서 팔아도 재고가 줄지 않았습니다</div>
+<div class="decision">② 추세만 보다가 <b>비쌀 때 가장 많이</b> 들고 있었습니다</div>
+<div class="decision">③ 질문을 <b>“얼마를 남길까”</b>로 바꾸자 규칙을 만들 수 있었습니다</div>
+<div class="decision">④ 경영진이 승인할 것은 시장 전망이 아니라 <b>비중의 경계선</b>입니다</div>
+<p class="lead" style="margin-top:24px">매일 같은 계산이 반복되고, 화면에는 원시 지표·제약 사유·FIFO 손익이 모두 남습니다.<br>어떤 권고든 <b>왜 그렇게 나왔는지 되짚을 수 있습니다.</b></p>
+<div class="footer"><span>왜 이 엔진을 만들었나</span><span>20</span></div>
+</section>
+
+</body></html>

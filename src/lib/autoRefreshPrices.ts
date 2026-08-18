@@ -2,8 +2,9 @@
  * 지분·국채 시세 자동 갱신 (앱 로그인 시 1회 / 일별 체크)
  *
  * 지분: 오늘 날짜 레코드가 없으면 GAS → 현재가 → equities INSERT
- * 국채: 전영업일 기준가가 없으면 GAS → T+1 기준가 → investments UPDATE
+ * 국채: 전영업일 기준가 행이 없으면 GAS → T+1 기준가 → investments **INSERT**(새 기준일 행)
  *       ※ 국채 API는 T+1 제공이므로 오후 12시 이후에만 실행
+ *       ※ 세션26차: 기존 행 UPDATE → 새 행 INSERT 로 교정 (아래 국채 블록 주석 참조)
  *
  * localStorage 키: treasury_auto_refresh_v1
  * {
@@ -12,10 +13,11 @@
  * }
  */
 
-import { restSelect, restInsert, restUpdate } from './supabase'
+import { restSelect, restInsert } from './supabase'
 import { fetchStockPrice, fetchBondPrice, isGasBlocked } from '../hooks/useGas'
 import { calcBondValue, normDate, generateUUID } from './format'
-import type { EquityRecord, InvestmentRecord } from '../types'
+import { investFromDb, investToDb, getLatestBonds } from '../hooks/useInvestments'
+import type { EquityRecord } from '../types'
 
 // ── 전영업일 계산 (주말 skip, 공휴일 무시 — 간이) ──
 function prevBizDay(dateStr: string): string {
@@ -145,15 +147,33 @@ export async function autoRefreshAllPrices(
     // ── 국채 기준가 갱신 (T+1, 오후 12시 이후) ─────────────
     if (nowHour >= 12 && log.bond[company] !== prevBiz) {
       try {
-        const { data: bonds } = await restSelect<InvestmentRecord>('investments', {
-          match: { company, product: '국채' }, order: 'start.asc', limit: 500,
+        // ⚠ 컬럼명은 start_date 다. 예전엔 order:'start.asc' 라 PostgREST 가 400 을 반환했고,
+        //   그 400 이 아래 catch 로 삼켜져 **국채 자동 갱신이 통째로 조용히 죽어 있었다**
+        //   (앱 로드마다 법인 수만큼 400 — 세션26차 브라우저 검증에서 발견).
+        const { data: bondRows } = await restSelect<Record<string, unknown>>('investments', {
+          match: { company, product: '국채' }, order: 'start_date.asc', limit: 500,
         })
-        const activeBonds = (bonds ?? []).filter(
+        // ⚠ restSelect 는 DB 행(snake_case)을 그대로 준다 — 매퍼 없이 bondTicker 를 읽으면
+        //   전부 undefined 라 필터에서 전량 탈락한다.
+        const allBonds = (bondRows ?? []).map(investFromDb)
+
+        /**
+         * ⚠⚠ 기존 행 UPDATE 금지 — 이력 파괴 사고가 난다.
+         *
+         * 국채는 **기준일마다 새 행**이 쌓이는 구조다(실측: 메디아나 KR103502GF39 72건).
+         * 그런데 예전 코드는 조회된 행을 전부 돌며 같은 최신 기준가로 UPDATE 했다.
+         * 그대로 되살렸다면 **72건 전부가 같은 날짜·같은 가격으로 뭉개져** 일별
+         * 기준가 이력이 소멸했을 것이다. (400 으로 죽어 있던 덕분에 사고가 안 났다.)
+         *
+         * 올바른 동작은 지분 갱신과 같다 — 종목별 **최신 1건**만 보고,
+         * 그 기준일 행이 없으면 **새 행 INSERT**.
+         */
+        const targets = getLatestBonds(allBonds).filter(
           b => b.active !== false && b.bondTicker,
         )
 
-        for (const bond of activeBonds) {
-          // 이미 전영업일 기준가 저장돼 있으면 skip
+        for (const bond of targets) {
+          // 이미 전영업일/오늘 기준가가 있으면 skip
           if (bond.priceDate === prevBiz || bond.priceDate === today) {
             result.bondSkip++
             continue
@@ -161,22 +181,40 @@ export async function autoRefreshAllPrices(
           try {
             onProgress?.(`${company} · ${bond.bondName ?? bond.bank} 기준가 조회 중…`)
             const res = await fetchBondPrice(bond.bondTicker!)
-            await restUpdate<Partial<InvestmentRecord>>(
-              'investments',
-              {
-                bondPrice: res.price,
-                priceDate: res.date,
-                amount:    calcBondValue(bond.bondQty ?? 0, res.price),
-              },
-              { id: bond.id },
-            )
+            const priceDate = normDate(res.date)
+            // 응답 기준일 행이 이미 있으면 skip (공휴일 등으로 같은 날짜가 반복 조회됨)
+            if (allBonds.some(b => b.bondTicker === bond.bondTicker && b.priceDate === priceDate)) {
+              result.bondSkip++
+              continue
+            }
+            // ⚠ camelCase 를 그대로 보내면 없는 컬럼(bondPrice/priceDate)이라 400 이 난다.
+            //   반드시 investToDb 를 거칠 것 (bondPrice→bond_price, priceDate→start_date).
+            await restInsert('investments', investToDb({
+              id:               generateUUID(),
+              company,
+              bank:             bond.bank,
+              product:          bond.product,
+              currency:         bond.currency,
+              available:        bond.available,
+              rate:             bond.rate,
+              maturity:         bond.maturity,
+              active:           true,
+              bondName:         bond.bondName,
+              bondTicker:       bond.bondTicker,
+              bondQty:          bond.bondQty,
+              bondPrice:        res.price,
+              priceDate,
+              amount:           calcBondValue(bond.bondQty ?? 0, res.price),
+              acquisition_cost: bond.acquisition_cost,
+            }))
             result.bondOk++
           } catch {
             result.bondFail++
           }
         }
-      } catch {
-        // 법인 전체 조회 실패 → 다음 법인으로
+      } catch (e) {
+        // ⚠ 과거엔 여기서 조용히 삼켜져 국채 갱신이 죽은 줄도 몰랐다 — 최소한 남긴다.
+        console.warn(`[autoRefresh] ${company} 국채 조회 실패:`, e)
       }
       if (!isGasBlocked()) {
         log.bond[company] = prevBiz

@@ -46,6 +46,9 @@ export interface TreasuryUser {
 
 export type Company = string  // DB-driven (companies 테이블); 기존 하드코딩 레거시 제거
 
+import type { FxOrderType } from '../lib/fxOrderType'
+export type { FxOrderType }
+
 // ─── 운전자금 (daily) ────────────────────────────────────
 export interface DailyRecord {
   id: string
@@ -116,7 +119,8 @@ export interface FxTradeRecord {
   completed_by: string | null
   // 매각 지시 이행 기한 (세션20차 정책 이행 통제 — 등록일+3영업일, 환율 무관 실행 강제)
   due_date: string | null
-  order_type: 'threshold' | 'discretionary' | null   // threshold=보유비중 초과 매각, discretionary=정책회의 재량 매각
+  // threshold=보유비중 초과 / discretionary=정책회의 재량 / regime=리짐 권고(세션26차)
+  order_type: FxOrderType | null
 }
 
 // ─── 차입금 (loans) ──────────────────────────────────────
@@ -191,7 +195,9 @@ export interface PolicyMeeting {
 export type DecisionStatus = 'pending' | 'in_progress' | 'completed'
 
 // 의결사항이 통제하는 실시간 지표 — 대시보드 자동 위반 감지 대상 (세션20차 정책 이행 통제 Phase 1)
-export type PolicyLinkedMetric = 'fx_ratio' | 'loan_ratio' | 'liquidity'
+// fx_regime_gap = 리짐 목표 잔존비중 대비 초과 보유 폭(%p) — 세션26차 Phase 4
+//   ⚠ 실무 화면이 남긴 판정 스냅샷(fxRegimeSnapshot)을 읽는다. 스냅샷이 없으면 위반 없음.
+export type PolicyLinkedMetric = 'fx_ratio' | 'loan_ratio' | 'liquidity' | 'fx_regime_gap'
 export type PolicyTargetOperator = 'lte' | 'gte'   // lte=이 값 이하 유지, gte=이 값 이상 유지
 
 export interface PolicyDecision {
@@ -219,6 +225,11 @@ export interface PolicyParam {
   param_text: string | null
   updated_by: string
   updated_at: string
+  // 정책회의 정정 감사 추적 (세션26차) — docs/db/policy_params_override_audit.sql
+  // ⚠ 마이그레이션 미적용 환경에서는 응답에 아예 없으므로 optional 이다.
+  overridden_by?: string | null
+  overridden_at?: string | null
+  override_note?: string | null
 }
 
 // ─── 공통 훅 반환 타입 ────────────────────────────────────

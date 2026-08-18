@@ -268,7 +268,8 @@ export default function CashflowForecastTab({ company, openingBalance, isMaster,
           items={(itemsByWeek.get(detail.week) ?? []).filter(i => i.direction === detail.direction)}
           readOnly={!isMaster || isWeekPast(detail.week, today)}
           onClose={() => setDetail(null)}
-          onAdd={(category, amount, memo) => plan.addItem(detail.week, detail.direction, category, amount, memo, userLabel)}
+          onAdd={(category, amount, memo, currency) =>
+            plan.addItem(detail.week, detail.direction, category, amount, memo, userLabel, currency)}
           onUpdate={(id, patch) => plan.updateItem(id, patch, userLabel)}
           onRemove={id => plan.removeItem(id, userLabel)}
         />

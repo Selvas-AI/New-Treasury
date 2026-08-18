@@ -9,6 +9,9 @@ import { usePolicyParams } from '../hooks/usePolicyParams'
 import { usePolicyDecisionsByCompany } from '../hooks/usePolicyDecisions'
 import { useFxTradeHistory } from '../hooks/useFxTradeHistory'
 import { checkDecisionRule } from '../lib/policyChecks'
+import { readAllRegimeSnapshots, pendingDays } from '../lib/fxRegimeSnapshot'
+import { REGIME_CURRENCIES } from '../lib/fxRegimeInputs'
+import { orderTypeLabel } from '../lib/fxOrderType'
 import { bizDaysBetween, todayStr } from '../lib/bizDay'
 import { makeIssueKey } from '../hooks/useIssues'
 
@@ -37,6 +40,41 @@ export default function DashboardPage() {
   const policyData      = usePolicyDashboard(company ?? null)
   const policyParams    = usePolicyParams(company)
   const companyDecisions = usePolicyDecisionsByCompany(company ?? null)
+
+  // ── 리짐 권고 미이행 (세션26차 Phase 4) ────────────────────────────
+  // ⚠ 여기서 엔진을 돌리지 않는다. 실무 화면(/fx-regime)이 판정할 때 남긴 스냅샷만 읽는다
+  //   — 대시보드는 전 사용자가 여는 화면이라 환율 이력 전체 조회를 감당할 수 없다.
+  const regimeSnapshots = useMemo(
+    () => readAllRegimeSnapshots(policyParams, REGIME_CURRENCIES),
+    [policyParams],
+  )
+  const regimeIssues = useMemo<IssueItem[]>(() => {
+    const today = todayStr()
+    const result: IssueItem[] = []
+    for (const snap of regimeSnapshots) {
+      if (snap.suggestKRW <= 0) continue
+      const key = makeIssueKey('fx_regime', `${company ?? ''}_${snap.currency}`)
+      const thread = db.issues.threadOf(key)
+      const lastStatus = thread[thread.length - 1]?.status ?? 'open'
+      if (lastStatus === 'done') continue
+      const days = pendingDays(snap, today, bizDaysBetween)
+      // 당일 발생한 권고까지 경보로 올리면 노이즈가 된다 — 하루는 집행 시간을 준다.
+      if (days == null || days < 1) continue
+      const gap = snap.targetPct != null && snap.currentPct != null
+        ? (snap.currentPct - snap.targetPct).toFixed(1) : '—'
+      result.push({
+        key,
+        title: `리짐 권고 미이행 ${days}영업일차: ${snap.currency}`,
+        desc: `목표 ${snap.targetPct ?? '—'}% 대비 현재 ${snap.currentPct ?? '—'}% (초과 ${gap}%p) · `
+          + `권고 매도 ${fmtKRW(snap.suggestKRW)} · ${snap.since} 발생 · 판정일 ${snap.asOf}`,
+        status: lastStatus,
+        commentCount: thread.length,
+      })
+    }
+    return result
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [regimeSnapshots, company, db.issues])
+
   const policyIssues = useMemo<IssueItem[]>(() => {
     const today = new Date().toISOString().slice(0, 10)
     const result: IssueItem[] = []
@@ -49,7 +87,8 @@ export default function DashboardPage() {
       const overdue = !!dec.due_date && dec.due_date < today
       let violated = false, violDesc = ''
       if (dec.linked_metric && dec.target_operator && dec.target_value != null) {
-        const r = checkDecisionRule(dec.linked_metric, dec.target_operator, dec.target_value, policyData, policyParams)
+        const r = checkDecisionRule(dec.linked_metric, dec.target_operator, dec.target_value,
+          policyData, policyParams, regimeSnapshots)
         violated = r.violated
         if (violated) {
           const cond = dec.target_operator === 'lte' ? `${dec.target_value} 이하` : `${dec.target_value} 이상`
@@ -87,7 +126,7 @@ export default function DashboardPage() {
       if (lastStatus === 'done') continue
       const dday = bizDaysBetween(today, o.due_date)
       if (dday > 0) continue   // 아직 기한 여유 있음
-      const typeLabel = o.order_type === 'discretionary' ? '재량 매각' : '한도초과 매각'
+      const typeLabel = orderTypeLabel(o.order_type)
       result.push({
         key,
         title: `외화 매각 지시 ${dday < 0 ? '기한초과' : '오늘 마감'}: ${o.currency} ${typeLabel}`,
@@ -100,7 +139,9 @@ export default function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sellOrders.data, db.issues])
 
-  const allIssues = useMemo(() => [...db.detectedIssues, ...policyIssues, ...sellOrderIssues], [db.detectedIssues, policyIssues, sellOrderIssues])
+  const allIssues = useMemo(
+    () => [...db.detectedIssues, ...policyIssues, ...regimeIssues, ...sellOrderIssues],
+    [db.detectedIssues, policyIssues, regimeIssues, sellOrderIssues])
 
   const [hoverKey, setHoverKey] = useState<string | null>(null)
   const [fixedKey, setFixedKey] = useState<string | null>(null)

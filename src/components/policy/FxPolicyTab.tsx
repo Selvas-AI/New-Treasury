@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useAuth } from '../../hooks/useAuth'
 import { useDaily } from '../../hooks/useDaily'
 import { useInvestments, getLatestInvestments, getLatestBonds } from '../../hooks/useInvestments'
@@ -10,6 +10,10 @@ import { fmtKRW, fmtNumber } from '../../lib/format'
 import { restInsert } from '../../lib/supabase'
 import { generateUUID } from '../../lib/format'
 import { NumInput } from '../common/NumInput'
+import FxRegimeMonitorCard from './FxRegimeMonitorCard'
+import { REGIME_CURRENCIES } from '../../lib/fxRegimeInputs'
+import { orderTypeLabel } from '../../lib/fxOrderType'
+import FxRegimeStandardTab from './FxRegimeStandardTab'
 import { useFxTradeHistory } from '../../hooks/useFxTradeHistory'
 import { useToast } from '../../contexts/ToastProvider'
 import { addBizDays, bizDaysBetween, todayStr } from '../../lib/bizDay'
@@ -24,6 +28,23 @@ const FX_CURRENCIES = [
 ]
 
 const Z_TABLE = { 90: 1.282, 95: 1.6503, 99: 2.326 } as const
+
+/**
+ * FX 정책 서브탭 — 세션26차 리짐 모델 채택에 따른 재편
+ *
+ * ③ 한도 계산기와 ④ 매각 집행을 나눈 이유:
+ *   계산기는 **참고안을 만드는 도구**이고, 집행은 **실제 돈이 나가는 워크플로우**다.
+ *   한 화면에 있으면 계산 결과가 곧 확정인 것처럼 읽힌다 — 실제로 과거엔
+ *   `🎯 자동설정` 버튼이 계산 즉시 fx_target_min/max 를 저장했다(Phase 3에서 제거).
+ */
+type FxSubTab = 'monitor' | 'standard' | 'calc' | 'exec'
+const FX_SUBTABS: { key: FxSubTab; label: string; hint: string }[] = [
+  { key: 'monitor',  label: '① 🧭 리짐 이행 현황', hint: '실무 화면 결론 요약 — 목표 대비 현재, 권고, 재고, 매각 지시' },
+  { key: 'standard', label: '② 🎯 정책 기준',      hint: '의결값 편집 — 밴드·운영 가정·국면 프로토콜' },
+  { key: 'calc',     label: '③ 📐 한도 계산기',    hint: '손실허용 한도 모델(σ×Z) — 권고 밴드를 만들어 ②로 보낸다 (저장 아님)' },
+  { key: 'exec',     label: '④ 🧾 매각 집행',      hint: '통화별 상한 대비 보유량과 매각 지시(발의→승인→완료)' },
+]
+
 type ConfLevel = 90 | 95 | 99
 
 function fmtAmt(v: number, code: FxCode): string {
@@ -32,10 +53,6 @@ function fmtAmt(v: number, code: FxCode): string {
 }
 
 interface TradeModal { code: FxCode | 'total'; excessKrw: number; discretionary: boolean }
-
-const ORDER_TYPE_LABEL: Record<string, string> = {
-  threshold: '한도초과 매각', discretionary: '재량 매각',
-}
 
 // 이행 대기 매각 지시 목록 — D-day(영업일 기준)로 기한 임박/초과를 강조
 function SellOrderList({ orders, onQuickComplete, canEdit }: {
@@ -67,7 +84,7 @@ function SellOrderList({ orders, onQuickComplete, canEdit }: {
                 overdue ? 'bg-red-600 text-white' : urgent ? 'bg-amber-500 text-white' : 'bg-gray-300 dark:bg-slate-600 text-gray-700 dark:text-slate-200'}`}>
                 {overdue ? `기한초과 D+${Math.abs(dday)}` : dday === 0 ? 'D-day' : `D-${dday}`}
               </span>
-              <span className="text-gray-500 dark:text-slate-400 shrink-0">{o.order_type ? ORDER_TYPE_LABEL[o.order_type] : ''}</span>
+              <span className="text-gray-500 dark:text-slate-400 shrink-0">{orderTypeLabel(o.order_type)}</span>
               <span className="font-medium text-gray-800 dark:text-slate-100 truncate">
                 {o.currency} {o.amount_fx ? o.amount_fx.toLocaleString() : ''} — 기한 {o.due_date}
               </span>
@@ -92,6 +109,13 @@ export default function FxPolicyTab({ company }: { company: Company }) {
   // action_permissions['policy'].write 로 허용(기존엔 master 고정이라 admin에게도 부여 불가했음)
   const canEditPolicy = canAction('policy', 'write')
   const toast = useToast()
+  // 리짐 채택 후 회의체가 가장 먼저 봐야 하는 것은 "이행 현황"이라 기본 서브탭으로 둔다.
+  const [fxSubTab, setFxSubTab]   = useState<FxSubTab>('monitor')
+  const [regimeCcy, setRegimeCcy] = useState<string>('USD')
+  // 한도 계산기 → 정책 기준 탭으로 넘기는 밴드 초안. 저장 전이라 언제든 버릴 수 있다.
+  const [bandDraft, setBandDraft] = useState<{ min: number; max: number } | null>(null)
+  // ⚠ 자식 effect 의 deps 에 들어가므로 참조가 안정적이어야 한다(매 렌더 새 함수 = 무한 루프).
+  const clearBandDraft = useCallback(() => setBandDraft(null), [])
   const daily    = useDaily()
   const invest   = useInvestments(true)
   const equities = useEquities()
@@ -368,21 +392,19 @@ export default function FxPolicyTab({ company }: { company: Company }) {
     setBandPreview({ min, max, bandWidth: dynamicBandWidth })
   }
 
-  async function applyAutoBand() {
+  /**
+   * 계산 결과를 **정책 기준 탭의 초안으로 넘긴다**. 저장하지 않는다.
+   *
+   * ⚠ 세션26차 Phase 3 이전에는 이 자리에서 곧바로 fx_target_min/max 를 저장했다
+   *   (window.confirm 한 번이 유일한 관문). 리짐 채택 후 밴드는 리짐 목표비중을
+   *   가두는 제약이 되므로, 계산기가 단독으로 확정하면 안 된다.
+   *   확정은 정책 기준 탭에서 사유와 함께 저장할 때 이뤄진다.
+   */
+  function sendBandToPolicy() {
     if (!bandPreview) return
-    const confirmed = window.confirm(
-      `[자금정책위원회 의결 사항]\nFX Target Band 변경\n이전: ${targetMin}%~${targetMax}%\n변경: ${bandPreview.min}%~${bandPreview.max}%\n\n계속하시겠습니까?`
-    )
-    if (!confirmed) return
-    const prevMin = targetMin, prevMax = targetMax
-    await params.set('fx_target_min', bandPreview.min, null, user?.label ?? '')
-    await params.set('fx_target_max', bandPreview.max, null, user?.label ?? '')
-    await restInsert('issue_comments', {
-      id: generateUUID(), issue_key: `policy_fx_band_${company}`,
-      body: `📋 FX Target Band 변경 (${user?.label ?? ''})\n이전: ${prevMin}%~${prevMax}% → 변경: ${bandPreview.min}%~${bandPreview.max}%`,
-      created_by: user?.label ?? '',
-    })
+    setBandDraft({ min: bandPreview.min, max: bandPreview.max })
     setBandPreview(null)
+    setFxSubTab('standard')
   }
 
   // 환차손익 계산 (모달 내 실시간)
@@ -485,6 +507,51 @@ export default function FxPolicyTab({ company }: { company: Company }) {
   return (
     <div className="space-y-5">
 
+      {/* ══ 0. FX 정책 서브탭 (세션26차 — 리짐 모델 채택) ═══════════
+          ① 이행 현황: 실무 화면 결론을 회의체 언어로 요약 (읽기)
+          ② 정책 기준: 밴드·운영가정·프로토콜 — 여기가 유일한 편집 지점
+          ③ 한도·집행: 기존 σ×Z 한도 모델 + 매각 지시 워크플로우
+          리짐 화면(/fx-regime)은 실무 일상용으로 분리 유지한다. */}
+      <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 dark:border-slate-700">
+        {FX_SUBTABS.map(t => (
+          <button key={t.key} onClick={() => setFxSubTab(t.key)} title={t.hint}
+            className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium transition ${
+              fxSubTab === t.key
+                ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400'
+                : 'border-transparent text-gray-500 hover:text-gray-800 dark:text-slate-400 dark:hover:text-slate-200'
+            }`}>{t.label}</button>
+        ))}
+        {fxSubTab !== 'limit' && (
+          <div className="ml-auto flex gap-1 pb-1">
+            {REGIME_CURRENCIES.map(c => (
+              <button key={c} onClick={() => setRegimeCcy(c)}
+                className={`rounded px-2.5 py-1 text-xs font-medium transition ${
+                  regimeCcy === c
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-slate-700 dark:text-slate-300'
+                }`}>{c}</button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {fxSubTab === 'monitor' && (
+        <FxRegimeMonitorCard company={company} currency={regimeCcy} />
+      )}
+
+      {fxSubTab === 'standard' && (
+        <FxRegimeStandardTab
+          company={company}
+          currency={regimeCcy}
+          canEdit={canEditPolicy}
+          userCode={user?.label ?? user?.code ?? 'unknown'}
+          incomingBand={bandDraft}
+          onConsumeBand={clearBandDraft}
+        />
+      )}
+
+      {fxSubTab === 'calc' && <>
+
       {/* ══ 1. 요약 배너 ══════════════════════════════════════════ */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
@@ -526,6 +593,10 @@ export default function FxPolicyTab({ company }: { company: Company }) {
           </div>
         ))}
       </div>
+
+      </>}
+
+      {fxSubTab === 'exec' && <>
 
       {/* 초과 보유 경고 배너 */}
       {isOverLimit && (
@@ -574,6 +645,10 @@ export default function FxPolicyTab({ company }: { company: Company }) {
         />
       </div>
 
+      </>}
+
+      {fxSubTab === 'calc' && <>
+
       {/* ══ 2. FX Target Band 모니터링 ══════════════════════════ */}
       <div className={card}>
         <div className="flex items-center justify-between mb-4">
@@ -584,7 +659,7 @@ export default function FxPolicyTab({ company }: { company: Company }) {
                 className="text-xs px-2.5 py-1 rounded-lg border border-blue-300 dark:border-blue-700
                            text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30
                            disabled:opacity-40 transition-colors">
-                🎯 자동설정
+                📐 권고 밴드 계산
               </button>
             )}
             <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${
@@ -604,7 +679,7 @@ export default function FxPolicyTab({ company }: { company: Company }) {
         )}
         {bandError && (
           <div className="mb-4 px-4 py-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl text-xs">
-            <p className="font-semibold text-amber-700 dark:text-amber-300">🎯 자동설정 불가</p>
+            <p className="font-semibold text-amber-700 dark:text-amber-300">📐 권고 밴드 계산 불가</p>
             <p className="text-amber-600 dark:text-amber-400 mt-0.5">{bandError}</p>
           </div>
         )}
@@ -612,18 +687,21 @@ export default function FxPolicyTab({ company }: { company: Company }) {
           <div className="mb-4 px-4 py-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-xl">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div>
-                <p className="text-xs font-semibold text-blue-800 dark:text-blue-300">🎯 Target Band 자동설정 미리보기</p>
+                <p className="text-xs font-semibold text-blue-800 dark:text-blue-300">📐 권고 밴드 (계산 결과)</p>
                 <p className="text-xs text-blue-600 dark:text-blue-400 mt-0.5">
                   실효한도 비중 {optimalFxRatio.toFixed(1)}% → <strong>상한 {bandPreview.max}%</strong> / 하한 {bandPreview.min}%
                   <span className="ml-1 text-blue-400">(Band폭 {bandPreview.bandWidth}%p = 최대변동폭×2)</span>
                 </p>
-                <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">⚠️ Target Band는 자금정책위원회 의결 사항입니다.</p>
+                <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">
+                  ⚠️ 참고안입니다 — 이 버튼은 <strong>저장하지 않습니다</strong>.
+                  정책 기준 탭으로 값을 넘기면 거기서 사유와 함께 의결 저장합니다.
+                </p>
               </div>
               <div className="flex gap-2 shrink-0">
                 <button onClick={() => setBandPreview(null)}
-                  className="text-xs px-3 py-1.5 border border-blue-300 dark:border-blue-700 text-blue-600 dark:text-blue-400 rounded-lg">취소</button>
-                <button onClick={applyAutoBand}
-                  className="text-xs px-3 py-1.5 bg-blue-600 text-white rounded-lg font-medium">적용 저장</button>
+                  className="text-xs px-3 py-1.5 border border-blue-300 dark:border-blue-700 text-blue-600 dark:text-blue-400 rounded-lg">버리기</button>
+                <button onClick={sendBandToPolicy}
+                  className="text-xs px-3 py-1.5 bg-blue-600 text-white rounded-lg font-medium">📥 정책 기준으로 불러오기</button>
               </div>
             </div>
           </div>
@@ -713,7 +791,7 @@ export default function FxPolicyTab({ company }: { company: Company }) {
                 ))}
               </div>
               <div className="px-3 py-2 bg-blue-100/60 dark:bg-blue-900/30 rounded-lg text-xs text-blue-600 dark:text-blue-400">
-                💡 Target Band는 파라미터 저장 후 우측 카드 상단의 <strong>🎯 자동설정</strong> 버튼으로 도출합니다.
+                💡 파라미터 저장 후 <strong>📐 권고 밴드 계산</strong> → <strong>📥 정책 기준으로 불러오기</strong> 순서로 진행합니다. 확정 저장은 정책 기준 탭에서 합니다.
               </div>
               <button onClick={saveParams} disabled={saving}
                 className="w-full py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50">
@@ -1261,6 +1339,10 @@ export default function FxPolicyTab({ company }: { company: Company }) {
         </div>
       </div>
 
+      </>}
+
+      {fxSubTab === 'exec' && <>
+
       {/* ══ 5. 통화별 상한 vs 현재 보유량 테이블 ════════════════════ */}
       <div className={card}>
         <div className="flex items-center justify-between mb-3">
@@ -1547,6 +1629,8 @@ export default function FxPolicyTab({ company }: { company: Company }) {
           </div>
         </div>
       )}
+
+      </>}
 
     </div>
   )

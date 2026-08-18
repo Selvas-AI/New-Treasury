@@ -920,6 +920,9 @@ const EMPTY_DECISION = {
 
 const LINKED_METRIC_LABELS: Record<PolicyLinkedMetric, string> = {
   fx_ratio: 'FX 비중(%)', loan_ratio: '차입 비율(%)', liquidity: '유동성(원화 현금성, 원)',
+  // 세션26차 — 리짐 목표 이행. fx_ratio(정책 밴드 준수)와 다른 위반이다:
+  // 밴드 안에 있어도 오늘 국면이 지시한 목표보다 많이 들고 있을 수 있다.
+  fx_regime_gap: '리짐 목표 초과 보유(%p)',
 }
 
 // 의결사항 폼의 "정량 규칙(선택)" 입력 — 3개 폼(신규 2곳 + 수정 1곳)에서 공용
