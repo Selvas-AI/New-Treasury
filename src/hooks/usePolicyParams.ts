@@ -42,7 +42,7 @@ export function usePolicyParams(company: Company | null) {
   }
 
   /** 특정 키의 정정 감사 정보 (마이그레이션 미적용 시 전부 null) */
-  function getMeta(key: string): Pick<PolicyParam, 'overridden_by' | 'overridden_at' | 'override_note'> | null {
+  function getMeta(key: string): { overridden_by: string | null; overridden_at: string | null; override_note: string | null } | null {
     const row = data.find(p => p.param_key === key)
     if (!row) return null
     return {

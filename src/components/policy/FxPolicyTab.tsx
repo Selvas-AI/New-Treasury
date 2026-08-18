@@ -521,7 +521,7 @@ export default function FxPolicyTab({ company }: { company: Company }) {
                 : 'border-transparent text-gray-500 hover:text-gray-800 dark:text-slate-400 dark:hover:text-slate-200'
             }`}>{t.label}</button>
         ))}
-        {fxSubTab !== 'limit' && (
+        {fxSubTab !== 'exec' && (
           <div className="ml-auto flex gap-1 pb-1">
             {REGIME_CURRENCIES.map(c => (
               <button key={c} onClick={() => setRegimeCcy(c)}

@@ -18,6 +18,7 @@
  */
 import { useState, useCallback, useEffect } from 'react'
 import { restSelect, restInsert, restUpdate, restDelete, restRpc } from '../lib/supabase'
+import type { FxOrderType } from '../lib/fxOrderType'
 import { generateUUID } from '../lib/format'
 import type { FxTradeRecord, Company } from '../types'
 import { saleKey, type SalesCsvRow } from '../lib/fxCsvImport'
