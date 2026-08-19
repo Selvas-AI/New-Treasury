@@ -41,10 +41,13 @@ import BacktestTab from '../components/fxRegime/BacktestTab'
 import NarrativeModal from '../components/fxRegime/NarrativeModal'
 import DecisionTab from '../components/fxRegime/DecisionTab'
 import VerdictCard from '../components/fxRegime/VerdictCard'
+import RegisterOrderPanel from '../components/fxRegime/RegisterOrderPanel'
 import { buildVerdict } from '../lib/fxVerdict'
 import { lossBudget, bepStats } from '../lib/fxPnl'
-import { fmtKRW } from '../lib/format'
-import { syncRegimeSnapshot } from '../lib/fxRegimeSnapshot'
+import { fmtKRW, generateUUID } from '../lib/format'
+import { syncRegimeSnapshot, type RegimeSnapshotHistoryEntry } from '../lib/fxRegimeSnapshot'
+import { restInsert } from '../lib/supabase'
+import RegimeHistoryCard from '../components/fxRegime/RegimeHistoryCard'
 import { addBizDays, todayStr } from '../lib/bizDay'
 import {
   REGIME_CURRENCIES as CURRENCIES,
@@ -273,7 +276,7 @@ function TreasuryInputPanel({ source, onSourceChange, inputs, currency, canEdit,
         <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg bg-blue-50 px-3 py-2 text-[11px] text-blue-800 dark:bg-blue-900/25 dark:text-blue-200">
           🔒 <strong>정책</strong> 표시 항목은 정책회의 의결값입니다 — 이 화면에서 변경할 수 없습니다.
           🏦 <strong>조회</strong> 항목은 Treasury 실데이터입니다.
-          <Link to={`/policy/${encodeURIComponent(company)}`}
+          <Link to={`/policy?tab=fx&company=${encodeURIComponent(company)}`}
             className="ml-auto rounded border border-blue-300 px-2 py-1 font-medium hover:bg-blue-100 dark:border-blue-700 dark:hover:bg-blue-900/40">
             자금정책 관리에서 변경 →
           </Link>
@@ -426,6 +429,15 @@ export default function FxRegimePage() {
   }
   if (treasuryLoadingNow) sawTreasuryLoadingRef.current = true
   const treasuryReady = sawTreasuryLoadingRef.current && !treasuryLoadingNow
+  // 스냅샷이 실제로 바뀔 때만(=syncRegimeSnapshot 내부에서 write 가 일어날 때만) 이력 1건을
+  // 남긴다 — "조치 카드 일자별 조회"(세션26차 7일차)의 데이터 소스.
+  const recordRegimeHistory = useCallback(async (entry: RegimeSnapshotHistoryEntry) => {
+    await restInsert('fx_regime_snapshot_history', {
+      id: generateUUID(), company, currency: entry.currency,
+      snapshot_date: entry.snapshotDate, target_pct: entry.targetPct, current_pct: entry.currentPct,
+      suggest_krw: entry.suggestKRW, since_date: entry.sinceDate, captured_by: entry.capturedBy,
+    })
+  }, [company])
   const snapWrittenRef = useRef<string>('')
   useEffect(() => {
     if (inputSource !== 'live' || !signal || !canEdit() || !treasuryReady) return
@@ -441,8 +453,8 @@ export default function FxRegimePage() {
       currentPct: Math.round(signal.decision.currentRatio * 1000) / 10,
       suggestKRW: suggest,
       asOf:       signal.asOf,
-    }, todayStr(), user?.label ?? user?.code ?? 'system')
-  }, [inputSource, signal, company, currency, params, canEdit, user, treasuryReady])
+    }, todayStr(), user?.label ?? user?.code ?? 'system', recordRegimeHistory)
+  }, [inputSource, signal, company, currency, params, canEdit, user, treasuryReady, recordRegimeHistory])
 
   // ── 수집 상태 ──────────────────────────────────────────────────────
   const [busy, setBusy]         = useState(false)
@@ -545,8 +557,9 @@ export default function FxRegimePage() {
     return out
   }, [series, protocol])
 
-  // ⭐ 오늘의 결론 — 화면 최상단. 이 카드 하나만 보고 나가도 업무가 되도록 한다.
-  const verdict = useMemo(() => {
+  // 분기 손실한도 기준 집행 가능액 — 조치 카드(VerdictCard)와 매각 지시 등록 패널이
+  // 공유한다(둘 다 상단에 붙어 있으므로 계산을 한 곳에만 둔다).
+  const decisionBudget = useMemo(() => {
     if (!signal) return null
     const rate = signal.indicators.close
     const suggestedKRW = signal.decision.actionRequired && signal.decision.suggestedTradeKRW < 0
@@ -560,6 +573,14 @@ export default function FxRegimePage() {
       treasuryInputs.avgAcquisitionRate,
       rate,
     )
+    return { rate, requestedFx, budget }
+  }, [signal, availableFx, treasuryInputs.quarterLossCapKRW,
+      treasuryInputs.realizedLossThisQuarterKRW, treasuryInputs.fxHoldingFx,
+      treasuryInputs.avgAcquisitionRate])
+
+  // ⭐ 오늘의 결론 — 화면 최상단. 이 카드 하나만 보고 나가도 업무가 되도록 한다.
+  const verdict = useMemo(() => {
+    if (!signal || !decisionBudget) return null
     const bep = treasuryInputs.avgAcquisitionRate > 0
       ? bepStats(series, treasuryInputs.avgAcquisitionRate, 750)
       : null
@@ -567,13 +588,12 @@ export default function FxRegimePage() {
       signal, currency,
       holdingFx:   treasuryInputs.fxHoldingFx,
       avgCostRate: treasuryInputs.avgAcquisitionRate,
-      allowedFx:   budget.allowedFx,
-      requestedFx,
+      allowedFx:   decisionBudget.budget.allowedFx,
+      requestedFx: decisionBudget.requestedFx,
       pctDaysAboveBep: bep?.pctDaysAbove ?? null,
     })
-  }, [signal, currency, series, treasuryInputs.quarterLossCapKRW,
-      treasuryInputs.realizedLossThisQuarterKRW, treasuryInputs.fxHoldingFx,
-      treasuryInputs.avgAcquisitionRate, availableFx])
+  }, [signal, currency, series, decisionBudget,
+      treasuryInputs.fxHoldingFx, treasuryInputs.avgAcquisitionRate])
 
   // 차트 자동 해석 — 지표값을 평이한 문장으로 변환 (fxChartNarrative)
   const narrative = useMemo(() => {
@@ -628,6 +648,22 @@ export default function FxRegimePage() {
           onOpenNarrative={() => setShowNarrative(true)}
         />
       )}
+
+      {/* 매각 지시 등록 — 조치 카드 바로 아래, 화면 최상단(세션26차 7일차).
+          실무자가 가장 필요로 하는 행동을 탭을 열지 않아도 바로 할 수 있게 한다. */}
+      {inputSource === 'live' && canEdit() && signal && decisionBudget && decisionBudget.budget.allowedFx > 0 && (
+        <RegisterOrderPanel
+          currency={currency}
+          company={company}
+          allowedFx={decisionBudget.budget.allowedFx}
+          rate={decisionBudget.rate}
+          avgCostRate={treasuryInputs.avgAcquisitionRate}
+          onRegister={registerRegimeOrder}
+        />
+      )}
+
+      {/* 조치 이력 — 과거 특정 날짜의 조치 카드 재조회(세션26차 7일차) */}
+      <RegimeHistoryCard company={company} currency={currency} />
 
       {/* 근거를 보고 싶은 사람만 여는 영역 */}
       <details open={detailsOpen} onToggle={e => setDetailsOpen((e.target as HTMLDetailsElement).open)}>
@@ -736,9 +772,6 @@ export default function FxRegimePage() {
           avgCostRate={treasuryInputs.avgAcquisitionRate}
           quarterCapKRW={treasuryInputs.quarterLossCapKRW}
           usedLossKRW={treasuryInputs.realizedLossThisQuarterKRW}
-          // 시뮬레이션 값으로 실제 매각 지시를 만들면 안 된다 — live 모드에서만 노출한다.
-          onRegisterOrder={inputSource === 'live' && canEdit() && signal
-            ? registerRegimeOrder : undefined}
         />
       )}
 

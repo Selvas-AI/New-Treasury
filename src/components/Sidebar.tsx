@@ -23,8 +23,6 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { to: '/dashboard', label: '통합 상황판', icon: '⊞', slug: 'dashboard' },
       { to: '/policy',    label: '자금정책',    icon: '📋', slug: 'policy'    },
-      // 기본 비공개 — 사용자 관리에서 별도 메뉴 권한을 받은 계정만 표시된다.
-      { to: '/fx-regime', label: 'FX 리짐 전략', icon: '🧭', slug: 'fx-regime' },
     ],
   },
   {
@@ -43,14 +41,26 @@ const NAV_GROUPS: NavGroup[] = [
       { to: '/daily-report-list', label: '일별 자금일보 목록', icon: '📅', slug: 'daily' },
     ],
   },
+  // 세션26차 7일차 FX 메뉴 개편 — 환율현황·외화거래명세(구 외화원장, 구 이력관리)·
+  // FX 리짐 전략(구 DASHBOARD)이 서로 다른 카테고리에 흩어져 있던 것을 하나로 묶었다.
+  // FX 정책 기준은 별도 메뉴로 두지 않는다 — 실무자가 필요한 발의 기능은 FX 리짐
+  // 전략의 조치 카드로 이관했고, 정책 편집은 자금정책 페이지 안에서 컨텍스트를
+  // 유지하는 게 낫다(같은 8일차 후속 조정).
+  {
+    section: '💱 외화(FX) 관리',
+    items: [
+      // 기본 비공개 — 사용자 관리에서 별도 메뉴 권한을 받은 계정만 표시된다.
+      { to: '/fx-regime',         label: 'FX 리짐 전략',    icon: '🧭', slug: 'fx-regime'  },
+      { to: '/fx-ledger',         label: '외화거래명세',    icon: '📚', slug: 'fx-ledger'  },
+      { to: '/fx',                label: '환율 현황',       icon: '💱', slug: 'fx'        },
+    ],
+  },
   {
     section: '이력관리',
     items: [
       { to: '/history',       label: '자금 변동 이력', icon: '📂', slug: 'history'   },
       { to: '/issue-history', label: '이슈 이력',      icon: '🔔', slug: 'history'   },
-      { to: '/fx',                 label: '환율 현황',     icon: '💱', slug: 'fx'               },
-      { to: '/fx-ledger',         label: '외화 원장', icon: '📚', slug: 'fx-ledger' },
-      { to: '/audit-log',         label: '변경 이력 로그', icon: '🗒️', slug: 'audit-log'       },
+      { to: '/audit-log',     label: '변경 이력 로그', icon: '🗒️', slug: 'audit-log' },
     ],
   },
 ]

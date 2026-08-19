@@ -112,7 +112,7 @@ export function FxLotAdminTab({ ledger, trades, company, userCode, canEdit, canD
       memo, userCode })
     setSaving(false)
     if (err) setMessage(err.includes('does not exist') || err.includes('schema cache')
-      ? '외화 원장 테이블이 아직 없습니다. docs/db/fx_lot_ledger.sql을 먼저 적용하세요.' : err)
+      ? '외화거래명세 테이블이 아직 없습니다. docs/db/fx_lot_ledger.sql을 먼저 적용하세요.' : err)
     else { setMessage('개시 로트가 등록되었습니다.'); setShowOpening(false); setAmount(0); setRate(0); setMemo(''); onChanged() }
   }
 

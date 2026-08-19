@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { usePolicyDashboard } from '../../hooks/usePolicyDashboard'
 import { useFx } from '../../hooks/useFx'
@@ -15,7 +16,6 @@ import FxRegimeStandardTab from './FxRegimeStandardTab'
 import { useFxTradeHistory } from '../../hooks/useFxTradeHistory'
 import { useToast } from '../../contexts/ToastProvider'
 import { addBizDays, bizDaysBetween, todayStr } from '../../lib/bizDay'
-import { CompleteTradeModal } from '../fx/CompleteTradeModal'
 import type { Company, FxCode, FxTradeRecord } from '../../types'
 
 // 4개 통화 (ECOS 지원 통화만 — CNY 제외)
@@ -55,22 +55,23 @@ interface TradeModal { code: FxCode | 'total'; excessKrw: number; discretionary:
 
 // 이행 대기 매각 지시 목록 — D-day(영업일 기준)로 기한 임박/초과를 강조
 //
-// ⚠ "체결 등록" 은 반드시 실제 체결환율을 입력받는 CompleteTradeModal 을 거친다.
-//   과거엔 클릭 즉시 현재 시장환율로 완료 처리했는데, 그건 실제 체결가와 다를 수
-//   있는 정확도 문제였다(세션26차 메뉴 정합성 정리에서 수정).
+// ⚠ 체결 등록·취소 같은 실행 액션은 여기서 직접 하지 않는다 — 외화 원장(세션26차
+//   4~5일차 통폐합)의 "매각 지시 관리" 탭이 유일한 실행 화면이다("발의는 여러 곳,
+//   집행·추적은 한 곳" 원칙, 세션26차 7일차 FX 메뉴 개편). 이 화면은 발의(제안)와
+//   기한 모니터링만 담당하고, "체결 등록" 클릭 시 원장으로 이동한다.
 // 지시 하나가 여러 영업일에 걸쳐 나눠 체결될 수 있어(부분 체결), 잔여 수량이
 // 남아있는 한('부분체결' 상태) 목록에 계속 남는다. 로트별 소진 상세는 이
 // 화면엔 없다 — 상세 감사는 외화 원장(/fx-ledger, 매각 지시 관리 탭)이 정본이다.
-function SellOrderList({ orders, onComplete, onDelete, canEdit, canDeleteOrder }: {
+function SellOrderList({ orders, company, onDelete, canEdit, canDeleteOrder }: {
   orders: FxTradeRecord[]
-  onComplete: (id: string, amount: number, rate: number, fillDate: string) => Promise<string | null>
+  company: Company
   onDelete: (id: string) => Promise<string | null>
   canEdit: boolean
   canDeleteOrder: boolean
 }) {
+  const navigate = useNavigate()
   const today = todayStr()
   const sorted = [...orders].sort((a, b) => (a.due_date ?? '').localeCompare(b.due_date ?? ''))
-  const [completing, setCompleting] = useState<FxTradeRecord | null>(null)
   // 삭제는 확정 이력이 없는 '발의' 건만 — '승인' 건은 먼저 취소한 뒤 외화매매거래
   // 이력에서 삭제한다(FIFO 소진이 없는 상태에서만 삭제 허용하는 정책과 일관).
   const [deleting, setDeleting] = useState<FxTradeRecord | null>(null)
@@ -117,22 +118,15 @@ function SellOrderList({ orders, onComplete, onDelete, canEdit, canDeleteOrder }
                 </button>
               )}
               {canEdit && (
-                <button onClick={() => setCompleting(o)}
+                <button onClick={() => navigate(`/fx-ledger/${company}?tab=orders&currency=${o.currency}`)}
                   className="text-[11px] px-2 py-1 bg-green-600 hover:bg-green-700 text-white rounded font-medium">
-                  체결 등록
+                  체결 등록 →
                 </button>
               )}
             </div>
           </div>
         )
       })}
-      {completing && (
-        <CompleteTradeModal
-          record={completing}
-          onClose={() => setCompleting(null)}
-          onSubmit={(amount, rate, fillDate) => onComplete(completing.id, amount, rate, fillDate)}
-        />
-      )}
       {deleting && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{ background: 'rgba(0,0,0,0.45)' }}
@@ -672,19 +666,7 @@ export default function FxPolicyTab({ company }: { company: Company }) {
         <SellOrderList
           orders={tradeHist.data.filter(t => t.direction === 'sell'
             && (t.status === '발의' || t.status === '승인' || t.status === '부분체결') && t.due_date)}
-          onComplete={async (id, amount, rate, fillDate) => {
-            const rec = tradeHist.data.find(t => t.id === id)
-            const remainingBefore = rec ? rec.amount_fx - (rec.filled_amount ?? 0) : 0
-            const { error } = await tradeHist.fillTrade(id, amount, rate, fillDate, user?.label ?? '')
-            if (error) return error.message ?? String(error)
-            await tradeHist.load()
-            // 전량 체결이면 이 목록(이행 대기)에서 바로 사라진다 — 조용히 없어지는 것처럼
-            // 보이지 않도록 완료 여부를 명시적으로 안내한다.
-            toast.success(amount >= remainingBefore - 0.000001
-              ? '체결 등록 완료 — 지시가 전량 체결되어 완료 처리되었습니다.'
-              : `체결 등록 완료 — 잔여 ${(remainingBefore - amount).toLocaleString()} 남았습니다.`)
-            return null
-          }}
+          company={company}
           onDelete={async id => {
             try {
               await tradeHist.remove(id)

@@ -1332,6 +1332,7 @@ baf8ef9 fix: 투자 집행 연동 저장 실패 수정 + 자산 구분(운용/�
 - **`docs/db/fx_trade_fill_reverse_rpc.sql`** ⭐ — RPC `reverse_fx_trade_fill` (세션26차 4일차, 개별 체결 1건만 취소). **실행 완료** (2026-08-19 사용자 확인, 브라우저 실화면에서 "이 체결만 취소" 버튼 정상 노출까지 스크린샷 확인).
 - **`docs/db/fx_lots_daily_report_source.sql`** ⭐ — `fx_lots_insert_authenticated` 정책에 `'daily_report_item'` 추가 + 신규 RPC `consume_fx_lots_for_source` (세션26차 6일차, 자금일보 ↔ 외화 원장 자동 반영). **실행 필요**. 미실행 시 원장 ①탭 "자금일보 미반영 증감" 패널의 "원장 반영" 버튼이 유입은 RLS 거부, 유출은 함수 없음 오류를 반환.
 - **`docs/db/fx_ledger_reconcile_ignore.sql`** ⭐ — `fx_ledger_reconcile_ignored` 테이블(세션26차 6일차 후속, 개시일 이전 미반영 항목 "무시" 처리). **실행 필요**. 미실행 시 "무시" 버튼이 테이블 없음 오류를 반환(원장 반영/타임라인 표시 자체는 영향 없음).
+- **`docs/db/fx_regime_snapshot_history.sql`** ⭐ — `fx_regime_snapshot_history` append-only 이력 테이블(세션26차 7일차, 조치 카드 일자별 조회). **실행 필요**. 미실행 시 이력 기록이 조용히 스킵되고(recordHistory insert 실패, 판정 자체엔 영향 없음) "조치 이력 조회" 카드가 항상 "기록된 이력이 없습니다"로 표시됨.
 
 ### ⚠️ 비밀번호 찾기/초기화 — 배포 전 필수 수동 작업 3건 (세션18차)
 ```
@@ -2493,6 +2494,115 @@ FIFO 소진 확인, `daily` 값 재수정 시 미반영액 재계산 확인)은 
    를 결과에서 제외한다.
 
 검증: tsc -b 0 errors, eslint 0 errors, vitest 247/247 유지.
+
+---
+
+### 2026-08-19 세션26차 7일차 — 조치 이력 조회 + FX 메뉴 전면 개편 ⭐
+
+#### Part 1: FX 리짐 조치 카드 일자별 조회
+사용자 리포트: 외화 매각으로 리짐 조치가 "조치 불필요"로 바뀌면 그 이전 상황(목표비중·
+현재비중·권고액·발생일)이 사라져 과거 의사결정을 추적할 수 없음. 원인: `fx_regime_snap_*`
+(policy_params, 세션26차 Phase4)는 판정할 때마다 같은 행을 **덮어쓴다**.
+
+- `src/lib/fxRegimeSnapshot.ts` — `syncRegimeSnapshot`에 선택적 `recordHistory` 콜백 인자
+  추가. 값이 실제로 바뀔 때만(=기존에 이미 하던 "변경 감지" 그 지점) 호출된다. 함수 자체는
+  여전히 DB 를 모르는 순수 로직 유지(테스트는 DI 목으로 그대로 통과, 파라미터 미전달 시
+  기존 동작과 100% 동일).
+- **`docs/db/fx_regime_snapshot_history.sql`** ⭐ (신규, **실행 필요**) — append-only 이력
+  테이블 `fx_regime_snapshot_history`(update/delete 정책 없음). 이 기능 도입 이후 시점부터만
+  쌓인다 — 과거로 소급 복원은 불가(환율 이력은 있어도 그 시점의 총자금·FX보유액 등은
+  기록이 안 남아있어서).
+- `src/hooks/useFxRegimeSnapshotHistory.ts` (신규) — 법인+통화 이력 조회 + `asOfDate(date)`
+  (선택한 날짜 이하 가장 최근 스냅샷 탐색).
+- `src/components/fxRegime/RegimeHistoryCard.tsx` (신규) — VerdictCard 바로 아래 접이식
+  카드. 날짜 입력 + 최근 기록 칩(클릭 시 해당일 조회). 실시간 판정(VerdictCard)의 전체
+  재현이 아니라 스냅샷에 저장된 4개 값만 보여주는 경량 조회임을 명확히 함.
+- `src/pages/FxRegimePage.tsx` — `company`를 넘겨 실제 insert 수행하는 `recordRegimeHistory`
+  콜백을 `syncRegimeSnapshot`에 주입, `RegimeHistoryCard` 마운트.
+
+#### Part 2: FX 메뉴 전면 개편 — "발의는 여러 곳, 집행·추적은 한 곳"
+사용자 리포트: FX 관련 화면이 4곳(환율현황·외화원장·FX리짐전략·FX정책)에 흩어져 있고,
+그중 매각 지시 발의→체결 워크플로우가 **3곳에 중복 구현**(외화원장②/FX정책④/FX리짐②)돼
+있어 "체결은 어디서 하지?" 혼란이 있었음. 성격이 다른 발의 트리거(정책위원회/리짐권고/
+실무수동)까지 통합할 필요는 없지만, 실행·추적 UI는 하나로 모으기로 함.
+
+- **사이드바 재편**(`src/components/Sidebar.tsx`) — 신규 섹션 `💱 외화(FX) 관리`
+  (환율현황/외화원장/FX리짐전략/FX정책 기준 바로가기). FX 리짐 전략은 DASHBOARD에서,
+  환율현황·외화원장은 이력관리에서 이동. 자금정책 페이지의 "6개 정책 영역" 탭 묶음
+  자체는 유지 — FX 정책만 별도로 빼내지 않고 딥링크만 추가.
+- **`src/pages/PolicyPage.tsx`** — `?tab=fx&company=법인명` 쿼리스트링으로 최초 렌더 시
+  `policyTab`/`companyTab`을 바로 세팅(이후는 로컬 state, 기존 라우트 `:company` 파라미터는
+  원래도 안 읽고 있었음 — 이번에 쿼리스트링 방식으로 새로 지원).
+- **`src/components/policy/FxPolicyTab.tsx`** — `SellOrderList`에서 `CompleteTradeModal` 직접
+  호출 제거. "체결 등록" 클릭 시 `/fx-ledger/{company}?tab=orders&currency={통화}`로 이동만
+  (실행은 외화 원장에서). 발의(재량 매각 지시 등록)·삭제(FIFO 미소진 발의 건)는 그대로 유지 —
+  체결/취소만 원장으로 넘김.
+- **`src/components/fxRegime/DecisionTab.tsx`** — 원래도 자체 체결 UI는 없었음(발의만 하고
+  "기존 워크플로우를 거친다"고 안내만 하던 상태). 등록 성공 메시지에 "외화 원장에서
+  승인·체결 →" 링크(`/fx-ledger/{company}?tab=orders&currency={통화}`) 추가.
+- **`src/pages/FxLedgerPage.tsx`** — `?currency=` 쿼리스트링도 초기 통화 탭에 반영(위 두
+  링크가 필터까지 미리 맞춰서 랜딩하도록).
+- **잠긴 필드 안내 링크 보강** — `FxRegimePage.tsx`의 "자금정책 관리에서 변경 →" 링크를
+  `/policy/{company}` → `/policy?tab=fx&company={company}`로 교체(딥링크 대상이 새로 생겨서
+  가능해짐 — 전에는 PolicyPage가 쿼리스트링을 안 읽어서 만들 수 없었음).
+
+**건드리지 않음**: DB 스키마(신규 테이블 1개 제외 — 조치 이력용), 매각 지시 발의(propose)
+경로 3곳 전부(정책위원회·리짐권고·실무수동은 여전히 각자 발의 가능 — 통합한 건 실행·추적
+UI뿐).
+
+검증: tsc -b 0 errors, eslint 0 errors, vitest 247/247 유지.
+
+---
+
+### 2026-08-19 세션26차 8일차 — FX 메뉴 후속 다듬기 + 외화거래명세 레이아웃 개편
+
+세션26차 7일차 개편 직후 사용자 후속 피드백 4건.
+
+#### 1) 사이드바 — FX 정책 기준 링크 제거, 순서·이름 정리
+`외화(FX) 관리` 섹션에서 "FX 정책 기준" 항목 삭제(실무자가 필요한 발의 기능이 아래 2)로
+이관됐으므로 불필요). 순서를 `FX 리짐 전략 → 외화거래명세 → 환율 현황`으로, "외화 원장"
+라벨을 "외화거래명세"로 변경. `PolicyPage.tsx`의 `?tab=fx&company=` 딥링크 지원 자체는
+남겨둠(FxRegimePage의 "자금정책 관리에서 변경 →" 잠긴 필드 안내 링크가 계속 사용).
+
+#### 2) FX 리짐 전략 — 매각 지시 등록을 조치 카드 바로 아래로
+"② 환전 판단" 탭 안에 있던 `RegisterOrderPanel`을 독립 파일
+(`src/components/fxRegime/RegisterOrderPanel.tsx`)로 추출해 VerdictCard 바로 아래(화면
+최상단, 탭과 무관하게 항상 보임)로 옮겼다. 분기 손실한도 계산(`lossBudget`)을
+`decisionBudget` useMemo로 앞당겨 VerdictCard·RegisterOrderPanel·DecisionTab이 공유.
+DecisionTab은 이제 분석(손익현황·손익분기·분할실현계획)만 하고 등록 버튼은 없다 —
+"실제 매각 지시 등록은 화면 최상단 조치 카드에서" 안내만 남김.
+
+#### 3) 외화거래명세(FxLedgerTab) 레이아웃 전면 개편
+- **7:3 그리드**: 원장 표(왼쪽 7)와 "자금일보 미반영" 카드(오른쪽 3)를 한 행에 배치
+  (`grid lg:grid-cols-[7fr_3fr]`). 미반영 카드 내부도 좁은 폭에 맞춰 세로 스택으로 재배치.
+- **10행 스크롤**: 원장 표를 `max-h-[26rem] overflow-auto` 컨테이너에 넣고 헤더를
+  `sticky top-0`으로 고정 — 대략 10행 보이고 나머지는 스크롤.
+- **계좌유형 필터**: 전체/보통예금/MMDA/정기예금 탭 추가. FIFO 소진 자체는 서버가 이미
+  취득일 순으로 정확히 처리하므로(계좌유형 무관, term_deposit만 만기 전 제외) 별도 재계산
+  없이 **표시할 유입(로트) 행만 필터**한다 — 유출(체결) 행은 항상 전체 표시(하나의 체결이
+  여러 유형의 로트를 동시에 소진할 수 있어서).
+- **CSV 이관 흔적 숨김**: "내용" 열에 붙어 있던 원본 memo(`2026-08-11 개시재고 ·
+  demand_deposit · import-key:...`) 표시를 제거 — 계좌유형·만기 라벨만 남김. 데이터
+  자체(memo 컬럼)는 그대로 유지, 계좌유형 교정(로트 설정 탭)에는 계속 쓰인다.
+  ⚠ **금지**: memo 컬럼 자체를 지우거나 비우지 말 것 — `intentFromMemo()`(계좌유형 교정)가
+  이 텍스트에서 원래 계좌유형·만기를 복원한다.
+- **금액 컬럼 재구성**: 기존 "금액"(부호 있는 단일 값) + "잔액"(누적 러닝밸런스) 두 컬럼을
+  없애고, 유입(로트) 행에 **최초유입/처분금액/잔액** 3컬럼으로 교체(로트 자신의
+  `originalAmount`/`originalAmount-remainingAmount`/`remainingAmount`, 전부 서버가 이미
+  FIFO로 정확히 계산해 둔 값 — 클라이언트 재계산 없음). 유출(체결) 행은 처분금액에만
+  `-금액` 표시, 나머지 두 칸은 `—`. 러닝밸런스 재구성 로직을 없앤 대신, 잔액 무결성 확인은
+  `lots.reduce(remainingAmount 합) vs ledger.totalAmount` 직접 비교로 단순화(화면에는
+  경고 배너로만 노출, 표에는 안 보이는 로트 필드를 그대로 신뢰).
+
+#### 4) 탭 이름 변경
+`매각 지시 관리` → `외화매도이력`, `로트 설정` → `데이터 등록`(TAB_LABEL만 변경, 내부
+컴포넌트 파일명 `FxOrdersTab.tsx`/`FxLotAdminTab.tsx`는 유지). 연동된 다른 화면의 안내
+문구(FxPolicyTab의 "체결 등록 →" 이동 버튼, FxLedgerTab의 "이행 대기" 배너 버튼, 펼쳐보기
+안내문)도 새 이름에 맞춰 업데이트. "외화 원장" 명칭이 남아있던 사용자 관리 메뉴 라벨,
+자금일보 미반영 배너, 환율 현황 페이지 링크도 "외화거래명세"로 통일.
+
+검증: tsc -b 0 errors, eslint 0 errors, vitest 247/247 유지. DB 마이그레이션 불필요(전부
+클라이언트 레이아웃/라우팅/네이밍 변경).
 
 ---
 

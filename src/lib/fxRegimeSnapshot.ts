@@ -69,6 +69,17 @@ interface SnapshotWriter extends SnapshotReader {
   set: (key: string, value: number | null, text: string | null, updatedBy: string) => Promise<string | null>
 }
 
+/** 히스토리 1건 — 실제 저장 방식(DB 테이블 등)은 호출부가 주입한다(테스트 가능성 유지). */
+export interface RegimeSnapshotHistoryEntry {
+  currency: string
+  targetPct: number | null
+  currentPct: number | null
+  suggestKRW: number
+  sinceDate: string | null
+  snapshotDate: string
+  capturedBy: string
+}
+
 /**
  * 판정 결과를 스냅샷에 반영한다. **변경이 없으면 아무것도 쓰지 않는다.**
  *
@@ -76,6 +87,11 @@ interface SnapshotWriter extends SnapshotReader {
  *   조치 불필요 → 권고 발생: 오늘로 설정
  *   권고 지속:              그대로 둔다 (경과일이 늘어난다)
  *   권고 → 조치 불필요:      지운다
+ *
+ * `recordHistory` 를 주입하면 값이 바뀔 때마다(=아래에서 실제로 쓸 때만) 이력 1건을
+ * 남긴다(세션26차 7일차 — 스냅샷은 덮어쓰기라 "매각 후 조치 카드가 사라져 그 당시
+ * 상황을 추적할 수 없다"는 문제가 있었다). 이 함수 자체는 DB 를 모르는 순수 로직으로
+ * 유지한다 — 실제 insert 는 호출부(FxRegimePage.tsx)가 주입.
  *
  * @returns 실제로 쓴 키 개수 (0 = 변경 없음)
  */
@@ -85,6 +101,7 @@ export async function syncRegimeSnapshot(
   next: { targetPct: number | null; currentPct: number | null; suggestKRW: number; asOf: string },
   today: string,
   updatedBy: string,
+  recordHistory?: (entry: RegimeSnapshotHistoryEntry) => Promise<void>,
 ): Promise<number> {
   const prev = readRegimeSnapshot(params, currency)
   const prevSuggest = prev?.suggestKRW ?? 0
@@ -97,6 +114,11 @@ export async function syncRegimeSnapshot(
     && prev.targetPct === next.targetPct
     && prev.currentPct === next.currentPct
   if (unchanged) return 0
+
+  let nextSince: string | null
+  if (suggest > 0 && prevSuggest === 0) nextSince = today
+  else if (suggest === 0 && prevSuggest > 0) nextSince = null
+  else nextSince = prev?.since ?? null
 
   const writes: Promise<string | null>[] = [
     params.set(REGIME_SNAPSHOT_KEYS.targetPct(currency),  next.targetPct,  null, updatedBy),
@@ -115,6 +137,14 @@ export async function syncRegimeSnapshot(
   //   PostgREST 가 409 를 반환할 수 있다.
   let n = 0
   for (const w of writes) { await w; n++ }
+
+  if (recordHistory) {
+    await recordHistory({
+      currency, targetPct: next.targetPct, currentPct: next.currentPct,
+      suggestKRW: suggest, sinceDate: nextSince, snapshotDate: next.asOf, capturedBy: updatedBy,
+    })
+  }
+
   return n
 }
 

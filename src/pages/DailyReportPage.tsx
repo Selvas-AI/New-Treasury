@@ -364,11 +364,11 @@ function PendingLedgerReconcileBanner({ company }: { company: Company }) {
     <div className="no-print mx-6 mt-3 px-4 py-2.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg shrink-0">
       <div className="flex items-center justify-between gap-3">
         <p className="text-xs font-semibold text-blue-800 dark:text-blue-300">
-          📚 외화 원장 미반영 증감 {totalCount}건 — 자금일보 잔액 변동이 아직 원장에 기록되지 않았습니다
+          📚 외화거래명세 미반영 증감 {totalCount}건 — 자금일보 잔액 변동이 아직 원장에 기록되지 않았습니다
         </p>
         <button onClick={() => navigate('/fx-ledger?tab=ledger')}
           className="text-xs px-2.5 py-1 border border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 rounded hover:bg-blue-100 dark:hover:bg-blue-900/30 whitespace-nowrap">
-          외화 원장에서 반영 →
+          외화거래명세에서 반영 →
         </button>
       </div>
       <ul className="mt-1.5 space-y-1">

@@ -67,7 +67,7 @@ const MENU_SLUGS = [
   { slug: 'fx',        label: '환율현황'   },
   { slug: 'policy',    label: '자금정책'   },
   { slug: 'fx-regime', label: '환율 국면'  },
-  { slug: 'fx-ledger', label: '외화 원장' },
+  { slug: 'fx-ledger', label: '외화거래명세' },
 ]
 const ROLE_BADGE: Record<string, string> = {
   master:  'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',

@@ -1,4 +1,5 @@
 ﻿import { useState, useMemo, useEffect, type ReactNode, type Dispatch, type SetStateAction } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { usePolicyMeetings } from '../hooks/usePolicyMeetings'
 import { usePolicyDecisions } from '../hooks/usePolicyDecisions'
@@ -998,9 +999,18 @@ export default function PolicyPage() {
   const threads     = usePolicyThreads(decisionIds)
 
   // ── 정책 유형 탭 + 법인 탭 ────────────────────────────────────────────
-  const [policyTab, setPolicyTab]   = useState<PolicyTab>('decisions')
+  // ?tab=fx&company=법인명 으로 딥링크 진입 지원(사이드바 "FX 정책 기준" 바로가기,
+  // 세션26차 7일차 FX 메뉴 개편) — 최초 렌더에서만 읽고 이후는 로컬 state로 관리한다.
+  const [searchParams] = useSearchParams()
+  const [policyTab, setPolicyTab]   = useState<PolicyTab>(() => {
+    const t = searchParams.get('tab')
+    return (t === 'fx' || t === 'fvpl' || t === 'banks' || t === 'forecast' || t === 'plan_c' || t === 'kpi') ? t : 'decisions'
+  })
   // 단일 법인 계정은 '전체' 없이 해당 법인으로 고정
-  const [companyTab, setCompanyTab] = useState<Company | 'all'>('all')
+  const [companyTab, setCompanyTab] = useState<Company | 'all'>(() => {
+    const c = searchParams.get('company')
+    return (c && hasCompany(c as Company)) ? c as Company : 'all'
+  })
 
   // 접근 가능한 법인이 1개뿐이면 해당 법인으로 자동 고정
   useEffect(() => {

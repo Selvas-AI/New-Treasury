@@ -16,7 +16,7 @@ const CARD = 'rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:bord
 
 type TabKey = 'ledger' | 'orders' | 'lots' | 'pnl'
 const TAB_LABEL: Record<TabKey, string> = {
-  ledger: '📒 원장', orders: '📝 매각 지시 관리', lots: '⚙️ 로트 설정', pnl: '📊 환차손익 요약',
+  ledger: '📒 원장', orders: '📝 외화매도이력', lots: '⚙️ 데이터 등록', pnl: '📊 환차손익 요약',
 }
 
 function Stat({ label, value }: { label: string; value: string }) {
@@ -38,7 +38,10 @@ export default function FxLedgerPage() {
   const { company } = usePageCompany('/fx-ledger')
   const { user, canEdit, canDelete } = useAuth()
   const [searchParams] = useSearchParams()
-  const [currency, setCurrency] = useState<FxCode>('USD')
+  const [currency, setCurrency] = useState<FxCode>(() => {
+    const c = searchParams.get('currency')
+    return (CURRENCIES as readonly string[]).includes(c ?? '') ? c as FxCode : 'USD'
+  })
   const [activeTab, setActiveTab] = useState<TabKey>(() => {
     const t = searchParams.get('tab')
     return t === 'orders' || t === 'lots' || t === 'pnl' ? t : 'ledger'
@@ -87,7 +90,7 @@ export default function FxLedgerPage() {
   return <div className="space-y-4 p-4 md:p-6">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div>
-        <h1 className="text-xl font-bold text-gray-900 dark:text-slate-100">외화 원장</h1>
+        <h1 className="text-xl font-bold text-gray-900 dark:text-slate-100">외화거래명세</h1>
         <p className="text-xs text-gray-500 dark:text-slate-400">{company} · 재고(FIFO)와 매각 지시 워크플로우를 한 화면에서 관리합니다.</p>
       </div>
     </div>
