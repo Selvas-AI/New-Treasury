@@ -250,14 +250,34 @@ export function useFxLots(company: string, currency: string) {
     return err?.message ?? null
   }, [company, currency, refetch])
 
+  /**
+   * 외화 유출 수동 등록 — 자금일보/매각 워크플로우를 거치지 않는 외화 지급을
+   * FIFO로 직접 소진한다(세션26차 9일차, "데이터 등록" 탭 유출 입력).
+   * source_type='manual' + 매번 새 source_id — 반복 등록을 막을 자연키가 없어
+   * daily_report_item 처럼 unique 제약으로 중복을 막지 못한다. 사용자가 실수로
+   * 두 번 누르면 두 건이 남으므로, 화면에서 저장 확정 버튼을 한 번만 누르게 안내한다.
+   */
+  const addManualOutflow = useCallback(async (input: {
+    date: string; amount: number; rate: number; memo: string; userCode: string
+  }) => {
+    const sourceId = crypto.randomUUID()
+    const { error: err } = await restRpc('consume_fx_lots_for_source', {
+      p_company: company, p_currency: currency, p_source_type: 'manual',
+      p_source_id: sourceId, p_amount: input.amount, p_disposal_rate: input.rate,
+      p_disposed_date: input.date, p_disposed_by: input.userCode,
+    })
+    if (!err) await refetch()
+    return err?.message ?? null
+  }, [company, currency, refetch])
+
   const today = new Date().toISOString().slice(0, 10)
   return useMemo(() => ({ lots, loading, error, refetch, addOpeningLot,
     importOpeningLots, updateLot, deleteLot, planLotRepair, applyLotRepair,
-    reconcileDailyInflow, reconcileDailyOutflow,
+    reconcileDailyInflow, reconcileDailyOutflow, addManualOutflow,
     totalAmount: remainingAmount(lots),
     availableAmount: availableAmount(lots, today), lockedAmount: remainingAmount(lots)-availableAmount(lots, today),
     expectedInterestFx: lots.reduce((sum, lot) => sum + expectedTermInterestFx(lot), 0),
     bookRate: weightedBookRate(lots) }),
   [lots, loading, error, refetch, addOpeningLot, importOpeningLots, updateLot, deleteLot,
-   planLotRepair, applyLotRepair, reconcileDailyInflow, reconcileDailyOutflow, today])
+   planLotRepair, applyLotRepair, reconcileDailyInflow, reconcileDailyOutflow, addManualOutflow, today])
 }
