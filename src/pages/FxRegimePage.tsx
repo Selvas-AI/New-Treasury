@@ -42,6 +42,7 @@ import NarrativeModal from '../components/fxRegime/NarrativeModal'
 import DecisionTab from '../components/fxRegime/DecisionTab'
 import VerdictCard from '../components/fxRegime/VerdictCard'
 import RegisterOrderPanel from '../components/fxRegime/RegisterOrderPanel'
+import PendingOrdersCard from '../components/fxRegime/PendingOrdersCard'
 import { buildVerdict } from '../lib/fxVerdict'
 import { lossBudget, bepStats } from '../lib/fxPnl'
 import { fmtKRW, generateUUID } from '../lib/format'
@@ -392,6 +393,12 @@ export default function FxRegimePage() {
   //    (세션26차 — 수동 입력으로 총자금까지 바꿔 권고를 만들 수 있던 잠금 우회 경로 차단)
   const [inputSource, setInputSource] = useState<InputSource>('live')
   const actualTradeHistory = useFxTradeHistory(company)
+  // 이 통화에 걸린, 아직 전량 체결되지 않은 리짐 매각 지시 — 라이브 판정이 "조치
+  // 불필요"로 바뀌어도 지시가 남아있는 한 계속 보여준다(세션26차 8일차 후속).
+  const pendingRegimeOrders = useMemo(
+    () => actualTradeHistory.data.filter(t => t.currency === currency && t.order_type === 'regime'
+      && (t.status === '발의' || t.status === '승인' || t.status === '부분체결')),
+    [actualTradeHistory.data, currency])
 
   // 판정 전 경로는 useFxRegime 하나로 통일한다 — 정책 화면과 같은 숫자를 봐야 한다.
   const {
@@ -649,17 +656,23 @@ export default function FxRegimePage() {
         />
       )}
 
-      {/* 매각 지시 등록 — 조치 카드 바로 아래, 화면 최상단(세션26차 7일차).
-          실무자가 가장 필요로 하는 행동을 탭을 열지 않아도 바로 할 수 있게 한다. */}
-      {inputSource === 'live' && canEdit() && signal && decisionBudget && decisionBudget.budget.allowedFx > 0 && (
-        <RegisterOrderPanel
-          currency={currency}
-          company={company}
-          allowedFx={decisionBudget.budget.allowedFx}
-          rate={decisionBudget.rate}
-          avgCostRate={treasuryInputs.avgAcquisitionRate}
-          onRegister={registerRegimeOrder}
-        />
+      {/* 매각 지시 등록/이행 현황 — 조치 카드 바로 아래, 화면 최상단(세션26차 7~8일차).
+          실무자가 가장 필요로 하는 행동을 탭을 열지 않아도 바로 할 수 있게 한다.
+          이미 이행 중인 지시가 있으면 신규 발의보다 그 지시의 진행 현황을 우선 보여준다
+          — 라이브 판정이 도중에 "조치 불필요"로 바뀌어도 잔여 체결분을 추적할 수 있어야 한다. */}
+      {pendingRegimeOrders.length > 0 ? (
+        <PendingOrdersCard company={company} currency={currency} orders={pendingRegimeOrders} />
+      ) : (
+        inputSource === 'live' && canEdit() && signal && decisionBudget && decisionBudget.budget.allowedFx > 0 && (
+          <RegisterOrderPanel
+            currency={currency}
+            company={company}
+            allowedFx={decisionBudget.budget.allowedFx}
+            rate={decisionBudget.rate}
+            avgCostRate={treasuryInputs.avgAcquisitionRate}
+            onRegister={registerRegimeOrder}
+          />
+        )
       )}
 
       {/* 조치 이력 — 과거 특정 날짜의 조치 카드 재조회(세션26차 7일차) */}
