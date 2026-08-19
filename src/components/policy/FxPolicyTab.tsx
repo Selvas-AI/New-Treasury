@@ -60,7 +60,7 @@ interface TradeModal { code: FxCode | 'total'; excessKrw: number; discretionary:
 //   있는 정확도 문제였다(세션26차 메뉴 정합성 정리에서 수정).
 // 지시 하나가 여러 영업일에 걸쳐 나눠 체결될 수 있어(부분 체결), 잔여 수량이
 // 남아있는 한('부분체결' 상태) 목록에 계속 남는다. 로트별 소진 상세는 이
-// 화면엔 없다 — 상세 감사는 외화매매거래(FxTradeHistoryPage)가 정본이다.
+// 화면엔 없다 — 상세 감사는 외화 원장(/fx-ledger, 매각 지시 관리 탭)이 정본이다.
 function SellOrderList({ orders, onComplete, onDelete, canEdit, canDeleteOrder }: {
   orders: FxTradeRecord[]
   onComplete: (id: string, amount: number, rate: number, fillDate: string) => Promise<string | null>

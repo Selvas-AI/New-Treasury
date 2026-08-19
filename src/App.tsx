@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom'
 import type { ReactNode } from 'react'
 import AuthProvider from './contexts/AuthContext'
 import IssueCountProvider from './contexts/IssueCountProvider'
@@ -23,7 +23,6 @@ import DataPage from './pages/admin/DataPage'
 import OrgChartPage from './pages/admin/OrgChartPage'
 import DailyReportListPage from './pages/DailyReportListPage'
 import AuditLogPage from './pages/AuditLogPage'
-import FxTradeHistoryPage from './pages/FxTradeHistoryPage'
 import FxRegimePage from './pages/FxRegimePage'
 import FxLedgerPage from './pages/FxLedgerPage'
 import { useHolidays } from './hooks/useHolidays'
@@ -36,6 +35,17 @@ import { useAuth } from './hooks/useAuth'
 function MenuRoute({ slug, children }: { slug: string; children: ReactNode }) {
   const { hasMenu } = useAuth()
   return hasMenu(slug) ? children : <Navigate to="/dashboard" replace />
+}
+
+/**
+ * 옛 /fx-trade-history 경로 호환용 리다이렉트.
+ * 세션26차 4일차 통폐합으로 외화매매거래 워크플로우는 외화 원장(/fx-ledger)의
+ * "매각 지시 관리" 탭으로 이관됐다 — 북마크·딥링크(대시보드 이슈 티커 등)가 계속
+ * 동작하도록 옛 경로를 새 경로 + ?tab=orders 로 보낸다.
+ */
+function FxTradeHistoryRedirect() {
+  const { company } = useParams<{ company?: string }>()
+  return <Navigate to={`/fx-ledger${company ? `/${company}` : ''}?tab=orders`} replace />
 }
 
 /**
@@ -122,11 +132,12 @@ export default function App() {
             <Route path="/daily-report-list"           element={<DailyReportListPage />} />
             <Route path="/daily-report-list/:company"  element={<DailyReportListPage />} />
 
-            {/* 외화매매거래 이력 */}
-            <Route path="/fx-trade-history"           element={<FxTradeHistoryPage />} />
-            <Route path="/fx-trade-history/:company"  element={<FxTradeHistoryPage />} />
+            {/* 외화 원장 (재고 FIFO + 매각 지시 워크플로우 통합, 세션26차 4일차) */}
             <Route path="/fx-ledger" element={<MenuRoute slug="fx-ledger"><FxLedgerPage /></MenuRoute>} />
             <Route path="/fx-ledger/:company" element={<MenuRoute slug="fx-ledger"><FxLedgerPage /></MenuRoute>} />
+            {/* 옛 외화매매거래 경로 — 호환용 리다이렉트 */}
+            <Route path="/fx-trade-history" element={<MenuRoute slug="fx-ledger"><FxTradeHistoryRedirect /></MenuRoute>} />
+            <Route path="/fx-trade-history/:company" element={<MenuRoute slug="fx-ledger"><FxTradeHistoryRedirect /></MenuRoute>} />
 
             {/* 변경 이력 로그 */}
             <Route path="/audit-log"           element={<AuditLogPage />} />

@@ -3,12 +3,14 @@ import type { TreasuryUser, Company, SectionKey, SectionPermission } from '../ty
 
 // 역할별 기본 허용 메뉴 slug
 export const MENU_DEFAULTS: Record<string, string[]> = {
-  // fx-regime / fx-ledger 는 민감한 개발·실원장 메뉴라 역할 기본값에 넣지 않는다.
+  // fx-regime 는 민감한 개발용 메뉴라 역할 기본값에 넣지 않는다.
+  // fx-ledger(외화 원장)는 세션26차 4일차 통폐합 시 기존 외화매매거래 수준(기본 노출)으로
+  // 격상됐다 — 사용자 확인(2026-08-19).
   // master는 hasMenu()에서 항상 허용되고, 그 외 계정은 treasury_users.menus에 명시돼야 한다.
   master:  ['*'],
-  admin:   ['dashboard','daily','input','invest','loans','equity','history','fx','policy'],
-  editor:  ['dashboard','daily','input','invest','loans','equity','history','fx'],
-  viewer:  ['dashboard','policy','invest','loans','equity','history','fx'],
+  admin:   ['dashboard','daily','input','invest','loans','equity','history','fx','fx-ledger','policy'],
+  editor:  ['dashboard','daily','input','invest','loans','equity','history','fx','fx-ledger'],
+  viewer:  ['dashboard','policy','invest','loans','equity','history','fx','fx-ledger'],
 }
 
 // 역할별 섹션 기본 작업 권한 (action_permissions=null 일 때 fallback)

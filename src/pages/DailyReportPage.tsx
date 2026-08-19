@@ -31,9 +31,10 @@ import { readAllRegimeSnapshots, pendingDays } from '../lib/fxRegimeSnapshot'
 import { REGIME_CURRENCIES } from '../lib/fxRegimeInputs'
 import { orderTypeLabel } from '../lib/fxOrderType'
 import { useFxTradeHistory } from '../hooks/useFxTradeHistory'
+import { useFxLedgerReconciliation } from '../hooks/useFxLedgerReconciliation'
 import { bizDaysBetween } from '../lib/bizDay'
-import { fmtKRW } from '../lib/format'
-import type { Company, DailyRecord } from '../types'
+import { fmtKRW, fmtNumber } from '../lib/format'
+import type { Company, DailyRecord, FxCode } from '../types'
 
 
 // ── 인쇄용 카테고리 레이블 ────────────────────────────────────
@@ -341,6 +342,42 @@ function PendingSellOrdersBanner({ company }: { company: string }) {
             </li>
           )
         })}
+      </ul>
+    </div>
+  )
+}
+
+// ── 외화 원장 자동 반영 대기 배너(세션26차 5일차) ──────────────────────────
+// 자금일보 잔액 델타 중 아직 외화 원장(fx_lots)에 반영되지 않은 것이 있으면 안내한다.
+// 실제 반영(적용 환율 입력)은 /fx-ledger 원장 탭에서만 한다 — 여기서는 존재만 알린다.
+const LEDGER_CURRENCIES: FxCode[] = ['USD', 'EUR', 'JPY', 'GBP', 'CNY']
+function PendingLedgerReconcileBanner({ company }: { company: Company }) {
+  const navigate = useNavigate()
+  const perCurrency = LEDGER_CURRENCIES.map(code => ({
+    code, ...useFxLedgerReconciliation(company, code), // eslint-disable-line react-hooks/rules-of-hooks
+  }))
+  const loading = perCurrency.some(c => c.loading)
+  const totalCount = perCurrency.reduce((s, c) => s + c.items.length, 0)
+  if (loading || totalCount === 0) return null
+
+  return (
+    <div className="no-print mx-6 mt-3 px-4 py-2.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg shrink-0">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs font-semibold text-blue-800 dark:text-blue-300">
+          📚 외화 원장 미반영 증감 {totalCount}건 — 자금일보 잔액 변동이 아직 원장에 기록되지 않았습니다
+        </p>
+        <button onClick={() => navigate('/fx-ledger?tab=ledger')}
+          className="text-xs px-2.5 py-1 border border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 rounded hover:bg-blue-100 dark:hover:bg-blue-900/30 whitespace-nowrap">
+          외화 원장에서 반영 →
+        </button>
+      </div>
+      <ul className="mt-1.5 space-y-1">
+        {perCurrency.filter(c => c.items.length > 0).map(c => (
+          <li key={c.code} className="text-xs text-blue-700 dark:text-blue-300">
+            · {c.code} {c.items.length}건 · 합계 {fmtNumber(c.items.reduce((s, i) => s + i.amount, 0), c.code === 'JPY' ? 0 : 2)} {c.code}
+            (최근 {c.items[0].date})
+          </li>
+        ))}
       </ul>
     </div>
   )
@@ -995,6 +1032,7 @@ export default function DailyReportPage() {
       <PendingDecisionsBanner company={resolvedCompany} />
       <PendingRegimeBanner company={resolvedCompany} />
       <PendingSellOrdersBanner company={resolvedCompany} />
+      <PendingLedgerReconcileBanner company={resolvedCompany} />
 
       {/* ── 메인 콘텐츠 ─────────────────────────────────────── */}
       <div className="no-print flex-1 overflow-y-auto px-6 py-4 space-y-4">

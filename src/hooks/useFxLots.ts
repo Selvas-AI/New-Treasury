@@ -218,13 +218,46 @@ export function useFxLots(company: string, currency: string) {
     if (!err) await refetch(); return err?.message ?? null
   }, [refetch])
 
+  /**
+   * 자금일보(운전자금) 잔액 증가분을 원장 유입 로트로 반영한다.
+   * source_type='daily_report_item' + source_id=daily 행의 id — unique(company,currency,
+   * source_type,source_id) 제약이 같은 날짜를 두 번 반영하는 것을 DB 레벨에서 막아준다.
+   * (docs/db/fx_lots_daily_report_source.sql — 사용자 실행 필요)
+   */
+  const reconcileDailyInflow = useCallback(async (input: {
+    dailyId: string; amount: number; rate: number; date: string; userCode: string
+  }) => {
+    const id = crypto.randomUUID()
+    const { error: err } = await restInsert('fx_lots', { id, company, currency,
+      acquired_date: input.date, original_amount: input.amount, remaining_amount: input.amount,
+      acq_rate: input.rate, source_type: 'daily_report_item', source_id: input.dailyId,
+      account_type: 'demand_deposit', annual_interest_rate: 0, maturity_date: null,
+      memo: '자금일보 잔액 증감 자동 반영', created_by: input.userCode })
+    if (!err) await refetch()
+    return err?.message ?? null
+  }, [company, currency, refetch])
+
+  /** 자금일보 잔액 감소분을 FIFO 소진(유출)으로 반영한다. */
+  const reconcileDailyOutflow = useCallback(async (input: {
+    dailyId: string; amount: number; rate: number; date: string; userCode: string
+  }) => {
+    const { error: err } = await restRpc('consume_fx_lots_for_source', {
+      p_company: company, p_currency: currency, p_source_type: 'daily_report_item',
+      p_source_id: input.dailyId, p_amount: input.amount, p_disposal_rate: input.rate,
+      p_disposed_date: input.date, p_disposed_by: input.userCode,
+    })
+    if (!err) await refetch()
+    return err?.message ?? null
+  }, [company, currency, refetch])
+
   const today = new Date().toISOString().slice(0, 10)
   return useMemo(() => ({ lots, loading, error, refetch, addOpeningLot,
     importOpeningLots, updateLot, deleteLot, planLotRepair, applyLotRepair,
+    reconcileDailyInflow, reconcileDailyOutflow,
     totalAmount: remainingAmount(lots),
     availableAmount: availableAmount(lots, today), lockedAmount: remainingAmount(lots)-availableAmount(lots, today),
     expectedInterestFx: lots.reduce((sum, lot) => sum + expectedTermInterestFx(lot), 0),
     bookRate: weightedBookRate(lots) }),
   [lots, loading, error, refetch, addOpeningLot, importOpeningLots, updateLot, deleteLot,
-   planLotRepair, applyLotRepair, today])
+   planLotRepair, applyLotRepair, reconcileDailyInflow, reconcileDailyOutflow, today])
 }

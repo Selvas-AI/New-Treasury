@@ -1,12 +1,12 @@
 import { Fragment, useState, useEffect, useMemo, useCallback } from 'react'
-import { useAuth } from '../hooks/useAuth'
-import { usePageCompany } from '../hooks/usePageCompany'
-import { useFxTradeHistory } from '../hooks/useFxTradeHistory'
-import { getCompanyNames } from '../hooks/useCompanies'
-import { fmtKRW, fmtNumber } from '../lib/format'
-import { CompleteTradeModal } from '../components/fx/CompleteTradeModal'
-import { orderTypeLabel } from '../lib/fxOrderType'
-import type { Company, FxTradeRecord, FxTradeFill, FxLotConsumption } from '../types'
+import { useAuth } from '../../hooks/useAuth'
+import { useFxTradeHistory } from '../../hooks/useFxTradeHistory'
+import { getCompanyNames } from '../../hooks/useCompanies'
+import { fmtKRW, fmtNumber } from '../../lib/format'
+import { CompleteTradeModal } from './CompleteTradeModal'
+import { FillConsumptionCard } from './FillConsumptionDetail'
+import { orderTypeLabel } from '../../lib/fxOrderType'
+import type { Company, FxTradeRecord, FxTradeFill, FxLotConsumption } from '../../types'
 
 const FX_CODES = ['USD', 'EUR', 'JPY', 'GBP', 'CNY']
 const STATUS_LIST = ['발의', '승인', '부분체결', '완료', '취소']
@@ -19,11 +19,6 @@ function monthAgoStr() {
   return d.toISOString().slice(0, 10)
 }
 
-function pnlColor(v: number | null) {
-  if (v == null) return 'text-gray-400 dark:text-slate-500'
-  return v >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'
-}
-
 function statusBadge(s: string) {
   const map: Record<string, string> = {
     '발의':   'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-300',
@@ -33,6 +28,11 @@ function statusBadge(s: string) {
     '취소':   'bg-gray-100   dark:bg-slate-700      text-gray-500   dark:text-slate-400',
   }
   return map[s] ?? map['취소']
+}
+
+function pnlColor(v: number | null) {
+  if (v == null) return 'text-gray-400 dark:text-slate-500'
+  return v >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'
 }
 
 // 체결 내역 펼쳐보기 — 체결(fill)마다 소진된 FIFO 로트 상세(장부환율)까지 표시
@@ -70,60 +70,11 @@ function FillDetailRows({ trade, fetchTradeDetail, refreshKey, canReverse, onReq
           <p className="text-xs text-gray-400">아직 등록된 체결이 없습니다.</p>
         ) : (
           <div className="space-y-3">
-            {fills.map((f, i) => {
-              const consumptions = consumptionsByFillId[f.id] ?? []
-              return (
-                <div key={f.id} className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg overflow-hidden">
-                  <div className="flex items-center justify-between gap-3 px-3 py-2 bg-gray-50 dark:bg-slate-900/60 border-b border-gray-200 dark:border-slate-700">
-                    <div className="flex items-center gap-2 text-xs">
-                      <span className="font-semibold px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300">
-                        {i + 1}차 체결
-                      </span>
-                      <span className="text-gray-600 dark:text-slate-300">{f.fill_date}</span>
-                      {f.completed_by && <span className="text-gray-400">· {f.completed_by}</span>}
-                    </div>
-                    <div className="flex items-center gap-3 text-xs tabular-nums">
-                      <span className="text-gray-700 dark:text-slate-200 font-medium">
-                        {fmtNumber(f.amount_fx, f.currency === 'JPY' ? 0 : 2)} {f.currency} @ {fmtNumber(f.completed_rate, 2)}
-                      </span>
-                      <span className={`font-semibold ${pnlColor(f.realized_pnl)}`}>
-                        {f.realized_pnl >= 0 ? '▲' : '▼'} {fmtKRW(Math.abs(f.realized_pnl))}
-                      </span>
-                      {canReverse && (
-                        <button onClick={() => onRequestReverse(f)}
-                          className="text-[11px] px-2 py-0.5 border border-red-200 dark:border-red-800 text-red-500 dark:text-red-400 rounded hover:bg-red-50 dark:hover:bg-red-950/30">
-                          이 체결만 취소
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                  {consumptions.length > 0 && (
-                    <table className="w-full text-xs">
-                      <thead>
-                        <tr className="text-gray-400 dark:text-slate-500">
-                          <th className="text-left font-medium px-3 py-1.5">소진 로트</th>
-                          <th className="text-right font-medium px-3 py-1.5">소진 수량</th>
-                          <th className="text-right font-medium px-3 py-1.5">장부환율</th>
-                          <th className="text-right font-medium px-3 py-1.5">처분환율</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-100 dark:divide-slate-700">
-                        {consumptions.map((c, j) => (
-                          <tr key={c.id}>
-                            <td className="px-3 py-1.5 text-gray-500 dark:text-slate-400">로트 {j + 1}</td>
-                            <td className="px-3 py-1.5 text-right tabular-nums text-gray-700 dark:text-slate-300">
-                              {fmtNumber(c.amount, f.currency === 'JPY' ? 0 : 2)} {f.currency}
-                            </td>
-                            <td className="px-3 py-1.5 text-right tabular-nums text-gray-500 dark:text-slate-400">{fmtNumber(c.acq_rate, 2)}</td>
-                            <td className="px-3 py-1.5 text-right tabular-nums text-gray-500 dark:text-slate-400">{fmtNumber(c.disposal_rate, 2)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
-              )
-            })}
+            {fills.map((f, i) => (
+              <FillConsumptionCard key={f.id} fill={f} index={i}
+                consumptions={consumptionsByFillId[f.id] ?? []}
+                canReverse={canReverse} onRequestReverse={onRequestReverse} />
+            ))}
           </div>
         )}
       </td>
@@ -131,34 +82,37 @@ function FillDetailRows({ trade, fetchTradeDetail, refreshKey, canReverse, onReq
   )
 }
 
-export default function FxTradeHistoryPage() {
+/**
+ * ② 매각 지시 관리 탭 — 외화매매거래 발의→승인→(부분)체결→완료 워크플로우.
+ *
+ * 세션26차 4일차: 옛 FxTradeHistoryPage.tsx 를 외화 원장(FxLedgerPage) 안의 탭으로 이관.
+ * 재고(FIFO 로트)와 체결 워크플로우가 메뉴만 분리돼 있던 것을 하나의 페이지·데이터 흐름으로
+ * 통합하기 위함 — 여기서 체결을 등록하면 `onChanged()` 를 통해 원장 탭의 잔액도 즉시 갱신된다.
+ *
+ * 이 탭은 감사·오디트 목적의 자유 필터(법인/기간/통화/상태 전체)를 그대로 유지한다 —
+ * 원장 탭·로트 설정 탭과 달리 선택된 법인+통화에 국한하지 않는다.
+ */
+export function FxOrdersTab({ company, currency, onChanged }: {
+  company: Company
+  currency: string
+  onChanged: () => void
+}) {
   const { user, canEdit, canApprove, canDelete, canAction } = useAuth()
-  // 외화매매거래 작업 권한 — 역할 기본값 위에 사용자별 개별 부여/회수 가능 (UsersPage > 작업 권한)
-  // 승인·완료·취소 모두 레코드를 변경하므로 write 로 통일해 게이트한다.
   const canWriteFxTrade = canAction('fx_trade', 'write')
-  const { company: resolvedCompany } = usePageCompany()
   const hist = useFxTradeHistory()
 
   const companies = getCompanyNames()
 
-  // 필터 상태
-  const [filterCompany, setFilterCompany] = useState<string>(resolvedCompany ?? '전체')
+  const [filterCompany, setFilterCompany] = useState<string>(company)
   const [filterFrom,    setFilterFrom]    = useState(monthAgoStr())
   const [filterTo,      setFilterTo]      = useState(todayStr())
-  const [filterCcy,     setFilterCcy]     = useState('전체')
+  const [filterCcy,     setFilterCcy]     = useState(currency)
   const [filterStatus,  setFilterStatus]  = useState('전체')
 
-  // 체결 등록 모달
   const [completeTarget, setCompleteTarget] = useState<string | null>(null)
-  // 체결 내역 펼쳐보기
   const [expandedId, setExpandedId] = useState<string | null>(null)
-  // 삭제 확인 패널 — window.confirm 은 크롬이 반복 대화상자를 차단하면 조용히
-  // 취소로 처리돼 "눌러도 안 지워지는" 상태가 된다(세션24차 실사고). 화면 안에서
-  // 확인받는다. '완료'/'부분체결' 건은 FIFO 소진 이력이 있어 삭제 대신 먼저
-  // "취소"(원복)로 되돌린 뒤에만 삭제 가능하다.
   const [deleteTarget, setDeleteTarget] = useState<FxTradeRecord | null>(null)
   const [deleting, setDeleting] = useState(false)
-  // 개별 체결 1건 취소 확인 패널 (동일 원칙 — window.confirm 미사용)
   const [reverseFillTarget, setReverseFillTarget] = useState<{ trade: FxTradeRecord; fill: FxTradeFill } | null>(null)
   const [reversingFill, setReversingFill] = useState(false)
   const [fillDetailRefreshKey, setFillDetailRefreshKey] = useState(0)
@@ -176,7 +130,6 @@ export default function FxTradeHistoryPage() {
 
   useEffect(() => { doFetch() }, []) // 초기 조회
 
-  // 요약 통계
   const summary = useMemo(() => {
     const rows = hist.data
     const totalKrw = rows.filter(r => r.status !== '취소').reduce((s, r) => s + (r.amount_krw ?? 0), 0)
@@ -186,7 +139,6 @@ export default function FxTradeHistoryPage() {
     return { count: rows.length, totalKrw, totalPnl, byStatus }
   }, [hist.data])
 
-  // CSV 다운로드
   function downloadCsv() {
     const headers = ['집행일', '법인', '구분', '통화', '외화금액', '취득환율', '매도예정환율', '예상환차손익',
                      '실체결환율(가중평균)', '확정 환차손익(누적)', '체결수량(누적)', '원화금액', '상태', '발의자', '승인자', '완료자', '메모']
@@ -208,13 +160,13 @@ export default function FxTradeHistoryPage() {
   async function handleApprove(id: string) {
     if (!window.confirm('이 발의를 승인하시겠습니까?')) return
     await hist.approve(id, user?.label ?? '')
-    doFetch()
+    doFetch(); onChanged()
   }
 
   async function handleCancel(id: string) {
     if (!window.confirm('이 발의를 취소하시겠습니까? 체결이 있었다면 전부 원복됩니다.')) return
     await hist.cancel(id, user?.label ?? '')
-    doFetch()
+    doFetch(); onChanged()
   }
 
   async function handleReverseFill() {
@@ -226,7 +178,7 @@ export default function FxTradeHistoryPage() {
       if (error) { setMessage(error.message ?? String(error)); return }
       setReverseFillTarget(null)
       setFillDetailRefreshKey(k => k + 1)
-      doFetch()
+      doFetch(); onChanged()
     } finally {
       setReversingFill(false)
     }
@@ -238,7 +190,7 @@ export default function FxTradeHistoryPage() {
     try {
       await hist.remove(deleteTarget.id)
       setDeleteTarget(null)
-      doFetch()
+      doFetch(); onChanged()
     } finally {
       setDeleting(false)
     }
@@ -251,12 +203,8 @@ export default function FxTradeHistoryPage() {
           {message}
         </div>
       )}
-      {/* 헤더 */}
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-xl font-bold text-gray-900 dark:text-slate-100">💱 외화매매거래 이력</h1>
-          <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">FX 매도 발의 → 승인 → (부분)체결 → 완료 누적 이력</p>
-        </div>
+        <p className="text-xs text-gray-500 dark:text-slate-400">FX 매도 발의 → 승인 → (부분)체결 → 완료 누적 이력. 체결 등록 시 원장 탭 잔액에 즉시 반영됩니다.</p>
         <button onClick={downloadCsv}
           className="text-sm px-4 py-2 border border-gray-300 dark:border-slate-600 rounded-lg text-gray-600 dark:text-slate-300
                      hover:bg-gray-50 dark:hover:bg-slate-700 flex items-center gap-1.5">
@@ -264,7 +212,6 @@ export default function FxTradeHistoryPage() {
         </button>
       </div>
 
-      {/* 검색 필터 */}
       <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl p-4">
         <div className="flex flex-wrap gap-3 items-end">
           <div>
@@ -314,7 +261,6 @@ export default function FxTradeHistoryPage() {
         </div>
       </div>
 
-      {/* 요약 칩 */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
           { label: '조회 건수',       value: `${summary.count}건`, color: 'text-gray-900 dark:text-slate-100' },
@@ -332,7 +278,6 @@ export default function FxTradeHistoryPage() {
         ))}
       </div>
 
-      {/* 이력 테이블 */}
       <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl overflow-hidden">
         {hist.loading ? (
           <div className="text-center py-12 text-sm text-gray-400 dark:text-slate-500">불러오는 중…</div>
@@ -408,7 +353,6 @@ export default function FxTradeHistoryPage() {
                           </span>
                         </td>
                         <td className="px-3 py-2.5 text-xs text-gray-400 dark:text-slate-500 whitespace-nowrap">{r.created_by ?? ''}</td>
-                        {/* 액션 */}
                         <td className="px-3 py-2.5 whitespace-nowrap">
                           <div className="flex gap-1">
                             {r.status === '발의' && canApprove() && canWriteFxTrade && (
@@ -453,7 +397,6 @@ export default function FxTradeHistoryPage() {
         )}
       </div>
 
-      {/* 체결 등록 모달 */}
       {completeTarget && (() => {
         const rec = hist.data.find(r => r.id === completeTarget)
         if (!rec) return null
@@ -464,14 +407,13 @@ export default function FxTradeHistoryPage() {
             onSubmit={async (amount, rate, fillDate) => {
               const { error } = await hist.fillTrade(rec.id, amount, rate, fillDate, user?.label ?? '')
               if (error) return error.message ?? String(error)
-              doFetch()
+              doFetch(); onChanged()
               return null
             }}
           />
         )
       })()}
 
-      {/* 삭제 확인 패널 */}
       {deleteTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{ background: 'rgba(0,0,0,0.45)' }}
@@ -501,7 +443,6 @@ export default function FxTradeHistoryPage() {
         </div>
       )}
 
-      {/* 개별 체결 취소 확인 패널 */}
       {reverseFillTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{ background: 'rgba(0,0,0,0.45)' }}

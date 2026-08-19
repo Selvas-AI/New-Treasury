@@ -23,7 +23,7 @@ export function issueSourceUrl(key: string, company: string | null | undefined):
   if (key.startsWith('policy_'))  return `/policy/${c}`
   // ⚠ fx_regime_ 을 fx_sell_ 보다 먼저 볼 필요는 없다(접두사가 겹치지 않음)
   if (key.startsWith('fx_regime_')) return `/fx-regime/${c}`
-  if (key.startsWith('fx_sell_')) return `/fx-trade-history/${c}`
+  if (key.startsWith('fx_sell_')) return `/fx-ledger/${c}?tab=orders`
   return null
 }
 

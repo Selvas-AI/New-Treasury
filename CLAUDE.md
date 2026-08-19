@@ -1329,7 +1329,9 @@ baf8ef9 fix: 투자 집행 연동 저장 실패 수정 + 자산 구분(운용/�
 - **`docs/db/policy_decision_rules_migration.sql`** ⭐ — `policy_decisions.linked_metric`/`target_operator`/`target_value` 컬럼 (세션19차 정책 이행 통제 Phase 1). **실행 완료** (세션19차 중 사용자 확인, 대시보드/자금일보 자동 노출까지 end-to-end 검증 완료).
 - **`docs/db/fx_sell_order_deadline_migration.sql`** ⭐ — `fx_trade_history.due_date`/`order_type` 컬럼 (세션19차 정책 이행 통제 Phase 3, 외화 매각 지시). **실행 완료** (세션19차 중 사용자 확인, 재량 매각 지시 등록→완료 처리까지 end-to-end 검증 완료).
 - **`docs/db/fx_trade_partial_fill_migration.sql`** ⭐⭐ — `fx_trade_fills` 테이블 + `fx_lot_consumptions.fill_id`/`fx_trade_history.filled_amount` 컬럼 + RPC `complete_fx_trade_fill`/`reverse_fx_trade` (세션26차 3일차, 외화매매거래 부분 체결). **실행 완료** (2026-08-19 사용자 확인, 브라우저 실화면 검증도 완료).
-- **`docs/db/fx_trade_fill_reverse_rpc.sql`** ⭐ — RPC `reverse_fx_trade_fill` (세션26차 4일차, 개별 체결 1건만 취소). **실행 완료** (2026-08-19 사용자 확인). 브라우저 실화면 검증(체결 취소 → 로트 복원 → 상태 재계산)은 아직 미수행.
+- **`docs/db/fx_trade_fill_reverse_rpc.sql`** ⭐ — RPC `reverse_fx_trade_fill` (세션26차 4일차, 개별 체결 1건만 취소). **실행 완료** (2026-08-19 사용자 확인, 브라우저 실화면에서 "이 체결만 취소" 버튼 정상 노출까지 스크린샷 확인).
+- **`docs/db/fx_lots_daily_report_source.sql`** ⭐ — `fx_lots_insert_authenticated` 정책에 `'daily_report_item'` 추가 + 신규 RPC `consume_fx_lots_for_source` (세션26차 6일차, 자금일보 ↔ 외화 원장 자동 반영). **실행 필요**. 미실행 시 원장 ①탭 "자금일보 미반영 증감" 패널의 "원장 반영" 버튼이 유입은 RLS 거부, 유출은 함수 없음 오류를 반환.
+- **`docs/db/fx_ledger_reconcile_ignore.sql`** ⭐ — `fx_ledger_reconcile_ignored` 테이블(세션26차 6일차 후속, 개시일 이전 미반영 항목 "무시" 처리). **실행 필요**. 미실행 시 "무시" 버튼이 테이블 없음 오류를 반환(원장 반영/타임라인 표시 자체는 영향 없음).
 
 ### ⚠️ 비밀번호 찾기/초기화 — 배포 전 필수 수동 작업 3건 (세션18차)
 ```
@@ -1686,6 +1688,8 @@ useEffect(() => {
 /history/:company?/:from?/:to?
 /issue-history/:issueKey?
 /fx/:currency?
+/fx-ledger/:company?[?tab=ledger|orders|lots|pnl]  ← 외화 원장 (재고 FIFO + 매각 지시 워크플로우 통합, 세션26차 4~5일차)
+/fx-trade-history/:company?  ← 구 경로, /fx-ledger?tab=orders 로 리다이렉트만 함
 /admin/mycode | /admin/companies | /admin/users | /admin/data | /admin/org-chart
 ```
 
@@ -2332,7 +2336,163 @@ toISOString() 이 KST(+9) 기준 전날(2026-08-09)을 반환한다.
 
 검증: tsc -b 0 errors, 변경 파일 lint 0 errors, vitest 247/247 유지.
 `docs/db/fx_trade_fill_reverse_rpc.sql` 은 2026-08-19 사용자가 Supabase에 실행 완료.
-브라우저 실화면 검증(체결 취소 → 로트 복원 → 지시 상태 재계산)은 아직 미수행 — 다음 확인 사항.
+브라우저 실화면 검증(체결 취소 → 로트 복원 → 지시 상태 재계산)은 사용자가 스크린샷으로
+확인 완료(1차 체결 30,000 USD "이 체결만 취소" 버튼 정상 노출까지 확인).
+
+---
+
+### 2026-08-19 세션26차 5일차 — 외화 FIFO 원장 ↔ 외화매매거래 통폐합 ⭐
+
+사용자 요구: 두 메뉴가 데이터상으로는 이미 연결(체결 등록 시 서버 RPC가 FIFO 로트를 실제
+소진)돼 있는데도 화면이 완전히 분리돼 있어 "재고 확인 → 매각 체결 → 잔액 재확인"에 페이지를
+오가야 했고, FIFO 원장의 "매각 이력" 탭은 체결 단위 상세를 보여주지 못해 정보가 두 군데서
+다르게 표시됨. "계정잔액명세처럼 유입·유출·잔액이 자동 연동되는 통합 원장"을 요청.
+
+**사용자 확인 사항(구현 전 승인)**: 메뉴 통합 시 접근권한은 기존 외화 FIFO 원장의
+opt-in(민감) 등급이 아니라 **기존 외화매매거래 수준(역할 기본값 노출)**으로 적용하기로 결정
+— 운영 편의 우선, 실재고·장부환율 정보가 기본적으로 더 많은 계정에 노출됨을 인지하고 승인.
+
+#### 목표 구조 — 메뉴 1개(`/fx-ledger`, "외화 원장") + 탭 4개
+| 탭 | 내용 |
+|---|---|
+| ① 📒 원장 | 유입(로트 취득)+유출(체결)을 날짜순으로 합쳐 **잔액이 누적 계산되는 단일 타임라인**. 유출 행 펼치면 소진 로트 상세. |
+| ② 📝 매각 지시 관리 | 발의→승인→(부분)체결→완료/취소 워크플로우(옛 FxTradeHistoryPage 이관). 법인/기간/통화/상태 자유 필터 유지(감사용). |
+| ③ ⚙️ 로트 설정 | 개시 로트 등록·CSV 임포트·계좌유형 교정·개시 이전 CSV 이관 과거 매각 실적 수정/삭제. |
+| ④ 📊 환차손익 요약 | 누적 실현손익 + 미실현손익. |
+
+①원장 탭이 옛 "보유 로트"+"매각 이력" 두 탭을 대체(둘 다 같은 잔액 정보의 부분집합이었음).
+
+#### 데이터 연동 — 신규 `fetchFillsByCurrency(company, currency)`
+`useFxTradeHistory.ts`에 추가. `fx_trade_fills`/`fx_lot_consumptions` 둘 다 `company`/
+`currency` 컬럼을 직접 갖고 있어(스키마 확인) `fx_trade_history` 조인 없이 법인+통화 단위
+전체 체결 내역을 바로 조회. 기존 `fetchTradeDetail(tradeId)`(거래 1건 단위)와 별도.
+
+원장 탭 타임라인: `ledger.lots`(유입)+`fills`(유출)를 날짜 오름차순 병합 → 누적합으로 잔액
+계산 → 최신순으로 뒤집어 표시. **안전장치**: 병합 계산의 최종 잔액과 `ledger.totalAmount`
+(로트 remaining_amount 합)가 불일치하면 "⚠ 잔액 불일치 감지" 경고 배지 표시 — 이 앱은 과거
+SSOT 불일치로 인한 실사고가 여러 번 있었으므로(세션19차 6.2%/27.9% 등) 저비용 방어 장치로 추가.
+
+**공유 리프레시**: 페이지 셸에 `refreshAll()`을 두고 모든 쓰기 동작 성공 후 호출 —
+`ledger.refetch()` + fills 재조회(refreshKey 증가) + `trades.load()`. 매각 지시 관리 탭에서
+체결을 등록하면 원장 탭 잔액이 탭 전환만으로 즉시 최신 상태로 보임(수동 새로고침 불필요).
+
+#### 발견해 함께 고친 버그 — 통화 스코프 누락
+`useFxTradeHistory(company)`(A패턴)로 로드되는 `trades.data`는 **통화 필터가 없어** 옛
+FxLedgerPage의 "매각 이력"/"환차손익 요약" 탭이 선택한 통화와 무관하게 전체 통화가 섞여
+표시되고 있었다(보유 로트 탭만 `useFxLots(company,currency)`로 통화 스코프가 걸려 있어 탭
+간 불일치). 환차손익 요약 탭 계산에 `row.currency === currency` 필터를 추가해 수정.
+
+#### 변경 파일
+- `src/hooks/useFxTradeHistory.ts` — `fetchFillsByCurrency` 추가.
+- `src/components/fx/FillConsumptionDetail.tsx` (신규) — 체결 카드+소진 로트 상세 렌더링을
+  프레젠테이션 컴포넌트로 추출(`FillConsumptionCard`). 원장 탭·매각지시관리 탭이 공유.
+- `src/components/fx/FxLedgerTab.tsx` (신규) — ① 원장 탭. 타임라인 병합·잔액 계산·펼치기·
+  로트 수정/삭제(옛 FxLedgerPage의 editingLot/pendingDelete 로직 이관)·이행 대기 매각 지시
+  배너.
+- `src/components/fx/FxOrdersTab.tsx` (신규) — ② 매각 지시 관리 탭. 옛 FxTradeHistoryPage.tsx
+  거의 그대로 이식, 성공 콜백에 `onChanged()`(=`refreshAll`) 추가.
+- `src/components/fx/FxLotAdminTab.tsx` (신규) — ③ 로트 설정 탭. 옛 FxLedgerPage 상단부(CSV
+  임포트·계좌유형 교정·개시 로트 등록) + 개시 이전 CSV 이관 과거 매각 실적 수정/삭제 이관.
+- `src/pages/FxLedgerPage.tsx` (재작성, 셸 역할) — company/currency/activeTab(`?tab=` 쿼리
+  파라미터로 초기값만 읽음, 이후는 로컬 state) 상태, 3개 데이터 훅, 상단 통계·통화탭·탭바,
+  `refreshAll()`, 4개 탭 컴포넌트에 props 전달.
+- `src/pages/FxTradeHistoryPage.tsx` — 삭제(내용은 `FxOrdersTab.tsx`로 이관).
+- `src/App.tsx` — `/fx-trade-history`(구 경로) → `FxTradeHistoryRedirect`(신규, `useParams`로
+  company 읽어 `/fx-ledger${company}?tab=orders`로 `<Navigate replace>`) 로 교체. `/fx-ledger`
+  라우트는 유지.
+- `src/components/Sidebar.tsx` — `외화매매거래` NavItem 삭제, `외화 FIFO 원장` → `외화 원장`.
+- `src/contexts/auth.ts` — `MENU_DEFAULTS.admin/editor/viewer`에 `'fx-ledger'` 추가(기존
+  opt-in 전용 → 역할 기본값 노출로 격상, 사용자 확인 반영).
+- `src/pages/admin/UsersPage.tsx` — `MENU_SLUGS`의 `fx-ledger` 라벨을 `외화 원장`으로 변경.
+- `src/lib/issueLink.ts` — `fx_sell_` 매핑을 `/fx-trade-history/${c}` → `/fx-ledger/${c}?tab=orders`.
+- `src/pages/FxPage.tsx` — "외화매매거래" 링크를 `/fx-ledger?tab=orders`로 변경.
+
+**건드리지 않음**: `src/components/policy/FxPolicyTab.tsx`(자체 `useFxTradeHistory`+
+`CompleteTradeModal`로 정책 이행 모니터링 미니 패널을 구성 — 훅 API 확장만 있어 영향 없음),
+DB 스키마(신규 마이그레이션 불필요 — 클라이언트 통합 + 메뉴 기본값 변경뿐).
+
+검증: tsc -b 0 errors, eslint 0 errors(전체 src), vitest 247/247. 브라우저 실화면 검증(원장
+탭 잔액 표시, 매각 지시 관리→체결 등록→원장 탭 즉시 반영, 옛 `/fx-trade-history` 리다이렉트,
+사용자 관리 화면에서 "외화 원장" 메뉴 기본 체크 상태)은 다음 세션 확인 사항.
+
+---
+
+### 2026-08-19 세션26차 6일차 — 자금일보 ↔ 외화 원장 자동 반영
+
+전날 통폐합한 원장에서 "유입/유출이 어느 입력 메뉴와 연동되는지" 사용자 질문 → 조사 결과
+**매각(유출)은 이미 자동 연동돼 있었다**(FX 정책 탭·FX 리짐 전략의 매각 지시도 전부 같은
+`fx_trade_history`/`fx_trade_fills`에 쓰기 때문에 체결되면 원장에 바로 보임 — 이번 세션
+작업 범위 아님). 빠져 있던 건 **운전자금(자금일보) 잔액 증감 → 원장 유입/유출 로트** 연결
+뿐이었다. 사용자 제안대로 "자금일보에 이미 있는 전일 대비 차액을 원장이 읽어와 사용자는
+실제 적용 환율만 입력"하는 흐름으로 구현.
+
+#### 설계 — 존재기반 dedup 대신 금액 재계산 비교
+`fx_lots.source_type` CHECK 제약에는 이미 `'daily_report_item'`이 있었지만(애초에 이 연동을
+염두에 두고 설계됐던 흔적) 실제로 쓰는 코드가 없었고, INSERT RLS 정책에도 빠져 있었다.
+지분·국채 평가손익 자동기재(세션10차)가 쓰는 `@auto:` memo 마커 + 후보목록 대조 방식은
+세션14차에 "평가변동 0 복귀 시 유령 항목 잔존" 실사고를 낸 전례가 있어, 여기서는 그보다
+단순한 방식을 썼다 — **미반영액을 매번 다시 계산**:
+```
+미반영액 = |오늘잔액 − 전일잔액| − (source_type='daily_report_item' 로 이미 반영된 금액)
+```
+`daily` 값이 나중에 수정돼도 미반영액이 자동으로 재조정되어 별도 stale-cleanup 코드가
+필요 없다. `fx_lots(company,currency,source_type,source_id)` unique 제약이 같은 날짜를
+두 번 반영하는 실수도 DB 레벨에서 막아준다.
+
+#### 변경 파일
+- **`docs/db/fx_lots_daily_report_source.sql`** ⭐ (신규, **실행 필요**) — `fx_lots_insert_authenticated`
+  정책에 `'daily_report_item'` 추가(유입=일반 insert, 기존 role/company 체크 재사용) +
+  신규 RPC `consume_fx_lots_for_source(company,currency,source_type,source_id,amount,
+  disposal_rate,disposed_date,disposed_by)` — `complete_fx_trade_with_fifo`와 동일한 FIFO
+  소진 로직을 `source_type`/`source_id` 인자로 범용화(유출용). 기존 매각 전용 RPC 3종은
+  손대지 않음(additive 관례). 권한은 매각 결정(master/admin/can_approve)보다 낮은 실무
+  편집 등급(editor 이상)으로 — "이미 일어난 잔액 변동의 기록"이지 새 매각 의사결정이 아님.
+- `src/hooks/useFxLots.ts` — `reconcileDailyInflow`/`reconcileDailyOutflow` 추가.
+- `src/hooks/useFxLedgerReconciliation.ts` (신규) — 선택된 법인+통화의 최근 60영업일
+  `daily` 잔액을 오름차순 정렬해 전일 대비 델타 계산 → `fx_lots`/`fx_lot_consumptions`를
+  `source_type='daily_report_item'` + `source_id=in.(...)`(PostgREST in 필터, `useFxHistory.ts`
+  에 선례 있는 `restSelect`의 `filters` 옵션 재사용)로 조회해 이미 반영된 금액 차감 →
+  미반영 목록 반환.
+- `src/components/fx/FxLedgerTab.tsx` — "자금일보 미반영 증감" 패널 추가. 행마다 방향
+  배지·금액·환율 입력·"원장 반영" 버튼. 반영 성공 시 훅 재조회 + 상위 `onChanged()`(=`refreshAll`).
+- `src/pages/FxLedgerPage.tsx` — `FxLedgerTab`에 `company`·`onReconcileInflow`/`onReconcileOutflow`
+  props 전달(내부에서 `ledger.reconcileDailyInflow/Outflow` 호출).
+- `src/pages/DailyReportPage.tsx` — 기존 `PendingRegimeBanner`/`PendingSellOrdersBanner`와
+  같은 패턴으로 `PendingLedgerReconcileBanner` 추가 — 자금일보 작성 화면에서도 미반영
+  건수를 인지하고 "외화 원장에서 반영 →" 링크(`/fx-ledger?tab=ledger`)로 이동할 수 있게.
+  통화 5종을 고정 배열로 순회하며 `useFxLedgerReconciliation`을 5번 호출(배열이 상수라
+  매 렌더 훅 호출 순서가 항상 동일 — `eslint-disable-next-line react-hooks/rules-of-hooks`
+  로 명시).
+
+**건드리지 않음**: FX 정책 탭/FX 리짐 전략의 매각 지시 흐름(이미 원장과 연결돼 있었음),
+기존 `complete_fx_trade_with_fifo`/`complete_fx_trade_fill` 등 매각 전용 RPC, `daily_report_items`
+스키마.
+
+검증: tsc -b 0 errors, eslint 0 errors(전체 src), vitest 247/247. 브라우저 실화면 검증(자금일보
+잔액을 이틀 다르게 입력 → 원장에 미반영 행 노출 → 환율 입력 후 반영 → 유입 로트 생성/유출
+FIFO 소진 확인, `daily` 값 재수정 시 미반영액 재계산 확인)은 다음 세션 확인 사항.
+
+#### 후속 수정 — 개시일 이전 이력 오탐 (사용자 실사용 중 발견)
+
+배포 직후 사용자가 실제 화면에서 발견: 개시 로트(source_type='opening')는 개시일(예:
+2026-08-11) 기준으로 그 이전 이력을 이미 흡수한 잔고인데, "자금일보 미반영 증감" 조회가
+`daily` 테이블 전 기간(최대 500행)을 훑다 보니 **개시일 이전 날짜의 잔액 증감까지
+"미반영"으로 잘못 잡아냈다**(2026-01-08 ~ 2026-08-04 구간이 전부 목록에 뜸). 두 가지로 수정:
+
+1. **조회 시작일 필터** — `useFxLedgerReconciliation(company, currency, fromDate)`에 세 번째
+   인자 추가. 델타 계산 자체는 여전히 전 기간에서 하되(경계일의 델타가 정확하려면 그 전날
+   값이 필요), **표시만** `fromDate` 이후로 거른다. `FxLedgerTab.tsx`가 조회 시작일 입력
+   필드를 갖고 기본값은 "이번 달 1일"(`new Date().toISOString().slice(0,8)+'01'`) — 특정
+   달을 하드코딩하지 않고 오늘 날짜 기준으로 자연스럽게 정해진다.
+2. **개별 "무시" 처리** — 경계 근처 날짜는 사용자가 직접 판단해야 할 수 있어, 목록의 각
+   행에 "무시" 버튼 추가(2단계 인라인 확인 — 이 앱의 window.confirm 회피 원칙). 신규 테이블
+   `fx_ledger_reconcile_ignored`(`docs/db/fx_ledger_reconcile_ignore.sql`, **실행 필요**)에
+   `(company, currency, daily_id)` 를 기록 — **fx_lots/fx_lot_consumptions 는 전혀 건드리지
+   않는 표시 전용 배제**다("원장에 반영"이 아니라 "이미 개시 잔고에 포함돼 있으니 목록에서
+   그만 보여달라"는 표시). `useFxLedgerReconciliation`이 이 테이블도 조회해 무시된 daily_id
+   를 결과에서 제외한다.
+
+검증: tsc -b 0 errors, eslint 0 errors, vitest 247/247 유지.
 
 ---
 

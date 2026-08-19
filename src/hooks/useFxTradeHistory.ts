@@ -269,6 +269,28 @@ export function useFxTradeHistory(company?: Company | null) {
     return restRpc('reverse_fx_trade_fill', { p_fill_id: fillId, p_reversed_by: reversedBy })
   }, [])
 
+  /**
+   * 법인+통화 단위 전체 체결 내역 + 소진 로트 상세 (외화 원장 통합 타임라인 전용).
+   *
+   * fetchTradeDetail 과 달리 거래(지시) 1건이 아니라 **여러 거래에 걸친 모든 체결**을
+   * 가져온다. fx_trade_fills/fx_lot_consumptions 둘 다 company/currency 컬럼을 직접
+   * 갖고 있어 fx_trade_history 조인 없이 바로 조회 가능하다.
+   */
+  const fetchFillsByCurrency = useCallback(async (targetCompany: Company, currency: string) => {
+    const { data: fills } = await restSelect<FxTradeFill>('fx_trade_fills', {
+      match: { company: targetCompany, currency }, order: 'fill_date.asc', limit: 1000,
+    })
+    const { data: consumptions } = await restSelect<FxLotConsumption>('fx_lot_consumptions', {
+      match: { company: targetCompany, currency }, order: 'disposed_date.asc', limit: 2000,
+    })
+    const consumptionsByFillId: Record<string, FxLotConsumption[]> = {}
+    for (const row of consumptions ?? []) {
+      if (!row.fill_id) continue
+      ;(consumptionsByFillId[row.fill_id] ??= []).push(row)
+    }
+    return { fills: fills ?? [], consumptionsByFillId }
+  }, [])
+
   /** 매각 지시 1건의 체결 내역 + 각 체결이 소진한 FIFO 로트 상세 (펼쳐보기 전용) */
   const fetchTradeDetail = useCallback(async (tradeId: string) => {
     const { data: fills } = await restSelect<FxTradeFill>('fx_trade_fills', {
@@ -294,5 +316,6 @@ export function useFxTradeHistory(company?: Company | null) {
     .reduce((s, r) => s + (r.completed_pnl ?? r.fx_pnl ?? 0), 0)
 
   return { data, loading, error, totalPnl, load, add, remove, updateCompletedSale,
-    importCompletedSales, fetch, propose, approve, fillTrade, cancel, reverseFill, fetchTradeDetail }
+    importCompletedSales, fetch, propose, approve, fillTrade, cancel, reverseFill,
+    fetchTradeDetail, fetchFillsByCurrency }
 }

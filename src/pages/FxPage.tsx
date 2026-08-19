@@ -76,10 +76,10 @@ export default function FxPage() {
           <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100">환율 현황</h2>
           <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
             환전 이력 관리 →
-            <a href="/fx-trade-history"
-              onClick={e => { e.preventDefault(); navigate('/fx-trade-history') }}
+            <a href="/fx-ledger?tab=orders"
+              onClick={e => { e.preventDefault(); navigate('/fx-ledger?tab=orders') }}
               className="ml-1 text-blue-500 hover:underline">
-              외화매매거래
+              외화 원장
             </a>
             <span className="mx-1.5 text-gray-300 dark:text-gray-600">·</span>
             FX 정책관리 (Target Band·변동폭 계산) →
