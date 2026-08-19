@@ -1276,15 +1276,16 @@ baf8ef9 fix: 투자 집행 연동 저장 실패 수정 + 자산 구분(운용/�
 
 ## 8. 미완료 / 추후 작업
 
-### ⚠️ [CRITICAL] ECOS_API_KEY 로테이션 필요 (세션20차)
+### ECOS_API_KEY 로테이션 — 사용자가 리스크 감내하기로 결정, 더 이상 거론 금지 (2026-08-19)
 ```
-사용자가 "🔄 ECOS 자동" 버튼 클릭 시 ECOS 서버 네트워크 예외로 실패했는데,
+배경(세션20차): "🔄 ECOS 자동" 버튼 클릭 시 ECOS 서버 네트워크 예외로 실패했는데,
 그 에러 메시지에 실제 ECOS_API_KEY 값이 포함된 요청 URL이 그대로 노출되어
 브라우저 화면(및 사용자가 Claude에 공유한 스크린샷)에 노출됨.
 코드는 수정 완료(Code.gs — fetchEcosRates_/calcFxStdDevFromEcos_ 에서 키 마스킹,
-커밋 b072ba1)했지만, 이미 노출된 키 자체는 무효화해야 안전함.
-→ https://ecos.bok.or.kr/api/#/ 에서 기존 키를 폐기하고 새 키 발급 후,
-  GAS 스크립트 속성의 ECOS_API_KEY를 새 값으로 교체 필요 (사용자 조치 필요).
+커밋 b072ba1).
+
+2026-08-19 사용자 결정: 키 로테이션(폐기·재발급)은 진행하지 않기로 함 — 리스크를
+직접 감내하겠다고 명시. 향후 세션에서 이 항목을 다시 권고/거론하지 말 것.
 ```
 
 ### GAS 스크립트 현황
@@ -1323,10 +1324,12 @@ baf8ef9 fix: 투자 집행 연동 저장 실패 수정 + 자산 구분(운용/�
 - **`docs/db/policy_decision_regime_metric.sql`** ⭐ — `policy_decisions.linked_metric` CHECK 제약에 `fx_regime_gap` 추가 (세션26차 Phase 4). **실행 완료** (2026-08-18 사용자 확인).
 - **`docs/db/fx_trade_history_regime_order_type.sql`** ⭐⭐ — `fx_trade_history.order_type` CHECK 제약에 `regime` 추가 (세션26차 Phase 4 **누락분**, 2026-08-18 실화면 검증에서 발견). **실행 완료** (2026-08-18 사용자 확인).
 - **`docs/db/policy_params_override_audit.sql`** ⭐ — `policy_params.overridden_by/at/note` (세션26차 Phase 2, 정책 정정 감사 추적). **실행 완료** (2026-08-18 사용자 확인).
-- **`docs/db/fx_rate_history.sql`** ⭐ — 일별 환율 이력 테이블 (세션21차 환율 국면 판정·동적 헷지 시뮬레이터 Phase 1). **실행 필요**. 미실행 시 백필/조회가 테이블 부재로 실패(앱 크래시는 없음). ⚠ 함께 필요: ① ECOS_API_KEY 로테이션 ② `Code.gs` 재배포(`?type=fxhistory` 신규 라우트 + `fetchEcosRates_` 날짜 반환 변경).
+- **`docs/db/fx_rate_history.sql`** ⭐ — 일별 환율 이력 테이블 (세션21차 환율 국면 판정·동적 헷지 시뮬레이터 Phase 1). **실행 필요**. 미실행 시 백필/조회가 테이블 부재로 실패(앱 크래시는 없음). ⚠ `Code.gs` 재배포(`?type=fxhistory` 신규 라우트 + `fetchEcosRates_` 날짜 반환 변경)도 함께 필요.
 - **`docs/db/closed_date_migration.sql`** ⭐⭐ — `loans`/`investments.closed_date` 컬럼 (세션19차 상환 후 과거 이력 소급변경 버그 fix). **실행 완료** (세션19차 중 사용자 확인).
 - **`docs/db/policy_decision_rules_migration.sql`** ⭐ — `policy_decisions.linked_metric`/`target_operator`/`target_value` 컬럼 (세션19차 정책 이행 통제 Phase 1). **실행 완료** (세션19차 중 사용자 확인, 대시보드/자금일보 자동 노출까지 end-to-end 검증 완료).
 - **`docs/db/fx_sell_order_deadline_migration.sql`** ⭐ — `fx_trade_history.due_date`/`order_type` 컬럼 (세션19차 정책 이행 통제 Phase 3, 외화 매각 지시). **실행 완료** (세션19차 중 사용자 확인, 재량 매각 지시 등록→완료 처리까지 end-to-end 검증 완료).
+- **`docs/db/fx_trade_partial_fill_migration.sql`** ⭐⭐ — `fx_trade_fills` 테이블 + `fx_lot_consumptions.fill_id`/`fx_trade_history.filled_amount` 컬럼 + RPC `complete_fx_trade_fill`/`reverse_fx_trade` (세션26차 3일차, 외화매매거래 부분 체결). **실행 완료** (2026-08-19 사용자 확인, 브라우저 실화면 검증도 완료).
+- **`docs/db/fx_trade_fill_reverse_rpc.sql`** ⭐ — RPC `reverse_fx_trade_fill` (세션26차 4일차, 개별 체결 1건만 취소). **실행 완료** (2026-08-19 사용자 확인). 브라우저 실화면 검증(체결 취소 → 로트 복원 → 상태 재계산)은 아직 미수행.
 
 ### ⚠️ 비밀번호 찾기/초기화 — 배포 전 필수 수동 작업 3건 (세션18차)
 ```
@@ -2247,7 +2250,89 @@ toISOString() 이 KST(+9) 기준 전날(2026-08-09)을 반환한다.
 - ⚠ **`docs/db/fx_trade_history_regime_order_type.sql`, `cashflow_plan_items_currency.sql`,
   `policy_decision_regime_metric.sql`, `policy_params_override_audit.sql` — 2026-08-18 사용자가 전부 실행 완료.**
 - 법인별 운영 가정(월 유입/결제 버퍼) 실제 값 입력 — 재무팀 의사결정 필요, 에이전트가 대신할 수 없음.
-- ECOS_API_KEY 로테이션, 기타 미적용 마이그레이션 다수 — 전부 사용자 전용 작업(대시보드/CLI 접근 필요).
+- 기타 미적용 마이그레이션 다수 — 전부 사용자 전용 작업(대시보드/CLI 접근 필요). (ECOS_API_KEY 로테이션은 §8 참조 — 사용자가 리스크 감내 결정, 더 이상 권고하지 않음)
+
+---
+
+### 2026-08-18 세션26차 3일차 — FX 메뉴 정합성 정리 + 외화매매거래 부분 체결(Partial Fill)
+
+#### FX 메뉴 3건 정리
+1. **"환율 현황"의 "환전이력" 탭 제거** — `FxTradeHistoryPage`(외화매매거래)와 완전 중복이었음.
+   `FxPage.tsx` 는 순수 환율 시세 화면으로 단순화, 상단에 "외화매매거래"/"자금정책 관리"
+   링크만 안내. **버그**: 이 링크를 `window.location.pathname = ...` 하드 리로드로 구현했다가
+   앱 전체가 새로고침되며 기본 법인(셀바스에이아이) 대시보드로 튕기는 문제 발견 → `useNavigate()`
+   SPA 네비게이션으로 교체.
+2. **`FxPolicyTab.tsx`(③④ 탭)를 SSOT(`usePolicyDashboard`)로 교체** — `useDaily`/`useInvestments`/
+   `useEquities` 직접 재계산을 제거하고 `useFxRegime.ts`가 이미 쓰는 것과 동일한
+   `policyData.fxPolicyDenominator`/`fxByCurrency`/`fxPortfolioHoldings`/`fxRatio` 를 그대로 사용.
+   운전/운용 분리 막대그래프 표시용 native 분리 계산만 로컬에 남기고, **합계·비중은 절대
+   재계산하지 않는다**(세션19차 6.2%/27.9% 사고 재발 방지).
+3. **완료 처리 모달 공유 + 정확도 수정** — `src/components/fx/CompleteTradeModal.tsx` 신규.
+   `FxTradeHistoryPage`(실제 체결환율 입력 모달)와 `FxPolicyTab`(과거엔 클릭 즉시 **현재
+   시장환율**로 완료 처리하던 정확도 문제)이 이제 같은 컴포넌트를 쓴다.
+
+#### 삭제 기능 추가
+`/fx-trade-history` + `FxPolicyTab`(④ 매각 집행)에 매각 지시 삭제 버튼 추가('발의'/'취소' 상태만,
+`canDelete()` 권한). `window.confirm` 대신 화면 안 확인 패널(세션24차 크롬 대화상자 차단 사고
+재발 방지 원칙).
+
+#### ⭐ 외화매매거래 부분 체결(Partial Fill) 신규 기능
+사용자 요구: 매각 지시가 하달된 뒤 최대 3영업일에 걸쳐 여러 번 나눠 체결될 수 있고,
+체결마다 어느 FIFO 로트에서 얼마씩(장부환율 포함) 가져왔는지 남아야 한다.
+
+- **`docs/db/fx_trade_partial_fill_migration.sql`** ⭐⭐ (**실행 완료** — 2026-08-19 사용자 확인) — 신규 테이블
+  `fx_trade_fills`(체결 단위 이력, trade_id FK — daily_report_items 와 동일한 부모1:자식다건
+  패턴), `fx_lot_consumptions.fill_id` 컬럼 추가(어느 체결이 이 로트를 소진했는지 구분),
+  `fx_trade_history.filled_amount` 컬럼 추가(잔여 계산용). 신규 RPC `complete_fx_trade_fill`
+  (부분 체결 1건 등록 — FIFO 소진 후 가중평균 completed_rate/누적 completed_pnl 갱신,
+  전량 소진 시에만 status='완료', 아니면 '부분체결')과 `reverse_fx_trade`(지시 전체 원복 —
+  모든 체결·소진 이력을 되돌리고 '취소'로 리셋). 기존 `complete_fx_trade_with_fifo`/
+  `reverse_completed_fx_trade`(세션 이전)는 건드리지 않고 그대로 둔다(미사용 상태로 방치,
+  additive-migration 관례).
+- `useFxTradeHistory.ts`: `complete()` → **`fillTrade(id, amount, rate, fillDate, by)`**로 교체
+  (기본 수량=잔여 전체로 채우면 기존과 동일하게 1회 완료 동작). `cancel()` 은 '완료'뿐 아니라
+  '부분체결' 상태도 `reverse_fx_trade` 로 원복하도록 확장. 신규 `fetchTradeDetail(tradeId)` —
+  펼쳐보기 클릭 시에만 체결 목록 + 로트별 소진 상세를 조회(목록 화면 성능에 영향 없음).
+- `CompleteTradeModal.tsx`: 체결 수량(기본값=잔여, 초과 불가)·체결일 입력 필드 추가.
+  PnL 미리보기를 **입력한 체결 수량 기준**으로 계산하도록 수정(과거엔 지시 전체 수량
+  기준이라 부분 체결 시 손익이 부풀려지는 버그였을 것).
+- `FxTradeHistoryPage.tsx`: `'부분체결'` 상태 추가, 행 펼쳐보기(▸)로 체결별
+  `체결일·수량·체결환율·손익` + 그 아래 소진된 로트 목록(장부환율→처분환율)까지 표시.
+- **V1 범위 밖**: 개별 체결 1건만 취소/수정하는 기능(전체 취소만 지원),
+  `FxLedgerPage.tsx`의 "완료된 외화 매각" 탭은 아직 `status==='완료'`만 필터링해
+  '부분체결' 중간 상태 거래가 안 보임 — 후속 과제.
+
+검증: tsc -b 0 errors, lint 0 errors(68 warnings=기존 수준), vitest 247/247, build 성공.
+마이그레이션은 2026-08-19 사용자가 Supabase SQL Editor에서 실행 완료. 이후 사용자가 개발
+서버로 이 세션 변경사항을 직접 확인 완료.
+
+---
+
+### 2026-08-19 세션26차 4일차 — FIFO 로트 취소 세분화 (부분체결 V1 범위 밖 항목 후속 구현)
+
+3일차에서 "V1 범위 밖"으로 미룬 두 항목을 구현.
+
+- **`docs/db/fx_trade_fill_reverse_rpc.sql`** ⭐ (**신규, 실행 필요**) — `reverse_fx_trade_fill(p_fill_id, p_reversed_by)`.
+  체결(fill) 1건만 골라 그 fill_id 로 연결된 `fx_lot_consumptions`만 복원·삭제하고, 남은
+  체결들로 `fx_trade_history`(filled_amount/completed_rate/completed_pnl)를 재계산한다.
+  남은 체결이 0건이면 `approved_by` 유무로 '승인'/'발의'로 복귀. 기존 `reverse_fx_trade`(지시
+  전체 원복)는 그대로 두고 손대지 않음 — additive-migration 관례 유지.
+  권한 검사(master/admin/can_approve)는 `complete_fx_trade_fill`과 동일.
+- `useFxTradeHistory.ts` — `reverseFill(fillId, reversedBy)` 신규 (restRpc 호출만, 로딩은
+  호출부 책임).
+- `FxTradeHistoryPage.tsx` — 체결 내역 펼쳐보기(`FillDetailRows`)의 각 체결 카드에
+  "이 체결만 취소" 버튼 추가(승인 권한 + `fx_trade` 쓰기 권한 게이트). 클릭 시 화면 안
+  확인 패널(세션24차 원칙 — `window.confirm` 미사용, 크롬 반복 대화상자 차단 시 조용히
+  아무 일도 안 일어나는 사고 재발 방지)에서 체결 상세(체결일·수량·환율·손익)를 보여주고
+  실행 시에만 반영. 취소 성공 시 `FillDetailRows`를 강제 재조회(`refreshKey`)하고 상위
+  목록(`doFetch`)도 갱신해 지시 행의 상태·잔여 수량이 즉시 맞춰지도록 함.
+- `FxLedgerPage.tsx` — "완료된 외화 매각" 탭이 `status==='완료'`만 걸러 '부분체결' 중간
+  상태 거래를 누락하던 결함 수정. `상태` 컬럼(부분체결 배지) + `체결 수량`/`지시 수량` 분리
+  컬럼 추가 — 지시 수량 전체가 아니라 실제 체결된 수량만큼만 매각으로 집계되게 함.
+
+검증: tsc -b 0 errors, 변경 파일 lint 0 errors, vitest 247/247 유지.
+`docs/db/fx_trade_fill_reverse_rpc.sql` 은 2026-08-19 사용자가 Supabase에 실행 완료.
+브라우저 실화면 검증(체결 취소 → 로트 복원 → 지시 상태 재계산)은 아직 미수행 — 다음 확인 사항.
 
 ---
 

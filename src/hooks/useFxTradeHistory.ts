@@ -20,7 +20,7 @@ import { useState, useCallback, useEffect } from 'react'
 import { restSelect, restInsert, restUpdate, restDelete, restRpc } from '../lib/supabase'
 import type { FxOrderType } from '../lib/fxOrderType'
 import { generateUUID } from '../lib/format'
-import type { FxTradeRecord, Company } from '../types'
+import type { FxTradeRecord, FxTradeFill, FxLotConsumption, Company } from '../types'
 import { saleKey, type SalesCsvRow } from '../lib/fxCsvImport'
 
 export interface FxTradeFilter {
@@ -210,28 +210,83 @@ export function useFxTradeHistory(company?: Company | null) {
     return restUpdate('fx_trade_history', { status: '승인', approved_by: approvedBy, approved_at: new Date().toISOString() }, { id })
   }, [])
 
-  /** B패턴: 완료 처리 (실제 체결 환율 입력) */
-  const complete = useCallback(async (id: string, completedRate: number, completedBy: string) => {
-    const rec      = data.find(r => r.id === id)
-    const amtFx    = rec?.amount_fx ?? 0
-    const acqRate  = rec?.acq_rate ?? null
-    const completedPnl = acqRate != null ? Math.round((completedRate - acqRate) * amtFx) : 0
+  /**
+   * B패턴: 체결 등록 (부분 체결 지원, 세션26차)
+   *
+   * 매각 지시는 최대 3영업일에 걸쳐 여러 번 나눠 체결될 수 있다. 이 함수는 그중
+   * 한 번의 체결(fill)만 기록한다 — 잔여 수량이 남으면 status='부분체결', 전량
+   * 소진되면 '완료'로 전이한다(판정은 서버 RPC/이 함수 내부에서만 한다).
+   *
+   * fx_lots 가 company/currency 에 하나도 없으면(FIFO 원장 미적용 법인/통화)
+   * RPC 대신 클라이언트에서 직접 기록한다 — 과거 complete() 의 폴백과 동일 원칙.
+   */
+  const fillTrade = useCallback(async (
+    id: string, fillAmount: number, completedRate: number, fillDate: string, completedBy: string,
+  ) => {
+    const rec = data.find(r => r.id === id)
     const { data: lots } = rec ? await restSelect('fx_lots', { match: { company: rec.company, currency: rec.currency }, limit: 1 }) : { data: [] }
-    if ((lots ?? []).length > 0) return restRpc('complete_fx_trade_with_fifo', {
-      p_trade_id: id, p_completed_rate: completedRate, p_completed_by: completedBy,
+    if ((lots ?? []).length > 0) return restRpc('complete_fx_trade_fill', {
+      p_trade_id: id, p_fill_amount: fillAmount, p_completed_rate: completedRate,
+      p_fill_date: fillDate, p_completed_by: completedBy,
     })
-    return restUpdate('fx_trade_history',
-      { status: '완료', completed_rate: completedRate, completed_pnl: completedPnl, completed_at: new Date().toISOString(), completed_by: completedBy }, { id })
+    // 폴백: FIFO 로트 없이 체결 기록만 남긴다.
+    const acqRate   = rec?.acq_rate ?? null
+    const fillPnl   = acqRate != null ? Math.round((completedRate - acqRate) * fillAmount) : 0
+    const prevFilled = rec?.filled_amount ?? 0
+    const newFilled  = prevFilled + fillAmount
+    const newRate    = newFilled > 0
+      ? ((rec?.completed_rate ?? 0) * prevFilled + completedRate * fillAmount) / newFilled
+      : completedRate
+    const newPnl     = (rec?.completed_pnl ?? 0) + fillPnl
+    const newStatus  = rec && newFilled >= rec.amount_fx - 0.000001 ? '완료' : '부분체결'
+    const { error: fillErr } = await restInsert('fx_trade_fills', {
+      id: generateUUID(), trade_id: id, company: rec?.company, currency: rec?.currency,
+      fill_date: fillDate, amount_fx: fillAmount, completed_rate: completedRate,
+      realized_pnl: fillPnl, completed_by: completedBy,
+    })
+    if (fillErr) return { data: null, error: fillErr }
+    return restUpdate('fx_trade_history', {
+      filled_amount: newFilled, status: newStatus, completed_rate: newRate,
+      completed_pnl: newPnl, completed_at: new Date().toISOString(), completed_by: completedBy,
+    }, { id })
   }, [data])
 
-  /** B패턴: 취소 */
+  /** B패턴: 지시 전체 취소(원복). */
   const cancel = useCallback(async (id: string, cancelledBy = '') => {
     const rec = data.find(row => row.id === id)
-    if (rec?.status === '완료') return restRpc('reverse_completed_fx_trade', {
+    if (rec?.status === '완료' || rec?.status === '부분체결') return restRpc('reverse_fx_trade', {
       p_trade_id: id, p_reversed_by: cancelledBy,
     })
     return restUpdate('fx_trade_history', { status: '취소' }, { id })
   }, [data])
+
+  /**
+   * 개별 체결 1건만 취소(원복). 지시 전체가 아니라 특정 체결(fill) 하나만 오기재됐을 때
+   * 나머지 체결은 유지한 채 그 체결이 소진한 FIFO 로트만 복원한다.
+   * (docs/db/fx_trade_fill_reverse_rpc.sql — 사용자 실행 필요)
+   */
+  const reverseFill = useCallback(async (fillId: string, reversedBy = '') => {
+    return restRpc('reverse_fx_trade_fill', { p_fill_id: fillId, p_reversed_by: reversedBy })
+  }, [])
+
+  /** 매각 지시 1건의 체결 내역 + 각 체결이 소진한 FIFO 로트 상세 (펼쳐보기 전용) */
+  const fetchTradeDetail = useCallback(async (tradeId: string) => {
+    const { data: fills } = await restSelect<FxTradeFill>('fx_trade_fills', {
+      match: { trade_id: tradeId }, order: 'fill_date.asc', limit: 100,
+    })
+    const fillIds = (fills ?? []).map(f => f.id)
+    const consumptionsByFillId: Record<string, FxLotConsumption[]> = {}
+    if (fillIds.length > 0) {
+      const { data: rows } = await restSelect<FxLotConsumption>('fx_lot_consumptions', {
+        match: { source_type: 'fx_trade_history', source_id: tradeId }, order: 'disposed_date.asc', limit: 500,
+      })
+      for (const row of rows ?? []) {
+        if (!row.fill_id) continue
+        ;(consumptionsByFillId[row.fill_id] ??= []).push(row)
+      }
+    }
+    return { fills: fills ?? [], consumptionsByFillId }
+  }, [])
 
   /** 누적 환차손익 (완료 건, 확정값 우선) */
   const totalPnl = data
@@ -239,5 +294,5 @@ export function useFxTradeHistory(company?: Company | null) {
     .reduce((s, r) => s + (r.completed_pnl ?? r.fx_pnl ?? 0), 0)
 
   return { data, loading, error, totalPnl, load, add, remove, updateCompletedSale,
-    importCompletedSales, fetch, propose, approve, complete, cancel }
+    importCompletedSales, fetch, propose, approve, fillTrade, cancel, reverseFill, fetchTradeDetail }
 }

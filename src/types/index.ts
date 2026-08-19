@@ -105,22 +105,57 @@ export interface FxTradeRecord {
   trade_rate: number | null // 매각환율 (예정)
   amount_krw: number | null // 원화환산액
   fx_pnl: number | null     // 환차손익 (예상)
-  status: string            // 발의 | 승인 | 완료 | 취소
+  status: string            // 발의 | 승인 | 부분체결 | 완료 | 취소
   memo: string | null
   created_by: string | null
   created_at: string
   // 승인 정보
   approved_by: string | null
   approved_at: string | null
-  // 완료(체결) 정보
-  completed_rate: number | null   // 실제 체결 환율
-  completed_pnl: number | null    // 확정 환차손익
+  // 완료(체결) 정보 — 부분 체결 지원 후에는 "누적/가중평균" 값이다. 개별 체결
+  // 내역은 fx_trade_fills(FxTradeFill)를 별도 조회해야 한다.
+  completed_rate: number | null   // 누적 체결의 가중평균 환율
+  completed_pnl: number | null    // 누적 확정 환차손익
   completed_at: string | null
   completed_by: string | null
   // 매각 지시 이행 기한 (세션20차 정책 이행 통제 — 등록일+3영업일, 환율 무관 실행 강제)
   due_date: string | null
   // threshold=보유비중 초과 / discretionary=정책회의 재량 / regime=리짐 권고(세션26차)
   order_type: FxOrderType | null
+  // 지시 전체 수량 대비 누적 체결 수량 (세션26차 부분 체결)
+  filled_amount: number
+}
+
+/**
+ * fx_trade_fills — 매각 지시(FxTradeRecord) 1건에 딸린 개별 체결 내역.
+ * 지시가 여러 영업일에 걸쳐 나눠 체결될 때, 체결마다 남는 행이다.
+ */
+export interface FxTradeFill {
+  id: string
+  trade_id: string
+  company: Company
+  currency: string
+  fill_date: string
+  amount_fx: number
+  completed_rate: number
+  realized_pnl: number
+  completed_by: string | null
+  created_at: string
+}
+
+/**
+ * fx_lot_consumptions — 체결(FxTradeFill) 1건이 어느 FIFO 로트에서 얼마씩,
+ * 그 로트의 장부환율(acq_rate)로 소진했는지의 상세. fill_id 로 체결과 연결된다.
+ */
+export interface FxLotConsumption {
+  id: string
+  lot_id: string
+  fill_id: string | null
+  disposed_date: string
+  amount: number
+  acq_rate: number       // 소진된 로트의 장부(취득)환율
+  disposal_rate: number  // 처분(체결)환율
+  realized_pnl: number
 }
 
 // ─── 차입금 (loans) ──────────────────────────────────────

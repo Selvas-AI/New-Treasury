@@ -54,14 +54,23 @@ describe('isBusinessDay', () => {
 })
 
 // ─── calcDday ────────────────────────────────────────────
+// ⚠ toISOString()은 UTC 기준이라, KST 자정~09시(UTC 기준 아직 전날)에 테스트를
+//   돌리면 로컬 날짜보다 하루 이른 문자열이 만들어져 실패한다. calcDday 자체는
+//   로컬 자정 기준으로 정확하므로(format.ts), 픽스처도 로컬 날짜로 만든다.
+function localDateStr(d: Date): string {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
 describe('calcDday', () => {
   it('미래 30일 → 30', () => {
     const future = new Date()
     future.setDate(future.getDate() + 30)
-    expect(calcDday(future.toISOString().slice(0, 10))).toBe(30)
+    expect(calcDday(localDateStr(future))).toBe(30)
   })
   it('오늘 → 0', () => {
-    expect(calcDday(new Date().toISOString().slice(0, 10))).toBe(0)
+    expect(calcDday(localDateStr(new Date()))).toBe(0)
   })
 })
 

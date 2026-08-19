@@ -1,8 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useAuth } from '../../hooks/useAuth'
-import { useDaily } from '../../hooks/useDaily'
-import { useInvestments, getLatestInvestments, getLatestBonds } from '../../hooks/useInvestments'
-import { useEquities } from '../../hooks/useEquities'
+import { usePolicyDashboard } from '../../hooks/usePolicyDashboard'
 import { useFx } from '../../hooks/useFx'
 import { usePolicyParams } from '../../hooks/usePolicyParams'
 import { fetchFxStdDev } from '../../hooks/useGas'
@@ -17,6 +15,7 @@ import FxRegimeStandardTab from './FxRegimeStandardTab'
 import { useFxTradeHistory } from '../../hooks/useFxTradeHistory'
 import { useToast } from '../../contexts/ToastProvider'
 import { addBizDays, bizDaysBetween, todayStr } from '../../lib/bizDay'
+import { CompleteTradeModal } from '../fx/CompleteTradeModal'
 import type { Company, FxCode, FxTradeRecord } from '../../types'
 
 // 4개 통화 (ECOS 지원 통화만 — CNY 제외)
@@ -55,13 +54,28 @@ function fmtAmt(v: number, code: FxCode): string {
 interface TradeModal { code: FxCode | 'total'; excessKrw: number; discretionary: boolean }
 
 // 이행 대기 매각 지시 목록 — D-day(영업일 기준)로 기한 임박/초과를 강조
-function SellOrderList({ orders, onQuickComplete, canEdit }: {
+//
+// ⚠ "체결 등록" 은 반드시 실제 체결환율을 입력받는 CompleteTradeModal 을 거친다.
+//   과거엔 클릭 즉시 현재 시장환율로 완료 처리했는데, 그건 실제 체결가와 다를 수
+//   있는 정확도 문제였다(세션26차 메뉴 정합성 정리에서 수정).
+// 지시 하나가 여러 영업일에 걸쳐 나눠 체결될 수 있어(부분 체결), 잔여 수량이
+// 남아있는 한('부분체결' 상태) 목록에 계속 남는다. 로트별 소진 상세는 이
+// 화면엔 없다 — 상세 감사는 외화매매거래(FxTradeHistoryPage)가 정본이다.
+function SellOrderList({ orders, onComplete, onDelete, canEdit, canDeleteOrder }: {
   orders: FxTradeRecord[]
-  onQuickComplete: (id: string, currency: string) => Promise<void>
+  onComplete: (id: string, amount: number, rate: number, fillDate: string) => Promise<string | null>
+  onDelete: (id: string) => Promise<string | null>
   canEdit: boolean
+  canDeleteOrder: boolean
 }) {
   const today = todayStr()
   const sorted = [...orders].sort((a, b) => (a.due_date ?? '').localeCompare(b.due_date ?? ''))
+  const [completing, setCompleting] = useState<FxTradeRecord | null>(null)
+  // 삭제는 확정 이력이 없는 '발의' 건만 — '승인' 건은 먼저 취소한 뒤 외화매매거래
+  // 이력에서 삭제한다(FIFO 소진이 없는 상태에서만 삭제 허용하는 정책과 일관).
+  const [deleting, setDeleting] = useState<FxTradeRecord | null>(null)
+  const [deleteBusy, setDeleteBusy] = useState(false)
+  const [deleteErr, setDeleteErr] = useState<string | null>(null)
 
   if (sorted.length === 0) {
     return <p className="text-xs text-gray-400 dark:text-gray-500 py-2">이행 대기 중인 매각 지시가 없습니다.</p>
@@ -86,24 +100,78 @@ function SellOrderList({ orders, onQuickComplete, canEdit }: {
               </span>
               <span className="text-gray-500 dark:text-slate-400 shrink-0">{orderTypeLabel(o.order_type)}</span>
               <span className="font-medium text-gray-800 dark:text-slate-100 truncate">
-                {o.currency} {o.amount_fx ? o.amount_fx.toLocaleString() : ''} — 기한 {o.due_date}
+                {o.currency} {o.amount_fx ? o.amount_fx.toLocaleString() : ''}
+                {(o.filled_amount ?? 0) > 0 && (
+                  <span className="text-purple-500 dark:text-purple-400 font-normal">
+                    {' '}/ 잔여 {Math.max(0, o.amount_fx - (o.filled_amount ?? 0)).toLocaleString()}
+                  </span>
+                )}
+                {' '}— 기한 {o.due_date}
               </span>
             </div>
-            {canEdit && (
-              <button onClick={() => void onQuickComplete(o.id, o.currency)}
-                className="shrink-0 text-[11px] px-2 py-1 bg-green-600 hover:bg-green-700 text-white rounded font-medium">
-                매각 완료
-              </button>
-            )}
+            <div className="shrink-0 flex gap-1">
+              {canDeleteOrder && o.status === '발의' && (
+                <button onClick={() => { setDeleting(o); setDeleteErr(null) }}
+                  className="text-[11px] px-2 py-1 border border-red-200 dark:border-red-800 text-red-500 dark:text-red-400 rounded hover:bg-red-50 dark:hover:bg-red-950/30">
+                  삭제
+                </button>
+              )}
+              {canEdit && (
+                <button onClick={() => setCompleting(o)}
+                  className="text-[11px] px-2 py-1 bg-green-600 hover:bg-green-700 text-white rounded font-medium">
+                  체결 등록
+                </button>
+              )}
+            </div>
           </div>
         )
       })}
+      {completing && (
+        <CompleteTradeModal
+          record={completing}
+          onClose={() => setCompleting(null)}
+          onSubmit={(amount, rate, fillDate) => onComplete(completing.id, amount, rate, fillDate)}
+        />
+      )}
+      {deleting && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: 'rgba(0,0,0,0.45)' }}
+          onClick={e => { if (e.target === e.currentTarget) setDeleting(null) }}>
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-sm border border-gray-200 dark:border-slate-700"
+            style={{ animation: 'fadeInScale 0.18s ease-out both' }}>
+            <div className="px-6 pt-5 pb-3 border-b border-gray-100 dark:border-slate-700">
+              <p className="text-base font-semibold text-gray-800 dark:text-slate-100">🗑 매각 지시 삭제</p>
+              <p className="text-xs text-gray-400 mt-0.5">복구할 수 없습니다.</p>
+            </div>
+            <div className="px-6 py-4 text-xs text-gray-600 dark:text-slate-300">
+              {deleting.currency} {deleting.amount_fx.toLocaleString()} — 기한 {deleting.due_date}
+              {deleteErr && <p className="text-red-600 mt-2">{deleteErr}</p>}
+            </div>
+            <div className="px-6 pb-5 flex gap-2 justify-end">
+              <button onClick={() => setDeleting(null)}
+                className="px-4 py-2 text-sm border border-gray-300 dark:border-slate-600 text-gray-600 dark:text-slate-300 rounded-lg">
+                취소
+              </button>
+              <button onClick={async () => {
+                setDeleteBusy(true)
+                const err = await onDelete(deleting.id)
+                setDeleteBusy(false)
+                if (err) setDeleteErr(err)
+                else setDeleting(null)
+              }} disabled={deleteBusy}
+                className="px-5 py-2 text-sm font-medium bg-red-600 hover:bg-red-700 text-white rounded-lg disabled:opacity-50">
+                {deleteBusy ? '삭제 중...' : '삭제 실행'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
 export default function FxPolicyTab({ company }: { company: Company }) {
-  const { user, canAction } = useAuth()
+  const { user, canAction, canDelete } = useAuth()
   const isMaster = user?.role === 'master'
   // 자금정책 편집 권한 — master는 항상 가능, 그 외 역할은 UsersPage에서 개별 부여된
   // action_permissions['policy'].write 로 허용(기존엔 master 고정이라 admin에게도 부여 불가했음)
@@ -116,11 +184,12 @@ export default function FxPolicyTab({ company }: { company: Company }) {
   const [bandDraft, setBandDraft] = useState<{ min: number; max: number } | null>(null)
   // ⚠ 자식 effect 의 deps 에 들어가므로 참조가 안정적이어야 한다(매 렌더 새 함수 = 무한 루프).
   const clearBandDraft = useCallback(() => setBandDraft(null), [])
-  const daily    = useDaily()
-  const invest   = useInvestments(true)
-  const equities = useEquities()
-  const fx       = useFx()
-  const params   = usePolicyParams(company)
+  // SSOT — useFxRegime.ts(/fx-regime)가 이미 재사용 중인 것과 동일한 훅.
+  // 세션19차에 자체 재계산 이중화로 외화비중이 6.2%/27.9%로 갈라진 사고가 있었다 —
+  // 이 탭도 자체 계산을 쓰지 말고 반드시 이 값을 그대로 쓸 것.
+  const policyData = usePolicyDashboard(company)
+  const fx         = useFx()
+  const params     = usePolicyParams(company)
 
   // ── 정책 파라미터
   const riskPortion      = params.get('fx_risk_portion')      ?? 0.5
@@ -163,44 +232,17 @@ export default function FxPolicyTab({ company }: { company: Company }) {
   const weightedStdSum = currencyRows.reduce((s, r) => s + r.wgt * r.std, 0)
   const maxRateChange  = weightedStdSum * z
 
-  // ── 가용 자금 합계 (운전자금 + 가용 운용자금 + 가용 국채 + 가용 지분/장기투자)
-  const latestDaily = useMemo(() => daily.data[0] ?? null, [daily.data])
-  const operatingCash = useMemo(() => latestDaily
-    ? (latestDaily.krw_demand + latestDaily.krw_govt + latestDaily.krw_mmda + latestDaily.fx_krw)
-    : 0, [latestDaily])
-  const investAvailCash = useMemo(() => {
-    const latest = getLatestInvestments(invest.data)
-    return latest
-      .filter(i => i.product !== '국채' && i.available === '가용')
-      .reduce((s, i) => {
-        if (!i.currency || i.currency === 'KRW') return s + (i.amount || 0)
-        return s + fx.toKRW(i.amount || 0, i.currency as FxCode)
-      }, 0)
-  }, [invest.data, fx.rates]) // eslint-disable-line react-hooks/exhaustive-deps
-  const investAllCash = useMemo(() => {
-    const latest = getLatestInvestments(invest.data)
-    return latest.filter(i => i.product !== '국채').reduce((s, i) => {
-      if (!i.currency || i.currency === 'KRW') return s + (i.amount || 0)
-      return s + fx.toKRW(i.amount || 0, i.currency as FxCode)
-    }, 0)
-  }, [invest.data, fx.rates]) // eslint-disable-line react-hooks/exhaustive-deps
-  const bondAvailCash = useMemo(() => {
-    const latestBonds = getLatestBonds(invest.data)
-    return latestBonds
-      .filter(b => b.available === '가용')
-      .reduce((s, b) => {
-        if (b.bondQty && b.bondPrice) return s + b.bondQty * b.bondPrice / 10
-        return s + (b.amount || 0)
-      }, 0)
-  }, [invest.data])
-  const equityAvailCash = useMemo(() =>
-    equities.latest
-      .filter(e => e.available === '가용')
-      .reduce((s, e) => s + (e.total_value || 0), 0)
-  , [equities.latest])
+  // ── 가용 자금 합계 — usePolicyDashboard(SSOT) 값을 그대로 사용 (자체 재계산 금지)
+  const latestDaily     = policyData.latestDaily
+  const operatingCash   = policyData.operatingCashWithFx
+  // "운용" 은 가용+불가용 합계다 — 분모(totalFund)에도 불가용이 포함되므로
+  // 표시를 가용분만 보여주면 합계와 어긋난다(과거 실제 불일치였던 지점).
+  const investAllCash   = policyData.investAvail + policyData.investUnavail
+  const bondAvailCash   = policyData.bondAvail
+  const equityAvailCash = policyData.equityAvail
   // 정책밴드 분모는 환전 가능액이 아니라 회사의 전체 자금 바구니다.
   // 정기예금/불가용 외화도 외화위험에는 노출되므로 분자와 분모에 함께 포함한다.
-  const totalFund = operatingCash + investAllCash + bondAvailCash + equityAvailCash
+  const totalFund = policyData.fxPolicyDenominator
 
   // ── 이중 안전장치 (로컬 슬라이더 값으로 실시간 계산 — Supabase 저장 전에도 즉각 반영)
   const maxAllowedLoss  = (operatingProfit + interestIncome) * (localRiskPct / 100)
@@ -210,8 +252,10 @@ export default function FxPolicyTab({ company }: { company: Company }) {
   const aWins           = limitA > 0 && limitB > 0 ? limitA <= limitB : limitA > 0
   const optimalFxRatio  = totalFund > 0 ? (effectiveLimit / totalFund) * 100 : 0
 
-  // ── 통화별 외화 잔액 분리 계산
-  // 운전자금 외화 (daily 테이블, 통화별 원화환산)
+  // ── 통화별 외화 잔액 분리 계산 (운전/운용 split — 막대그래프 시각화 전용)
+  // ⚠ 합계·비중의 SSOT는 policyData.fxByCurrency/fxRatio 다. 여기 native 분리는
+  // "운전 얼마 + 운용 얼마"를 보여주기 위한 화면 전용 세부값일 뿐, 총액 계산에는
+  // 관여하지 않는다 — 총액을 다시 여기서 더하지 말 것.
   const operatingFxNative: Record<FxCode, number> = {
     USD: latestDaily?.fx_usd ?? 0,
     EUR: latestDaily?.fx_eur ?? 0,
@@ -219,43 +263,35 @@ export default function FxPolicyTab({ company }: { company: Company }) {
     GBP: latestDaily?.fx_gbp ?? 0,
     CNY: latestDaily?.fx_cny ?? 0,
   }
-  // 운용자금 외화 (investments 테이블, currency != KRW, 가용·불가용 모두)
   const investFxNative = useMemo(() => {
     const result: Partial<Record<FxCode, number>> = {}
-    const latest = getLatestInvestments(invest.data)
-    latest
-      .filter(i => i.product !== '국채' && i.currency && i.currency !== 'KRW')
+    policyData.investments
+      .filter(i => i.currency && i.currency !== 'KRW')
       .forEach(i => {
         const code = i.currency as FxCode
         result[code] = (result[code] ?? 0) + (i.amount || 0)
       })
     return result
-  }, [invest.data])
+  }, [policyData.investments])
 
-  // 통화별 합계 (운전 + 운용) — KRW 환산
   const operatingFxKrwByCode = useMemo(() =>
     Object.fromEntries(FX_CURRENCIES.map(c => [c.code, fx.toKRW(operatingFxNative[c.code] ?? 0, c.code)]))
   , [operatingFxNative, fx]) // eslint-disable-line react-hooks/exhaustive-deps
   const investFxKrwByCode = useMemo(() =>
     Object.fromEntries(FX_CURRENCIES.map(c => [c.code, fx.toKRW(investFxNative[c.code] ?? 0, c.code)]))
   , [investFxNative, fx]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 통화별 합계·보유 총액·비중 — SSOT(usePolicyDashboard) 그대로 사용
   const fxKrwByCode = useMemo(() =>
-    Object.fromEntries(FX_CURRENCIES.map(c => [c.code,
-      (operatingFxKrwByCode[c.code] ?? 0) + (investFxKrwByCode[c.code] ?? 0)
-    ])) as Record<FxCode, number>
-  , [operatingFxKrwByCode, investFxKrwByCode])
-
-  // 하위 호환: 통화별 native 합계 (운전+운용) — 테이블 표시용
+    Object.fromEntries(FX_CURRENCIES.map(c => [c.code, policyData.fxByCurrency[c.code]?.krwAmount ?? 0])) as Record<FxCode, number>
+  , [policyData.fxByCurrency])
   const fxBalances = useMemo(() =>
-    Object.fromEntries(FX_CURRENCIES.map(c => [c.code,
-      (operatingFxNative[c.code] ?? 0) + (investFxNative[c.code] ?? 0)
-    ])) as Record<FxCode, number>
-  , [operatingFxNative, investFxNative])
+    Object.fromEntries(FX_CURRENCIES.map(c => [c.code, policyData.fxByCurrency[c.code]?.nativeAmount ?? 0])) as Record<FxCode, number>
+  , [policyData.fxByCurrency])
 
-  // 현재 외화 보유 총액 = 통화별 KRW 합산 (운전 + 운용)
-  const totalIndividualFxKrw = Object.values(fxKrwByCode).reduce((s, v) => s + v, 0)
+  const totalIndividualFxKrw = policyData.fxPortfolioHoldings
   const currentFxKrw   = totalIndividualFxKrw
-  const currentFxRatio = totalFund > 0 ? (currentFxKrw / totalFund) * 100 : 0
+  const currentFxRatio = policyData.fxRatio
   const fxGap          = currentFxKrw - effectiveLimit  // 양수 = 초과, 음수 = 여유
   const isOverLimit    = fxGap > 0
 
@@ -634,14 +670,31 @@ export default function FxPolicyTab({ company }: { company: Company }) {
           )}
         </div>
         <SellOrderList
-          orders={tradeHist.data.filter(t => t.direction === 'sell' && (t.status === '발의' || t.status === '승인') && t.due_date)}
-          onQuickComplete={async (id, curr) => {
-            const rate = fx.toKRW(1, curr as FxCode)
-            const { error } = await tradeHist.complete(id, rate, user?.label ?? '')
-            if (error) toast.error(`완료 처리 실패: ${error.message ?? error}`)
-            else await tradeHist.load()
+          orders={tradeHist.data.filter(t => t.direction === 'sell'
+            && (t.status === '발의' || t.status === '승인' || t.status === '부분체결') && t.due_date)}
+          onComplete={async (id, amount, rate, fillDate) => {
+            const rec = tradeHist.data.find(t => t.id === id)
+            const remainingBefore = rec ? rec.amount_fx - (rec.filled_amount ?? 0) : 0
+            const { error } = await tradeHist.fillTrade(id, amount, rate, fillDate, user?.label ?? '')
+            if (error) return error.message ?? String(error)
+            await tradeHist.load()
+            // 전량 체결이면 이 목록(이행 대기)에서 바로 사라진다 — 조용히 없어지는 것처럼
+            // 보이지 않도록 완료 여부를 명시적으로 안내한다.
+            toast.success(amount >= remainingBefore - 0.000001
+              ? '체결 등록 완료 — 지시가 전량 체결되어 완료 처리되었습니다.'
+              : `체결 등록 완료 — 잔여 ${(remainingBefore - amount).toLocaleString()} 남았습니다.`)
+            return null
+          }}
+          onDelete={async id => {
+            try {
+              await tradeHist.remove(id)
+              return null
+            } catch (e) {
+              return String(e)
+            }
           }}
           canEdit={canEditPolicy}
+          canDeleteOrder={canDelete()}
         />
       </div>
 
@@ -866,7 +919,7 @@ export default function FxPolicyTab({ company }: { company: Company }) {
             <p className="text-base font-bold text-gray-800 dark:text-slate-100 tabular-nums">{fmtKRW(totalFund)}</p>
             <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
               <p className="text-xs text-gray-400">운전 <span className="text-gray-600 dark:text-slate-300">{fmtKRW(operatingCash)}</span></p>
-              <p className="text-xs text-gray-400">+ 운용(가용) <span className="text-gray-600 dark:text-slate-300">{fmtKRW(investAvailCash)}</span></p>
+              <p className="text-xs text-gray-400">+ 운용 <span className="text-gray-600 dark:text-slate-300">{fmtKRW(investAllCash)}</span></p>
               <p className="text-xs text-gray-400">+ 국채(가용) <span className="text-gray-600 dark:text-slate-300">{fmtKRW(bondAvailCash)}</span></p>
               {equityAvailCash > 0 && (
                 <p className="text-xs text-gray-400">+ 지분(가용) <span className="text-gray-600 dark:text-slate-300">{fmtKRW(equityAvailCash)}</span></p>
