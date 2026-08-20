@@ -29,15 +29,32 @@
 
 -- ── 0. 백업 (필수) ─────────────────────────────────────────────────────────
 -- ⚠ 이걸 먼저 하지 않으면 되돌릴 방법이 없다.
-create table if not exists public.daily_backup_20260820 as
+--
+-- ⚠⚠ **backup 스키마에 만든다. public 에 만들지 말 것.**
+--   Supabase 는 public 스키마를 PostgREST 로 자동 노출하고, 신규 테이블에
+--   anon/authenticated 권한을 기본 부여한다(ALTER DEFAULT PRIVILEGES).
+--   public.daily_backup_... 을 만들면 **RLS 없이 API 에 그대로 열려** 전 법인
+--   자금 데이터가 anon 키로 조회 가능해진다.
+--   backup 스키마는 PostgREST 노출 대상(Exposed schemas)이 아니라 안전하다.
+
+create schema if not exists backup;
+revoke all on schema backup from anon, authenticated;
+
+drop table if exists backup.daily_20260820;
+drop table if exists backup.daily_reports_20260820;
+
+create table backup.daily_20260820 as
   select * from public.daily where company = '메디아나';
-create table if not exists public.daily_reports_backup_20260820 as
+create table backup.daily_reports_20260820 as
   select * from public.daily_reports where company = '메디아나';
 
--- 백업 건수 확인 (daily 87건 예상)
-select 'daily' as t, count(*) from public.daily_backup_20260820
+revoke all on backup.daily_20260820         from anon, authenticated;
+revoke all on backup.daily_reports_20260820 from anon, authenticated;
+
+-- 백업 건수 확인 — daily 87건 예상. 0 이 나오면 절대 다음 단계로 넘어가지 말 것.
+select 'daily' as t, count(*) from backup.daily_20260820
 union all
-select 'daily_reports', count(*) from public.daily_reports_backup_20260820;
+select 'daily_reports', count(*) from backup.daily_reports_20260820;
 
 
 -- ── 1. DRY-RUN — 무엇이 어떻게 바뀌는지 먼저 눈으로 확인 ───────────────────
@@ -138,7 +155,7 @@ select count(*) from public.daily where company = '메디아나';
 -- 3-2. 값이 한 칸씩 밀렸는가 — 백업의 D일 값이 현재 D+1영업일에 있어야 한다
 select b.date as old_date, b.fx_usd as old_usd,
        d.date as new_date, d.fx_usd as new_usd
-  from public.daily_backup_20260820 b
+  from backup.daily_20260820 b
   join public.daily d on d.id = b.id
  order by b.date desc
  limit 10;
@@ -155,15 +172,16 @@ select company, max(date) from public.daily group by company order by company;
 -- ⚠ 백업 테이블이 있어야 한다. 실행 전 반드시 §3 으로 상태를 확인할 것.
 -- begin;
 -- update public.daily d set date = b.date + interval '10000 day'
---   from public.daily_backup_20260820 b where d.id = b.id;
+--   from backup.daily_20260820 b where d.id = b.id;
 -- update public.daily d set date = b.date
---   from public.daily_backup_20260820 b where d.id = b.id;
+--   from backup.daily_20260820 b where d.id = b.id;
 -- update public.daily_reports r set report_date = b.report_date + interval '10000 day'
---   from public.daily_reports_backup_20260820 b where r.id = b.id;
+--   from backup.daily_reports_20260820 b where r.id = b.id;
 -- update public.daily_reports r set report_date = b.report_date
---   from public.daily_reports_backup_20260820 b where r.id = b.id;
+--   from backup.daily_reports_20260820 b where r.id = b.id;
 -- commit;
 
 -- ── 5. 정리 (검증 완료 후, 충분한 시간이 지난 뒤에) ────────────────────────
--- drop table public.daily_backup_20260820;
--- drop table public.daily_reports_backup_20260820;
+-- ⚠ 서두르지 말 것. 자금일보·대시보드를 며칠 써보고 이상이 없을 때 지운다.
+-- drop table backup.daily_20260820;
+-- drop table backup.daily_reports_20260820;
