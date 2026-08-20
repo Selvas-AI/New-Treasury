@@ -13,9 +13,11 @@
 --      자금일보는 daily[작성일](마감) 과 daily[전영업일](기초) 을 읽어
 --      `입금 − 출금 − 잔액증감 = 0` 을 검증한다. 한쪽만 밀면 이미 승인된
 --      과거 일보의 검증식이 어긋난다 → `daily_reports.report_date` 도 함께 민다.
---   2. **영업일 계산에 공휴일 테이블이 필요 없다.** 기존 행이 이미 영업일에만
---      존재하므로 "각 행의 날짜 → 다음 행의 날짜" 로 밀면 정확히 +1 영업일이다.
---      대체공휴일·임시공휴일도 자동으로 맞는다.
+--   2. **영업일 계산에 공휴일 테이블이 필요 없다.** `daily` 가 영업일마다 빠짐없이
+--      존재하므로 그 날짜 시퀀스가 곧 영업일 달력이다. 대체공휴일도 자동으로 맞는다.
+--      ⚠⚠ **`daily_reports` 를 자기 시퀀스로 밀면 안 된다.** 일보를 안 쓴 날이 비어 있어
+--      영업일을 점프한다(실측: 2026-06-05 → 06-09, 6/08 일보 없음). 양쪽 모두
+--      **daily 달력**으로 민다.
 --   3. UNIQUE(company, date) 충돌을 피하려고 **2단계**로 옮긴다
 --      (한 번에 밀면 이동 도중 중복이 생겨 실패한다).
 --   4. `fx_lots.source_id` · `fx_ledger_reconcile_ignored.daily_id` 는 daily 의 **id**
@@ -58,92 +60,109 @@ select 'daily_reports', count(*) from backup.daily_reports_20260820;
 
 
 -- ── 1. DRY-RUN — 무엇이 어떻게 바뀌는지 먼저 눈으로 확인 ───────────────────
--- ⚠ 여기서 `new_date is null` 인 행 = **가장 최신 행**. 다음 영업일을 알 수 없으므로
---   §2 에서 :p_last_new_date 로 직접 지정한다. 오늘이 2026-08-20(목, 영업일)이고
---   마지막 daily 가 2026-08-19 라면 → '2026-08-20'.
-select id, date as old_date,
-       lead(date) over (order by date) as new_date
-  from public.daily
- where company = '메디아나'
- order by date desc
- limit 20;
+-- ⚠ 영업일 달력은 **daily 하나**를 쓴다. daily_reports 는 일보를 안 쓴 날이 비어 있어
+--   자기 시퀀스로 밀면 영업일을 점프한다(실측: 2026-06-05 → 06-09).
+with bizcal as (
+  select date as d, lead(date) over (order by date) as next_d
+    from public.daily where company = '메디아나'
+)
+select 'daily' as tbl, d.date as old_date, c.next_d as new_date
+  from public.daily d join bizcal c on c.d = d.date
+ where d.company = '메디아나'
+union all
+select 'daily_reports', r.report_date, c.next_d
+  from public.daily_reports r left join bizcal c on c.d = r.report_date
+ where r.company = '메디아나'
+ order by 1, 2 desc;
+-- ⚠ new_date 가 NULL 인 행 = 달력 마지막(daily 최신) 또는 달력에 없는 초안.
+--   §2 에서 각각 '2026-08-20'(daily) / '2026-08-21'(초안) 로 지정한다.
+--   그 외에 NULL 이 더 있으면 중단하고 원인을 확인할 것.
 
-select id, report_date as old_date,
-       lead(report_date) over (order by report_date) as new_date
-  from public.daily_reports
- where company = '메디아나'
- order by report_date desc
- limit 20;
+-- 비연속 구간 점검 — daily_reports 가 daily 달력 대비 얼마나 비어 있는지
+select count(*) as reports_not_in_daily_calendar
+  from public.daily_reports r
+ where r.company = '메디아나'
+   and r.report_date not in (select date from public.daily where company = '메디아나');
 
 
 -- ── 2. 실행 ────────────────────────────────────────────────────────────────
 -- ⚠ 아래 블록 전체를 **한 트랜잭션**으로 실행한다. 중간에 실패하면 전부 롤백된다.
--- ⚠ :LAST_NEW_DATE 를 실제 값으로 바꿔서 실행할 것 (예: '2026-08-20').
+--
+-- ⚠⚠ **영업일 달력은 `daily` 하나로 통일한다.**
+--   처음엔 각 테이블의 자기 시퀀스로 `lead()` 를 썼는데 **틀렸다.**
+--   daily_reports 는 일보를 안 쓴 날이 비어 있어(실측: 2026-06-05 → 06-09,
+--   6/08 일보 없음) 자기 시퀀스로 밀면 **2영업일을 점프**하고 그 뒤가 전부 어긋난다.
+--   daily 는 영업일마다 빠짐없이 존재하므로 이것이 영업일 달력의 정본이다.
 begin;
 
--- 2-1. daily
-create temp table _shift_daily on commit drop as
-  select id,
-         date as old_date,
-         lead(date) over (order by date) as new_date
+-- 2-0. 영업일 달력 — daily 의 날짜 시퀀스가 곧 영업일 목록이다.
+--      공휴일 테이블이 필요 없고 대체공휴일도 자동으로 맞는다.
+create temp table _bizcal on commit drop as
+  select date as d, lead(date) over (order by date) as next_d
     from public.daily
    where company = '메디아나';
 
--- 최신 행에 새 날짜 지정 (다음 영업일)
-update _shift_daily
-   set new_date = date '2026-08-20'      -- ⚠ :LAST_NEW_DATE — 실행 전 확인
- where new_date is null;
+-- 달력의 마지막 날(= daily 최신)의 다음 영업일을 지정한다.
+-- ⚠ 실행 전 확인: daily 최신이 2026-08-19 이면 다음 영업일은 2026-08-20.
+update _bizcal set next_d = date '2026-08-20' where next_d is null;
 
--- 안전장치: 목표 날짜에 중복이 없어야 한다
+-- 2-1. daily
+create temp table _shift_daily on commit drop as
+  select d.id, d.date as old_date, c.next_d as new_date
+    from public.daily d
+    join _bizcal c on c.d = d.date
+   where d.company = '메디아나';
+
 do $$
-declare v_dup int;
+declare v_miss int; v_dup int;
 begin
+  select count(*) into v_miss from public.daily
+   where company='메디아나'
+     and id not in (select id from _shift_daily);
+  if v_miss > 0 then raise exception 'daily %건이 달력에 매칭되지 않음 — 중단', v_miss; end if;
+
   select count(*) into v_dup
     from (select new_date from _shift_daily group by new_date having count(*) > 1) x;
   if v_dup > 0 then raise exception 'daily 목표 날짜 중복 %건 — 중단', v_dup; end if;
 end $$;
 
 -- 1단계: 충돌 회피용 임시 이동 (UNIQUE(company,date) 위반 방지)
-update public.daily d
-   set date = m.old_date + interval '10000 day'
-  from _shift_daily m
- where d.id = m.id;
-
+update public.daily d set date = m.old_date + interval '10000 day'
+  from _shift_daily m where d.id = m.id;
 -- 2단계: 목표 날짜로 확정
-update public.daily d
-   set date = m.new_date
-  from _shift_daily m
- where d.id = m.id;
+update public.daily d set date = m.new_date
+  from _shift_daily m where d.id = m.id;
 
--- 2-2. daily_reports (자금일보) — daily 와 짝을 유지해야 검증식이 깨지지 않는다
+-- 2-2. daily_reports — **daily 달력**으로 민다(자기 시퀀스로 밀면 안 된다).
+--      단, daily 에 없는 report_date(= 오늘 작성 중인 초안)는 따로 지정한다.
 create temp table _shift_reports on commit drop as
-  select id,
-         report_date as old_date,
-         lead(report_date) over (order by report_date) as new_date
-    from public.daily_reports
-   where company = '메디아나';
-
-update _shift_reports
-   set new_date = date '2026-08-21'      -- ⚠ 자금일보 최신이 8/20 이면 다음 영업일
- where new_date is null;
+  select r.id, r.report_date as old_date,
+         coalesce(c.next_d, date '2026-08-21') as new_date   -- ⚠ 초안(2026-08-20)의 다음 영업일
+    from public.daily_reports r
+    left join _bizcal c on c.d = r.report_date
+   where r.company = '메디아나';
 
 do $$
-declare v_dup int;
+declare v_dup int; v_unmatched int;
 begin
+  -- daily 달력에 없는 report_date 가 1건(오늘 초안)뿐인지 확인 — 그 외면 중단
+  select count(*) into v_unmatched
+    from public.daily_reports r
+    left join _bizcal c on c.d = r.report_date
+   where r.company='메디아나' and c.d is null;
+  if v_unmatched > 1 then
+    raise exception 'daily 달력에 없는 report_date %건 — 확인 필요', v_unmatched;
+  end if;
+
   select count(*) into v_dup
     from (select new_date from _shift_reports group by new_date having count(*) > 1) x;
   if v_dup > 0 then raise exception 'daily_reports 목표 날짜 중복 %건 — 중단', v_dup; end if;
 end $$;
 
-update public.daily_reports r
-   set report_date = m.old_date + interval '10000 day'
-  from _shift_reports m
- where r.id = m.id;
-
-update public.daily_reports r
-   set report_date = m.new_date
-  from _shift_reports m
- where r.id = m.id;
+update public.daily_reports r set report_date = m.old_date + interval '10000 day'
+  from _shift_reports m where r.id = m.id;
+update public.daily_reports r set report_date = m.new_date
+  from _shift_reports m where r.id = m.id;
 
 commit;
 
