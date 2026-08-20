@@ -32,6 +32,8 @@ import { REGIME_CURRENCIES } from '../lib/fxRegimeInputs'
 import { orderTypeLabel } from '../lib/fxOrderType'
 import { useFxTradeHistory } from '../hooks/useFxTradeHistory'
 import { useFxLedgerReconciliation } from '../hooks/useFxLedgerReconciliation'
+import { useFxLedgerDayActivity } from '../hooks/useFxLedgerDayActivity'
+import { outflowTxnLabel } from '../lib/fxTxnType'
 import { bizDaysBetween } from '../lib/bizDay'
 import { fmtKRW, fmtNumber } from '../lib/format'
 import type { Company, DailyRecord, FxCode } from '../types'
@@ -351,6 +353,74 @@ function PendingSellOrdersBanner({ company }: { company: string }) {
 // 자금일보 잔액 델타 중 아직 외화 원장(fx_lots)에 반영되지 않은 것이 있으면 안내한다.
 // 실제 반영(적용 환율 입력)은 /fx-ledger 원장 탭에서만 한다 — 여기서는 존재만 알린다.
 const LEDGER_CURRENCIES: FxCode[] = ['USD', 'EUR', 'JPY', 'GBP', 'CNY']
+/**
+ * 이 보고대상일에 **외화 원장에 기록된 거래**를 보여준다 (세션26차 13일차).
+ *
+ * ⭐ 왜 경고가 아니라 참고 정보인가: 실무는 거래를 실시간으로 원장에 넣고 자금현황은
+ *   익일 아침에 기재한다. 두 장부는 **원천적으로 실시간 일치가 불가능**하다.
+ *   그 차이를 매번 경고로 띄우면 노이즈일 뿐이라, 대신 **작성 시점에 근거를 보여준다** —
+ *   "어제 USD 가 왜 100만 줄었나"를 다른 화면에 가서 찾지 않아도 된다.
+ *
+ * ⚠ 계좌 대체는 제외한다(같은 통화 내 이동이라 잔액이 변하지 않는다).
+ * ⚠ 외화 매각은 대개 USD 감소 + KRW 증가로 **상계**되므로 별도 입출금 항목이 필요 없다.
+ *   항목이 필요한 것은 대외 지급(payment)처럼 총자산이 실제로 줄어드는 거래다.
+ */
+function LedgerDayActivityPanel({ company, txnDate }: { company: Company; txnDate: string }) {
+  const { flows, loading } = useFxLedgerDayActivity(company, txnDate)
+  const [open, setOpen] = useState(true)
+  if (loading || flows.length === 0) return null
+
+  return (
+    <div className="no-print mx-6 mt-3 rounded-lg border border-sky-200 bg-sky-50 px-4 py-2.5 dark:border-sky-800 dark:bg-sky-950/20">
+      <button type="button" onClick={() => setOpen(o => !o)}
+        className="flex w-full items-center gap-2 text-left">
+        <span className="text-xs font-semibold text-sky-800 dark:text-sky-300">
+          📚 {txnDate} 외화 원장 거래 {flows.length}건
+        </span>
+        <span className="ml-auto text-[11px] text-sky-600 dark:text-sky-400">{open ? '접기 ▾' : '펼치기 ▸'}</span>
+      </button>
+      {open && (
+        <>
+          <p className="mt-1 text-[11px] text-sky-700 dark:text-sky-400">
+            이 날 원장에 기록된 실제 거래입니다 — 아래 잔액 증감의 근거로 참고하세요.
+            매각은 외화 감소와 원화 증가가 상계되므로 별도 입출금 항목이 필요 없습니다.
+          </p>
+          <table className="mt-2 w-full text-[11px] tabular-nums">
+            <thead>
+              <tr className="text-left text-sky-600/70 dark:text-sky-500">
+                <th className="font-medium">구분</th>
+                <th className="font-medium">통화</th>
+                <th className="text-right font-medium">금액</th>
+                <th className="text-right font-medium">적용환율</th>
+                <th className="font-medium">경로</th>
+              </tr>
+            </thead>
+            <tbody className="text-gray-700 dark:text-slate-300">
+              {flows.map((f, i) => (
+                <tr key={i}>
+                  <td className="py-0.5">
+                    <span className={`rounded px-1.5 py-0.5 ${f.direction === 'in'
+                      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300'
+                      : 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300'}`}>
+                      {f.direction === 'in' ? '유입' : '유출'}
+                    </span>
+                  </td>
+                  <td>{f.currency}</td>
+                  <td className="text-right">{fmtNumber(f.amount, f.currency === 'JPY' ? 0 : 2)}</td>
+                  <td className="text-right">{fmtNumber(f.rate, 2)}</td>
+                  <td className="text-gray-500 dark:text-slate-400">
+                    {f.direction === 'out' ? outflowTxnLabel(f.txnType) : (f.sourceType === 'interest' ? '이자 수취' : '외화 수취')}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+    </div>
+  )
+}
+
 function PendingLedgerReconcileBanner({ company }: { company: Company }) {
   const navigate = useNavigate()
   const perCurrency = LEDGER_CURRENCIES.map(code => ({
@@ -1033,6 +1103,7 @@ export default function DailyReportPage() {
       <PendingRegimeBanner company={resolvedCompany} />
       <PendingSellOrdersBanner company={resolvedCompany} />
       <PendingLedgerReconcileBanner company={resolvedCompany} />
+      <LedgerDayActivityPanel company={resolvedCompany} txnDate={reportDate} />
 
       {/* ── 메인 콘텐츠 ─────────────────────────────────────── */}
       <div className="no-print flex-1 overflow-y-auto px-6 py-4 space-y-4">

@@ -3,7 +3,7 @@ import { useAuth } from '../../hooks/useAuth'
 import { fmtKRW, fmtNumber } from '../../lib/format'
 import { ACCOUNT_TYPE_LABEL, type FxAccountType, type FxLot } from '../../lib/fxLots'
 import { outflowTxnLabel } from '../../lib/fxTxnType'
-import { useFxLedgerReconciliation } from '../../hooks/useFxLedgerReconciliation'
+import { useFxLedgerReconciliation, type PendingReconcileItem } from '../../hooks/useFxLedgerReconciliation'
 import type { FxTradeFill, FxLotConsumption, FxTradeRecord, Company, FxCode } from '../../types'
 
 const CARD = 'rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900'
@@ -142,15 +142,17 @@ export function FxLedgerTab({
     if (!err) { setPendingDeleteLot(null); onChanged() }
   }
 
-  async function handleReconcile(item: { dailyId: string; date: string; direction: 'in' | 'out'; amount: number }) {
+  async function handleReconcile(item: PendingReconcileItem) {
     const rateStr = reconcileRates[item.dailyId]
     const rate = Number(rateStr)
     if (!rateStr || !(rate > 0)) { setMessage('실제 적용 환율을 입력하세요.'); return }
     setReconciling(item.dailyId)
     setMessage(null)
     const err = item.direction === 'in'
-      ? await onReconcileInflow(item.dailyId, item.amount, rate, item.date)
-      : await onReconcileOutflow(item.dailyId, item.amount, rate, item.date)
+      // 원장에는 **거래일(txnDate)** 로 기록한다 — daily[X] 는 전영업일 마감이라
+      // X 를 그대로 쓰면 원장 거래일이 하루 밀린다.
+      ? await onReconcileInflow(item.dailyId, item.amount, rate, item.txnDate)
+      : await onReconcileOutflow(item.dailyId, item.amount, rate, item.txnDate)
     setReconciling(null)
     if (err) { setMessage(err); return }
     setReconcileRates(prev => { const next = { ...prev }; delete next[item.dailyId]; return next })
@@ -158,7 +160,7 @@ export function FxLedgerTab({
     onChanged()
   }
 
-  async function handleDismiss(item: { dailyId: string; date: string; direction: 'in' | 'out'; amount: number }) {
+  async function handleDismiss(item: PendingReconcileItem) {
     setDismissing(item.dailyId)
     const err = await reconcile.dismiss(item, user?.code ?? 'unknown')
     setDismissing(null)
@@ -392,7 +394,9 @@ export function FxLedgerTab({
               className="rounded border px-2 py-1 text-xs dark:bg-slate-800" />
           </label>
           <div className="mb-3 text-[11px] text-gray-500 dark:text-slate-400">
-            적용 환율만 입력하면 유입/FIFO 소진으로 자동 반영됩니다. 개시 로트가 이미 흡수한 과거 날짜는 "무시"로 뺄 수 있습니다.
+            <strong>거래일 기준</strong>으로 표시합니다. 원장에 이미 기록된 그날 거래(매각 체결·수동 유출 등)는
+            자동으로 차감되므로, 여기 남는 것은 <strong>원장이 모르는 증감</strong>뿐입니다.
+            적용 환율만 입력하면 유입/FIFO 소진으로 반영됩니다. 개시 로트가 이미 흡수한 과거 날짜는 "무시"로 뺄 수 있습니다.
           </div>
           {reconcile.loading ? (
             <div className="text-xs text-gray-500">조회 중…</div>
@@ -406,7 +410,9 @@ export function FxLedgerTab({
                       : 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300'}`}>
                       {item.direction === 'in' ? '유입' : '유출'}
                     </span>
-                    <span className="text-gray-600 dark:text-slate-300">{item.date}</span>
+                    <span className="text-gray-600 dark:text-slate-300" title={`자금현황 ${item.date} 행 · 거래일 ${item.txnDate}`}>
+                      {item.txnDate}
+                    </span>
                     <span className="ml-auto font-medium tabular-nums">
                       {fmtNumber(item.amount, currency === 'JPY' ? 0 : 2)}
                     </span>
