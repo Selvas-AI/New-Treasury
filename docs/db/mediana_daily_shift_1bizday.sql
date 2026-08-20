@@ -125,89 +125,87 @@ select count(*) as reports_not_in_daily_calendar
 
 
 -- ── 2. 실행 ────────────────────────────────────────────────────────────────
--- ⚠ 아래 블록 전체를 **한 트랜잭션**으로 실행한다. 중간에 실패하면 전부 롤백된다.
+-- ⚠⚠ **반드시 아래 DO 블록 하나로 실행한다. begin;/commit; 다중 문장으로 쪼개지 말 것.**
+--   Supabase SQL Editor 는 커넥션 풀러를 통해 문장을 실행해서, `begin;` ~ `commit;` 을
+--   써도 문장이 서로 다른 세션으로 갈 수 있다. 그러면 **temp table 이 다음 문장에서
+--   보이지 않는다**(실측 2026-08-20: `relation "_bizcal" does not exist`).
+--   더 나쁜 건 **원자성이 보장되지 않는다**는 점이다 — 중간에 끊기면 daily 만 밀리고
+--   daily_reports 는 그대로 남는 반쪽 상태가 된다.
+--   DO 블록은 **한 문장 = 한 트랜잭션**이라 이 문제가 없다.
 --
--- ⚠⚠ **영업일 달력은 `daily` 하나로 통일한다.**
---   처음엔 각 테이블의 자기 시퀀스로 `lead()` 를 썼는데 **틀렸다.**
---   daily_reports 는 일보를 안 쓴 날이 비어 있어(실측: 2026-06-05 → 06-09,
---   6/08 일보 없음) 자기 시퀀스로 밀면 **2영업일을 점프**하고 그 뒤가 전부 어긋난다.
---   daily 는 영업일마다 빠짐없이 존재하므로 이것이 영업일 달력의 정본이다.
-begin;
-
--- 2-0. 영업일 달력 — daily 의 날짜 시퀀스가 곧 영업일 목록이다.
---      공휴일 테이블이 필요 없고 대체공휴일도 자동으로 맞는다.
-create temp table _bizcal on commit drop as
-  select date::date as d,
-         lead(date::date) over (order by date::date) as next_d
-    from public.daily
-   where company = '메디아나';
-
--- 달력의 마지막 날(= daily 최신)의 다음 영업일을 지정한다.
--- ⚠ 실행 전 확인: daily 최신이 2026-08-19 이면 다음 영업일은 2026-08-20.
-update _bizcal set next_d = date '2026-08-20' where next_d is null;
-
--- 2-1. daily
-create temp table _shift_daily on commit drop as
-  select d.id, d.date::date as old_date, c.next_d as new_date
-    from public.daily d
-    join _bizcal c on c.d = d.date::date
-   where d.company = '메디아나';
+-- ⚠ 영업일 달력은 `daily` 하나로 통일한다. daily_reports 는 일보를 안 쓴 날이 비어 있어
+--   자기 시퀀스로 밀면 영업일을 점프한다(실측: 2026-06-05 → 06-09, 6/08 일보 없음).
 
 do $$
-declare v_miss int; v_dup int;
+declare
+  v_last_biz    date := date '2026-08-20';   -- ⚠ daily 최신의 다음 영업일
+  v_draft_next  date := date '2026-08-21';   -- ⚠ 달력에 없는 초안(오늘자)의 다음 영업일
+  v_miss int; v_dup int; v_unmatched int;
 begin
+  -- 2-0. 영업일 달력 — daily 의 날짜 시퀀스가 곧 영업일 목록이다.
+  --      공휴일 테이블이 필요 없고 대체공휴일도 자동으로 맞는다.
+  create temp table _bizcal as
+    select date::date as d,
+           lead(date::date) over (order by date::date) as next_d
+      from public.daily
+     where company = '메디아나';
+  update _bizcal set next_d = v_last_biz where next_d is null;
+
+  -- 2-1. daily  (date 컬럼은 **text**)
+  create temp table _shift_daily as
+    select d.id, d.date::date as old_date, c.next_d as new_date
+      from public.daily d
+      join _bizcal c on c.d = d.date::date
+     where d.company = '메디아나';
+
   select count(*) into v_miss from public.daily
-   where company='메디아나'
-     and id not in (select id from _shift_daily);
+   where company = '메디아나' and id not in (select id from _shift_daily);
   if v_miss > 0 then raise exception 'daily %건이 달력에 매칭되지 않음 — 중단', v_miss; end if;
 
   select count(*) into v_dup
     from (select new_date from _shift_daily group by new_date having count(*) > 1) x;
   if v_dup > 0 then raise exception 'daily 목표 날짜 중복 %건 — 중단', v_dup; end if;
-end $$;
 
--- 1단계: 충돌 회피용 임시 이동 (UNIQUE(company,date) 위반 방지)
--- ⚠ date 컬럼이 text 라 to_char 로 문자열을 만들어 넣는다
-update public.daily d
-   set date = to_char(m.old_date + interval '10000 day', 'YYYY-MM-DD')
-  from _shift_daily m where d.id = m.id;
--- 2단계: 목표 날짜로 확정
-update public.daily d
-   set date = to_char(m.new_date, 'YYYY-MM-DD')
-  from _shift_daily m where d.id = m.id;
+  -- 1단계: 충돌 회피용 임시 이동 (UNIQUE(company,date) 위반 방지)
+  update public.daily d
+     set date = to_char(m.old_date + interval '10000 day', 'YYYY-MM-DD')
+    from _shift_daily m where d.id = m.id;
+  -- 2단계: 목표 날짜로 확정
+  update public.daily d
+     set date = to_char(m.new_date, 'YYYY-MM-DD')
+    from _shift_daily m where d.id = m.id;
 
--- 2-2. daily_reports — **daily 달력**으로 민다(자기 시퀀스로 밀면 안 된다).
---      단, daily 에 없는 report_date(= 오늘 작성 중인 초안)는 따로 지정한다.
-create temp table _shift_reports on commit drop as
-  select r.id, r.report_date as old_date,
-         coalesce(c.next_d, date '2026-08-21') as new_date   -- ⚠ 초안(2026-08-20)의 다음 영업일
-    from public.daily_reports r
-    left join _bizcal c on c.d = r.report_date
-   where r.company = '메디아나';
+  -- 2-2. daily_reports  (report_date 컬럼은 **date**) — daily 달력으로 민다
+  create temp table _shift_reports as
+    select r.id, r.report_date as old_date,
+           coalesce(c.next_d, v_draft_next) as new_date
+      from public.daily_reports r
+      left join _bizcal c on c.d = r.report_date
+     where r.company = '메디아나';
 
-do $$
-declare v_dup int; v_unmatched int;
-begin
-  -- daily 달력에 없는 report_date 가 1건(오늘 초안)뿐인지 확인 — 그 외면 중단
   select count(*) into v_unmatched
     from public.daily_reports r
     left join _bizcal c on c.d = r.report_date
-   where r.company='메디아나' and c.d is null;
+   where r.company = '메디아나' and c.d is null;
   if v_unmatched > 1 then
-    raise exception 'daily 달력에 없는 report_date %건 — 확인 필요', v_unmatched;
+    raise exception 'daily 달력에 없는 report_date %건 — 확인 필요(초안 1건만 예상)', v_unmatched;
   end if;
 
   select count(*) into v_dup
     from (select new_date from _shift_reports group by new_date having count(*) > 1) x;
   if v_dup > 0 then raise exception 'daily_reports 목표 날짜 중복 %건 — 중단', v_dup; end if;
+
+  update public.daily_reports r set report_date = m.old_date + interval '10000 day'
+    from _shift_reports m where r.id = m.id;
+  update public.daily_reports r set report_date = m.new_date
+    from _shift_reports m where r.id = m.id;
+
+  drop table _bizcal;
+  drop table _shift_daily;
+  drop table _shift_reports;
+
+  raise notice '시프트 완료 — §3 검증을 실행하세요';
 end $$;
-
-update public.daily_reports r set report_date = m.old_date + interval '10000 day'
-  from _shift_reports m where r.id = m.id;
-update public.daily_reports r set report_date = m.new_date
-  from _shift_reports m where r.id = m.id;
-
-commit;
 
 
 -- ── 3. 검증 ────────────────────────────────────────────────────────────────
