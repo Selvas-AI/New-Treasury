@@ -116,7 +116,10 @@
 | 작업 | 수정 파일 |
 |------|---------|
 | 법인 추가 | `src/types/index.ts` + `TopBar.tsx` + `UsersPage.tsx` |
-| 메뉴 항목 추가 | `Sidebar.tsx` (NAV_ITEMS) + `App.tsx` (라우트) |
+| 메뉴 항목 추가·개명·삭제 | **`src/lib/navTree.ts` (NAV_GROUPS — SSOT)** + `App.tsx` (라우트) + `MENU_DEFAULTS`(auth.ts) — ⚠ 사이드바와 **사용자 관리 권한 트리**가 같은 상수를 읽는다. 화면 안에 메뉴 목록을 다시 정의하지 말 것 (CLAUDE.md §1-A) |
+| 메뉴 접근/작업 권한 UI | `src/components/admin/MenuPermissionTree.tsx` + `src/pages/admin/UsersPage.tsx` |
+| 외화 원장(FIFO)·계좌 대체 | `src/pages/FxLedgerPage.tsx` + `src/components/fx/*` + `src/hooks/useFxLots.ts` |
+| 외화 매각 지시 워크플로우 | `src/components/fx/FxOrdersTab.tsx` (발의는 여러 곳, **집행·추적은 여기 한 곳**) |
 | 이슈 감지 조건 변경 | `src/hooks/useDashboard.ts` (detectedIssues useMemo) |
 | 차트 색상/종류 변경 | 해당 컴포넌트 MD 문서의 "변경 포인트" 참조 |
 | GAS API 변경 | `src/hooks/useGas.ts` + `.env.local` (VITE_GAS_API_URL) + `Code.gs` (재배포 필요) |
@@ -126,3 +129,27 @@
 | FX 정책 파라미터 편집 | `src/components/policy/FxPolicyTab.tsx` |
 | FVPL Duration 편집 | `src/components/policy/FvplRiskTab.tsx` |
 | 유동성/차입 한도 설정 | `PolicyPage.tsx` (LiquidityCard, LoanStatusCard) + `policy_params` 키 추가 |
+
+
+---
+
+## 세션26차 11~13일차 신규 문서 (2026-08-20)
+
+| 문서 | 내용 |
+|------|------|
+| **`docs/기획/인수인계_세션26_11-13일차.md`** | **다음 세션이 먼저 읽을 인수인계** — 상태·금지사항·반복된 함정 |
+| `docs/기획/외화원장_계좌간거래_설계.md` | 계좌 대체·정기예금 라이프사이클·거래 유형 설계 |
+
+### 신규 SSOT 모듈
+
+| 모듈 | 역할 | 금지 |
+|------|------|------|
+| `src/lib/navTree.ts` | 사이드바 = 권한 트리 메뉴 정의 | 화면 안에 메뉴 목록 재정의 |
+| `src/lib/fxBandExceed.ts` | 정책 밴드 초과분 산출·발의 payload | σ×Z 한도 모델을 실무 화면에 복제 |
+| `src/lib/fxTxnType.ts` | 거래 유형(sale/payment/transfer/interest) 라벨·손익 집계 | 화면마다 유형 분기 |
+| `src/lib/fxOrderType.ts` | 매각 지시 발생 경로 라벨 | 삼항 연산자로 즉석 분기 |
+
+### 세션26차 12일차 DB 마이그레이션 (전부 적용 완료)
+
+`fx_fifo_account_priority.sql` → `fx_lot_transfer.sql` → `fx_txn_type.sql`
+→ `fx_transfer_selfconsume_guard.sql` → `fx_term_deposit_settle.sql` (실행 순서)
