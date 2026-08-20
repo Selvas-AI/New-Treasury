@@ -553,8 +553,8 @@ export function FxOrdersTab({ company, currency, pendingOrders, initialOrderId, 
           <CompleteTradeModal
             record={rec}
             onClose={() => setCompleteTarget(null)}
-            onSubmit={async (amount, rate, fillDate) => {
-              const { error } = await hist.fillTrade(rec.id, amount, rate, fillDate, user?.label ?? '')
+            onSubmit={async (amount, rate, fillDate, accountType) => {
+              const { error } = await hist.fillTrade(rec.id, amount, rate, fillDate, user?.label ?? '', accountType)
               if (error) return error.message ?? String(error)
               doFetch(); onChanged()
               return null

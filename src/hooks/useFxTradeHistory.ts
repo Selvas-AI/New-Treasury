@@ -222,12 +222,15 @@ export function useFxTradeHistory(company?: Company | null) {
    */
   const fillTrade = useCallback(async (
     id: string, fillAmount: number, completedRate: number, fillDate: string, completedBy: string,
+    /** 출금 계좌유형 — 달러 매각은 보통예금·MMDA 어느 쪽에서도 나갈 수 있다(회사 규칙) */
+    accountType?: string | null,
   ) => {
     const rec = data.find(r => r.id === id)
     const { data: lots } = rec ? await restSelect('fx_lots', { match: { company: rec.company, currency: rec.currency }, limit: 1 }) : { data: [] }
     if ((lots ?? []).length > 0) return restRpc('complete_fx_trade_fill', {
       p_trade_id: id, p_fill_amount: fillAmount, p_completed_rate: completedRate,
       p_fill_date: fillDate, p_completed_by: completedBy,
+      p_account_type: accountType ?? null,
     })
     // 폴백: FIFO 로트 없이 체결 기록만 남긴다.
     const acqRate   = rec?.acq_rate ?? null

@@ -3015,8 +3015,9 @@ DecisionTab은 이제 분석(손익현황·손익분기·분할실현계획)만 
 > **인수인계**: `docs/기획/인수인계_세션26_11-13일차.md` — 다음 세션(다른 LLM 포함)은 이것부터 읽을 것.
 
 검증: tsc -b 0 errors · eslint 0 errors · vitest 253/253.
-⚠ `npx vitest run`(전체)은 `.claude/worktrees/agent-*` 의 스테일 사본에서 날짜 의존 테스트가
-깨진다 — 실제 소스와 무관하다. 검증은 `npx vitest run src/lib` 로 범위를 지정할 것.
+⚠ `npx vitest run`(전체)·`npx vitest run src/lib` 둘 다 `.claude/worktrees/agent-*` 의 스테일
+사본을 함께 잡아 날짜 의존 테스트가 깨진다 — 실제 소스와 무관하다.
+**검증은 `npx vitest run --dir src`** 로 할 것(worktree 제외, 61 tests).
 
 ---
 
@@ -3166,6 +3167,46 @@ DecisionTab은 이제 분석(손익현황·손익분기·분할실현계획)만 
 총자산이 실제로 줄어드는 거래다. 매각을 출금 항목으로 넣으면 검증식이 오히려 깨진다.
 
 검증: tsc -b 0 errors · eslint 0 errors · vitest 253/253.
+
+---
+
+### 2026-08-21 세션26차 14일차 — 출금 계좌 지정 + 수동 유출 정정 ⭐
+
+사용자 리포트 2건. `docs/db/fx_outflow_account_and_reverse.sql` ⭐⭐ (**실행 필요**)
+
+#### ① FIFO 가 실제 인출 계좌를 무시했다
+```
+회사 업무 규칙(제공 표):
+  보통예금 출금 — 외화물대 지급 / 달러매각 / 정기예금 가입 / MMDA 대체
+  MMDA     출금 — 달러매각 / 정기예금 대체
+  정기예금 출금 — 재예치 인출 / 만기 후 매각
+→ **거래 유형마다 나가는 계좌가 다르다.** 특히 외화결제대금(물대)은 보통예금 전용.
+  그런데 FIFO 는 계좌유형과 무관하게 취득일 순으로만 소진해서, 실제 인출 계좌와
+  장부상 소진 계좌가 어긋났다.
+  법인 단위 단일 우선순위(fx_fifo_account_priority)로는 표현이 안 된다.
+
+해결: 유출 시 **출금 계좌유형을 지정**할 수 있게 했다(consume_fx_lots_for_source /
+  complete_fx_trade_fill 에 p_account_type 추가, null 이면 기존 정책 우선순위).
+  ⚠ 11일차에 "체결 단위 계좌 선택은 cherry-picking 위험"이라 반대했었는데, 그 판단은
+    **매각 손익을 고르는 경우**에 한한 것이었다. 대외 지급의 출금 계좌는 **선택이 아니라
+    사실**이다(은행에서 실제로 그 계좌에서 나갔다). 계좌 안에서는 여전히 취득일 FIFO 를
+    강제하므로 로트 고르기는 불가능하다 — 사실은 정확히 기록하고 조작은 막는다.
+  잔액 부족 시 계좌명과 함께 친절한 오류를 낸다(어느 계좌가 모자란지 알 수 있게).
+```
+- 기본값: 수동 유출 폼은 **보통예금**(회사 규칙상 물대가 기본), 체결 모달은 **자동(정책)**
+- 체결 모달의 FIFO 미리보기도 선택 계좌로 좁혀 계산 — 서버와 같은 결과를 보여준다
+
+#### ② 잘못 입력한 수동 유출을 되돌릴 수 없었다
+```
+실측: 2026-08-06 대외 지급 -24,227.1 오입력. 매각 체결은 reverse_fx_trade_fill,
+계좌 대체는 reverse_fx_lot_transfer 가 있는데 **수동 유출만 경로가 없었다.**
+해결: reverse_fx_consumption_by_source RPC 신규 + 원장 처분 내역에 "취소" 버튼.
+⚠ source_type 을 'manual'/'daily_report_item' 으로 **제한**한다. 매각 체결은
+  fx_trade_fills·fx_trade_history 상태까지 함께 되돌려야 해서 전용 RPC 를 써야 한다 —
+  여기로 우회하면 거래 상태가 어긋난다. 서버가 막고, UI 도 그 두 유형에만 버튼을 준다.
+```
+
+검증: tsc -b 0 errors · eslint 0 errors · vitest --dir src 61/61.
 
 ---
 

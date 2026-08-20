@@ -21,7 +21,7 @@ interface LedgerAdminApi {
   planLotRepair: (rows?: InventoryCsvRow[]) => Promise<{ plan: LotRepairPlanItem[]; unmatched: number; missingRate: number; error: string | null }>
   applyLotRepair: (plan: LotRepairPlanItem[]) => Promise<{ updated: number; failures: string[] }>
   addOpeningLot: (input: { date: string; amount: number; acqRate: number; accountType: FxAccountType; annualInterestRate: number; maturityDate: string | null; memo: string; userCode: string }) => Promise<string | null>
-  addManualOutflow: (input: { date: string; amount: number; rate: number; memo: string; userCode: string; txnType?: 'sale' | 'payment' }) => Promise<string | null>
+  addManualOutflow: (input: { date: string; amount: number; rate: number; memo: string; userCode: string; txnType?: 'sale' | 'payment'; accountType?: FxAccountType | null }) => Promise<string | null>
   lots: FxLot[]
   transferLots: (input: {
     date: string; fromAccountType: FxAccountType; toAccountType: FxAccountType
@@ -85,6 +85,9 @@ export function FxLotAdminTab({ ledger, trades, company, currency, valuationMeth
   const [outMemo, setOutMemo] = useState('')
   // 거래 유형 — 매각(환전)과 대외 지급을 구분해야 환차손익 요약의 "매각 실적"이 정확해진다.
   const [outTxnType, setOutTxnType] = useState<'sale' | 'payment'>('payment')
+  // 출금 계좌 — 회사 규칙상 외화결제대금(물대)은 보통예금에서만 나간다.
+  // 'auto' = 정책 우선순위(fx_fifo_account_priority)를 따름.
+  const [outAccount, setOutAccount] = useState<'auto' | FxAccountType>('demand_deposit')
   const [outSaving, setOutSaving] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [inventoryPreview, setInventoryPreview] = useState<{ rows: InventoryCsvRow[]; errors: string[]; skipped: number } | null>(null)
@@ -155,7 +158,8 @@ export function FxLotAdminTab({ ledger, trades, company, currency, valuationMeth
     if (!(outAmount > 0) || !(outRate > 0)) { setMessage('외화 금액과 처분(체결) 환율을 입력하세요.'); return }
     setOutSaving(true)
     const err = await ledger.addManualOutflow({ date: outDate, amount: outAmount, rate: outRate,
-      memo: outMemo, userCode, txnType: outTxnType })
+      memo: outMemo, userCode, txnType: outTxnType,
+      accountType: outAccount === 'auto' ? null : outAccount })
     setOutSaving(false)
     if (err) setMessage(err)
     else { setMessage('외화 유출이 등록되었습니다 — FIFO 순서대로 로트에서 차감됐습니다.'); setShowOutflow(false); setOutAmount(0); setOutRate(0); setOutMemo(''); onChanged() }
@@ -348,11 +352,22 @@ export function FxLotAdminTab({ ledger, trades, company, currency, valuationMeth
                   {SELECTABLE_OUTFLOW_TXN.map(t => <option key={t} value={t}>{OUTFLOW_TXN_LABEL[t]}</option>)}
                 </select>
               </label>
+              <label className="text-xs">출금 계좌
+                <select value={outAccount} onChange={e => setOutAccount(e.target.value as 'auto' | FxAccountType)}
+                  className="mt-1 w-full rounded border px-2 py-1.5 dark:bg-slate-800">
+                  {ACCOUNT_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  <option value="auto">자동 (정책 우선순위)</option>
+                </select>
+              </label>
               <label className="text-xs sm:col-span-2">메모<input value={outMemo} onChange={e => setOutMemo(e.target.value)} className="mt-1 w-full rounded border px-2 py-1.5 dark:bg-slate-800" /></label>
             </div>
             <p className="mt-2 text-[11px] text-gray-500 dark:text-slate-400">
               <strong>대외 지급</strong>(매입대금·수수료 등)은 환차손익이 나더라도 <strong>매각 실적에 잡히지 않습니다.</strong>
               원화로 환전한 것이라면 <strong>매각(환전)</strong>을 고르세요.
+              <br />
+              <strong>출금 계좌</strong>는 은행에서 실제로 돈이 빠진 계좌입니다 — 회사 규칙상
+              외화결제대금(물대)은 보통예금에서 나갑니다. 지정한 계좌 <strong>안에서만</strong> 취득일 순(FIFO)으로
+              소진되며, 잔액이 부족하면 저장이 거부됩니다.
             </p>
             <button disabled={outSaving} onClick={() => void saveOutflow()} className="mt-3 rounded bg-orange-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">{outSaving ? '저장 중…' : '확인 후 저장'}</button>
           </>}

@@ -266,6 +266,14 @@ export function useFxLots(company: string, currency: string) {
     date: string; amount: number; rate: number; memo: string; userCode: string
     /** 'sale'(환전) | 'payment'(대외 지급). 미지정 시 대외 지급 — 매각 실적에 섞이지 않게 */
     txnType?: 'sale' | 'payment'
+    /**
+     * 출금 계좌유형. 회사 규칙상 **외화결제대금은 보통예금에서만** 나가는 등
+     * 거래 유형마다 출금 계좌가 정해져 있다(2026-08-21 리포트).
+     * ⚠ 로트를 고르는 게 아니라 **은행에서 실제로 어느 계좌에서 나갔는지**를 기록하는 것이다.
+     *   계좌 안에서는 여전히 취득일 FIFO 라 cherry-picking 은 불가능하다.
+     * null 이면 정책 우선순위(fx_fifo_account_priority)를 따른다.
+     */
+    accountType?: FxLot['accountType'] | null
   }) => {
     const sourceId = crypto.randomUUID()
     const { error: err } = await restRpc('consume_fx_lots_for_source', {
@@ -273,6 +281,7 @@ export function useFxLots(company: string, currency: string) {
       p_source_id: sourceId, p_amount: input.amount, p_disposal_rate: input.rate,
       p_disposed_date: input.date, p_disposed_by: input.userCode,
       p_txn_type: input.txnType ?? 'payment',
+      p_account_type: input.accountType ?? null,
     })
     if (!err) await refetch()
     return err?.message ?? null
@@ -344,6 +353,23 @@ export function useFxLots(company: string, currency: string) {
     return err?.message ?? null
   }, [refetch])
 
+  /**
+   * 수동 유출 / 자금일보 유출 취소 (세션26차 14일차).
+   * 잘못 입력한 유출을 되돌려 로트 잔액을 복원한다.
+   * ⚠ 매각 체결은 이 경로를 쓰지 않는다 — 거래 상태까지 함께 되돌려야 해서
+   *   reverseFill(reverse_fx_trade_fill)을 써야 한다. 서버도 source_type 으로 막는다.
+   */
+  const reverseConsumption = useCallback(async (
+    sourceType: 'manual' | 'daily_report_item', sourceId: string, userCode: string,
+  ) => {
+    const { error: err } = await restRpc('reverse_fx_consumption_by_source', {
+      p_company: company, p_currency: currency,
+      p_source_type: sourceType, p_source_id: sourceId, p_by: userCode,
+    })
+    if (!err) await refetch()
+    return err?.message ?? null
+  }, [company, currency, refetch])
+
   const reverseTransfer = useCallback(async (transferId: string, userCode: string) => {
     const { error: err } = await restRpc('reverse_fx_lot_transfer', {
       p_transfer_id: transferId, p_reversed_by: userCode,
@@ -356,12 +382,12 @@ export function useFxLots(company: string, currency: string) {
   return useMemo(() => ({ lots, loading, error, refetch, addOpeningLot,
     importOpeningLots, updateLot, deleteLot, planLotRepair, applyLotRepair,
     reconcileDailyInflow, reconcileDailyOutflow, addManualOutflow,
-    transferLots, reverseTransfer, settleTermDeposit, linkLotsToInvestment,
+    transferLots, reverseTransfer, settleTermDeposit, linkLotsToInvestment, reverseConsumption,
     totalAmount: remainingAmount(lots),
     availableAmount: availableAmount(lots, today), lockedAmount: remainingAmount(lots)-availableAmount(lots, today),
     expectedInterestFx: lots.reduce((sum, lot) => sum + expectedTermInterestFx(lot), 0),
     bookRate: weightedBookRate(lots) }),
   [lots, loading, error, refetch, addOpeningLot, importOpeningLots, updateLot, deleteLot,
    planLotRepair, applyLotRepair, reconcileDailyInflow, reconcileDailyOutflow, addManualOutflow,
-   transferLots, reverseTransfer, settleTermDeposit, linkLotsToInvestment, today])
+   transferLots, reverseTransfer, settleTermDeposit, linkLotsToInvestment, reverseConsumption, today])
 }

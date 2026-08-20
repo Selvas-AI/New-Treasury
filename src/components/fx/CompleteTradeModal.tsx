@@ -29,13 +29,16 @@ function todayStr() {
  */
 export function CompleteTradeModal({ record, onSubmit, onClose }: {
   record: FxTradeRecord
-  onSubmit: (amount: number, rate: number, fillDate: string) => Promise<string | null>
+  onSubmit: (amount: number, rate: number, fillDate: string, accountType: string | null) => Promise<string | null>
   onClose: () => void
 }) {
   const remaining = Math.max(0, record.amount_fx - (record.filled_amount ?? 0))
   const [amount, setAmount] = useState(String(remaining))
   const [fillDate, setFillDate] = useState(todayStr())
   const [rate, setRate] = useState('')
+  // 출금 계좌 — 달러 매각은 보통예금·MMDA 어느 쪽에서도 나갈 수 있다(회사 규칙 표).
+  // 'auto' = 정책 우선순위를 따름.
+  const [account, setAccount] = useState<'auto' | 'demand_deposit' | 'mmda' | 'term_deposit'>('auto')
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
@@ -52,11 +55,12 @@ export function CompleteTradeModal({ record, onSubmit, onClose }: {
   const fifo = useMemo(() => {
     const r = Number(rate)
     if (!amtNum || !r || lots.length === 0) return null
-    const rows = previewFifoConsumption(lots, amtNum, r, fillDate, accountPriority)
+    const scoped = account === 'auto' ? lots : lots.filter(l => l.accountType === account)
+    const rows = previewFifoConsumption(scoped, amtNum, r, fillDate, accountPriority)
     const covered = rows.reduce((s, x) => s + x.amount, 0)
     return { rows, covered, shortfall: Math.max(0, amtNum - covered),
       pnl: rows.reduce((s, x) => s + x.realizedPnlKRW, 0) }
-  }, [lots, amtNum, rate, fillDate, accountPriority])
+  }, [lots, amtNum, rate, fillDate, accountPriority, account])
 
   // 손익은 FIFO 로트 기준이 정본. 로트가 없는(원장 미적용) 법인·통화만 지시의 acq_rate 로 대체.
   const pnl = fifo ? fifo.pnl
@@ -67,7 +71,7 @@ export function CompleteTradeModal({ record, onSubmit, onClose }: {
     if (!rate || !amtNum || overRemaining) return
     setSaving(true)
     setErr(null)
-    const error = await onSubmit(amtNum, Number(rate), fillDate)
+    const error = await onSubmit(amtNum, Number(rate), fillDate, account === 'auto' ? null : account)
     setSaving(false)
     if (error) setErr(error)
     else onClose()
@@ -108,6 +112,15 @@ export function CompleteTradeModal({ record, onSubmit, onClose }: {
             <p className="text-xs text-red-600">체결 수량이 잔여 수량({remaining.toLocaleString()})을 초과합니다.</p>
           )}
           <div>
+            <label className="text-xs font-medium text-gray-600 dark:text-slate-300 block mb-1">출금 계좌</label>
+            <select value={account} onChange={e => setAccount(e.target.value as typeof account)}
+              className="w-full text-sm border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2
+                         bg-white dark:bg-slate-700 text-gray-900 dark:text-white mb-3">
+              <option value="auto">자동 (정책 우선순위)</option>
+              <option value="demand_deposit">{ACCOUNT_TYPE_LABEL.demand_deposit}</option>
+              <option value="mmda">{ACCOUNT_TYPE_LABEL.mmda}</option>
+              <option value="term_deposit">{ACCOUNT_TYPE_LABEL.term_deposit}</option>
+            </select>
             <label className="text-xs font-medium text-gray-600 dark:text-slate-300 block mb-1">실제 체결 환율</label>
             <input type="number" step="0.01" value={rate}
               onChange={e => setRate(e.target.value)}

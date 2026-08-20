@@ -157,6 +157,7 @@ export default function FxLedgerPage() {
         onUpdateLot={ledger.updateLot} onDeleteLot={ledger.deleteLot}
         onReconcileInflow={(dailyId, amount, rate, date) => ledger.reconcileDailyInflow({ dailyId, amount, rate, date, userCode: user?.code ?? 'unknown' })}
         onReconcileOutflow={(dailyId, amount, rate, date) => ledger.reconcileDailyOutflow({ dailyId, amount, rate, date, userCode: user?.code ?? 'unknown' })}
+        onReverseConsumption={(st, sid, uc) => ledger.reverseConsumption(st, sid, uc)}
         onGotoOrders={() => setActiveTab('orders')} onChanged={refreshAll}
       />
     )}

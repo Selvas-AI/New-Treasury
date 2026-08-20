@@ -47,7 +47,8 @@ const SOURCE_LABEL: Record<string, string> = {
  */
 export function FxLedgerTab({
   company, lots, fills, consumptionsByLotId, loading, currency, totalAmount, pendingOrders,
-  onUpdateLot, onDeleteLot, onReconcileInflow, onReconcileOutflow, onGotoOrders, onChanged,
+  onUpdateLot, onDeleteLot, onReconcileInflow, onReconcileOutflow, onReverseConsumption,
+  onGotoOrders, onChanged,
 }: {
   company: Company
   lots: FxLot[]
@@ -63,6 +64,8 @@ export function FxLedgerTab({
   onDeleteLot: (id: string) => Promise<string | null>
   onReconcileInflow: (dailyId: string, amount: number, rate: number, date: string) => Promise<string | null>
   onReconcileOutflow: (dailyId: string, amount: number, rate: number, date: string) => Promise<string | null>
+  /** 수동/자금일보 유출 취소 — 잘못 입력한 건을 되돌려 로트 잔액을 복원한다 */
+  onReverseConsumption: (sourceType: 'manual' | 'daily_report_item', sourceId: string, userCode: string) => Promise<string | null>
   onGotoOrders: () => void
   onChanged: () => void
 }) {
@@ -82,6 +85,9 @@ export function FxLedgerTab({
   const [expandedLotId, setExpandedLotId] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [accountFilter, setAccountFilter] = useState<'all' | FxAccountType>('all')
+  // 잘못 입력한 수동/자금일보 유출 취소 — 화면 안 2단계 확인(window.confirm 금지 규칙)
+  const [reverseTarget, setReverseTarget] = useState<FxLotConsumption | null>(null)
+  const [reversing, setReversing] = useState(false)
 
   /** 체결일 등 부가 표시용 — 소진 내역의 fill_id 로 조회한다 */
   const fillById = useMemo(() => new Map(fills.map(f => [f.id, f])), [fills])
@@ -193,6 +199,40 @@ export function FxLedgerTab({
       )}
 
       {message && <div className="text-xs font-medium text-blue-700 dark:text-blue-300">{message}</div>}
+
+      {/* 잘못 입력한 유출 취소 — 로트 잔액이 복원된다 */}
+      {reverseTarget && (
+        <div className="rounded-xl border border-red-300 bg-red-50 p-4 dark:border-red-700 dark:bg-red-900/20">
+          <div className="text-sm font-bold text-red-800 dark:text-red-200">유출 취소 확인</div>
+          <div className="mt-1 text-xs text-red-700 dark:text-red-300 tabular-nums">
+            {reverseTarget.disposed_date} · {outflowTxnLabel(reverseTarget.txn_type)} ·{' '}
+            {fmtNumber(reverseTarget.amount, currency === 'JPY' ? 0 : 2)} {currency} @ {fmtNumber(reverseTarget.disposal_rate, 2)}
+            <br />
+            이 유출을 되돌리고 <strong>로트 잔액을 복원</strong>합니다.
+            같은 등록으로 여러 로트가 소진됐다면 <strong>전부 함께</strong> 복원됩니다.
+          </div>
+          <div className="mt-3 flex gap-2">
+            <button disabled={reversing}
+              onClick={async () => {
+                if (!reverseTarget.source_type || !reverseTarget.source_id) return
+                setReversing(true)
+                const err = await onReverseConsumption(
+                  reverseTarget.source_type as 'manual' | 'daily_report_item',
+                  reverseTarget.source_id, user?.code ?? 'unknown')
+                setReversing(false)
+                if (err) { setMessage(err); return }
+                setReverseTarget(null); setMessage('유출을 취소하고 로트 잔액을 복원했습니다.'); onChanged()
+              }}
+              className="rounded bg-red-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">
+              {reversing ? '처리 중…' : '취소 실행'}
+            </button>
+            <button onClick={() => setReverseTarget(null)}
+              className="rounded border border-gray-300 bg-white px-3 py-1.5 text-xs dark:border-slate-600 dark:bg-slate-800">
+              닫기
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 원장(FIFO) : 자금일보 미반영 증감 = 대략 7:3 로 한 행에 배치 */}
       <div className="grid gap-4 lg:grid-cols-[7fr_3fr] items-start">
@@ -340,6 +380,7 @@ export function FxLedgerTab({
                                     <th className="text-right font-medium">금액</th>
                                     <th className="text-right font-medium">처분환율</th>
                                     <th className="text-right font-medium">실현손익</th>
+                                    <th className="text-right font-medium">관리</th>
                                   </tr>
                                 </thead>
                                 <tbody className="text-gray-600 dark:text-slate-300">
@@ -359,6 +400,13 @@ export function FxLedgerTab({
                                       <td className="text-right">{c.disposal_rate.toLocaleString()}</td>
                                       <td className={`text-right ${c.realized_pnl >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>
                                         {c.realized_pnl >= 0 ? '▲' : '▼'} {fmtKRW(Math.abs(c.realized_pnl))}
+                                      </td>
+                                      <td className="text-right whitespace-nowrap">
+                                        {/* 매각 체결은 거래 상태까지 되돌려야 해서 외화매도이력에서만 취소한다 */}
+                                        {canEdit() && (c.source_type === 'manual' || c.source_type === 'daily_report_item') && (
+                                          <button onClick={() => { setReverseTarget(c); setMessage(null) }}
+                                            className="text-red-600 hover:underline dark:text-red-400">취소</button>
+                                        )}
                                       </td>
                                     </tr>
                                   ))}
