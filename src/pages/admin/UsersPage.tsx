@@ -12,7 +12,11 @@ import { useAuth } from '../../hooks/useAuth'
 import { supabase, restInsert, restUpdate, restDelete } from '../../lib/supabase'
 import { generateUUID } from '../../lib/format'
 import { useCompanies } from '../../hooks/useCompanies'
-import { ACTION_DEFAULTS } from '../../contexts/auth'
+import { ACTION_DEFAULTS, MENU_DEFAULTS } from '../../contexts/auth'
+// ⚠ 메뉴 목록은 src/lib/navTree.ts 가 SSOT — 사이드바와 같은 상수를 읽는다.
+//   여기서 다시 정의하면 두 화면이 어긋난다(과거 audit-log 를 아무도 부여할 수 없었던 원인).
+import MenuPermissionTree from '../../components/admin/MenuPermissionTree'
+import { ASSIGNABLE_SLUGS } from '../../lib/navTree'
 import type { UserRole, SectionKey, SectionPermission, CategoryPermissions } from '../../types'
 const ROLES: { value: UserRole; label: string; desc: string; permissions: string[] }[] = [
   {
@@ -55,19 +59,6 @@ const ROLES: { value: UserRole; label: string; desc: string; permissions: string
       '❌ 사용자 관리 불가',
     ],
   },
-]
-const MENU_SLUGS = [
-  { slug: 'dashboard', label: '통합상황판' },
-  { slug: 'daily',     label: '자금일보'   },
-  { slug: 'input',     label: '운전자금'   },
-  { slug: 'invest',    label: '운용자금'   },
-  { slug: 'loans',     label: '차입금'     },
-  { slug: 'equity',    label: '지분투자'   },
-  { slug: 'history',   label: '이력관리'   },
-  { slug: 'fx',        label: '환율현황'   },
-  { slug: 'policy',    label: '자금정책'   },
-  { slug: 'fx-regime', label: '환율 국면'  },
-  { slug: 'fx-ledger', label: '외화거래명세' },
 ]
 const ROLE_BADGE: Record<string, string> = {
   master:  'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
@@ -157,6 +148,12 @@ export default function UsersPage() {
   const [editId,    setEditId]    = useState<string | null>(null)
   const [form,      setForm]      = useState<Omit<UserRow, 'id' | 'created_at'>>({ ...EMPTY })
   const [customMenu,     setCustomMenu]     = useState(false)
+  // 커스텀 미설정 시 실제로 적용되는 값 — 트리에 미리보기로 그린다.
+  // master 는 MENU_DEFAULTS 가 ['*'] 이라 전 메뉴 허용 → 부여 가능한 전체로 펼쳐 보여준다.
+  const roleDefaultMenus = useMemo(() => {
+    const d = MENU_DEFAULTS[form.role] ?? []
+    return d.includes('*') ? [...ASSIGNABLE_SLUGS] : d
+  }, [form.role])
   const [saving,         setSaving]         = useState(false)
   const [error,          setError]          = useState<string | null>(null)
   const [success,        setSuccess]        = useState(false)
@@ -289,12 +286,6 @@ export default function UsersPage() {
     })
   }
 
-  function toggleMenu(slug: string) {
-    setForm(f => {
-      const cur = f.menus ?? []
-      return { ...f, menus: cur.includes(slug) ? cur.filter(x => x !== slug) : [...cur, slug] }
-    })
-  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -555,18 +546,39 @@ export default function UsersPage() {
                     className="w-4 h-4 accent-blue-600" />
                   <span className="text-xs text-gray-600 dark:text-slate-300">커스텀 설정 (미선택 시 역할 기본값 적용)</span>
                 </label>
-                {customMenu && (
-                  <div className="flex flex-wrap gap-2 pl-6">
-                    {MENU_SLUGS.map(m => (
-                      <label key={m.slug}
-                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border cursor-pointer text-xs transition-colors ${(form.menus ?? []).includes(m.slug) ? 'border-indigo-400 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300' : 'border-gray-200 dark:border-slate-600 text-gray-500 dark:text-slate-300'}`}>
-                        <input type="checkbox" checked={(form.menus ?? []).includes(m.slug)}
-                          onChange={() => toggleMenu(m.slug)} className="sr-only" />
-                        {(form.menus ?? []).includes(m.slug) ? '✓ ' : ''}{m.label}
-                      </label>
-                    ))}
+                {/* 트리는 커스텀 미설정 시에도 보여준다 — 역할 기본값으로 실제 무엇이 열리는지
+                    확인할 수 있어야 한다(과거엔 안내 문장만 있어 확인이 불가능했다). */}
+                <div className="pl-6 space-y-2">
+                  <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                    <span className="text-gray-400">
+                      {customMenu
+                        ? '좌측 사이드바와 동일한 구조입니다. 체크한 메뉴만 이 사용자에게 노출됩니다.'
+                        : `역할 기본값(${form.role}) 미리보기 — 커스텀을 켜면 개별 지정할 수 있습니다.`}
+                    </span>
+                    {customMenu && (
+                      <span className="ml-auto flex gap-1.5">
+                        <button type="button" onClick={() => setF('menus', [...ASSIGNABLE_SLUGS])}
+                          className="rounded border border-gray-300 px-2 py-0.5 text-gray-600 dark:border-slate-600 dark:text-slate-300">
+                          전체 선택
+                        </button>
+                        <button type="button" onClick={() => setF('menus', [...roleDefaultMenus])}
+                          className="rounded border border-gray-300 px-2 py-0.5 text-gray-600 dark:border-slate-600 dark:text-slate-300">
+                          역할 기본값으로
+                        </button>
+                        <button type="button" onClick={() => setF('menus', [])}
+                          className="rounded border border-gray-300 px-2 py-0.5 text-gray-600 dark:border-slate-600 dark:text-slate-300">
+                          전체 해제
+                        </button>
+                      </span>
+                    )}
                   </div>
-                )}
+                  <MenuPermissionTree
+                    selected={form.menus ?? []}
+                    roleDefaults={roleDefaultMenus}
+                    enabled={customMenu}
+                    onChange={next => setF('menus', next)}
+                  />
+                </div>
               </div>
             )}
 

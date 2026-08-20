@@ -4,74 +4,10 @@ import { useAuth } from '../hooks/useAuth'
 import { useIssueCount } from '../contexts/issueCount'
 import { useFx } from '../hooks/useFx'
 import type { FxCode } from '../types'
-
-interface NavItem {
-  to: string
-  label: string
-  icon: string
-  slug: string  // hasMenu() 체크용 메뉴 슬러그
-}
-
-interface NavGroup {
-  section: string   // 섹션 헤더 (collapsed 시 구분선으로만 표시)
-  items: NavItem[]
-}
-
-const NAV_GROUPS: NavGroup[] = [
-  {
-    section: 'DASHBOARD',
-    items: [
-      { to: '/dashboard', label: '통합 상황판', icon: '⊞', slug: 'dashboard' },
-      { to: '/policy',    label: '자금정책',    icon: '📋', slug: 'policy'    },
-    ],
-  },
-  {
-    section: '자금입력',
-    items: [
-      { to: '/input',   label: '운전자금',     icon: '✏️', slug: 'input'  },
-      { to: '/invest',  label: '운용자금',      icon: '📈', slug: 'invest' },
-      { to: '/equity',  label: '지분/장기투자', icon: '💹', slug: 'equity' },
-      { to: '/loans',   label: '차입금',        icon: '🏦', slug: 'loans'  },
-    ],
-  },
-  {
-    section: '자금일보',
-    items: [
-      { to: '/daily-report',      label: '자금일보 작성',     icon: '📄', slug: 'daily' },
-      { to: '/daily-report-list', label: '일별 자금일보 목록', icon: '📅', slug: 'daily' },
-    ],
-  },
-  // 세션26차 7일차 FX 메뉴 개편 — 환율현황·외화거래명세(구 외화원장, 구 이력관리)·
-  // FX 리짐 전략(구 DASHBOARD)이 서로 다른 카테고리에 흩어져 있던 것을 하나로 묶었다.
-  // FX 정책 기준은 별도 메뉴로 두지 않는다 — 실무자가 필요한 발의 기능은 FX 리짐
-  // 전략의 조치 카드로 이관했고, 정책 편집은 자금정책 페이지 안에서 컨텍스트를
-  // 유지하는 게 낫다(같은 8일차 후속 조정).
-  {
-    section: '💱 외화(FX) 관리',
-    items: [
-      // 기본 비공개 — 사용자 관리에서 별도 메뉴 권한을 받은 계정만 표시된다.
-      { to: '/fx-regime',         label: 'FX 리짐 전략',    icon: '🧭', slug: 'fx-regime'  },
-      { to: '/fx-ledger',         label: '외화거래명세',    icon: '📚', slug: 'fx-ledger'  },
-      { to: '/fx',                label: '환율 현황',       icon: '💱', slug: 'fx'        },
-    ],
-  },
-  {
-    section: '이력관리',
-    items: [
-      { to: '/history',       label: '자금 변동 이력', icon: '📂', slug: 'history'   },
-      { to: '/issue-history', label: '이슈 이력',      icon: '🔔', slug: 'history'   },
-      { to: '/audit-log',     label: '변경 이력 로그', icon: '🗒️', slug: 'audit-log' },
-    ],
-  },
-]
-
-const ADMIN_ITEMS: NavItem[] = [
-  { to: '/admin/mycode',    label: '코드 변경',   icon: '🔑', slug: 'admin' },
-  { to: '/admin/companies', label: '회사 관리',   icon: '🏢', slug: 'admin' },
-  { to: '/admin/users',     label: '사용자 관리', icon: '👥', slug: 'admin' },
-  { to: '/admin/data',      label: '데이터 관리', icon: '🗄️', slug: 'admin' },
-  { to: '/admin/org-chart', label: '조직도 관리', icon: '🏬', slug: 'admin' },
-]
+// ⚠ 메뉴 정의는 src/lib/navTree.ts 가 SSOT — 사용자 관리의 권한 트리와 같은 상수를 읽는다.
+//   여기에 메뉴를 다시 정의하지 말 것(과거 UsersPage 와 어긋나 audit-log 를 아무도
+//   부여할 수 없는 상태가 됐다 — 세션26차 13일차).
+import { NAV_SECTIONS as NAV_GROUPS, ADMIN_SECTION } from '../lib/navTree'
 
 const FX_CODES: FxCode[] = ['USD', 'EUR', 'JPY', 'GBP', 'CNY']
 
@@ -246,7 +182,7 @@ export default function Sidebar({ collapsed, onCollapse, onNavClick }: Props) {
         {/* 관리 메뉴 — master 전용 */}
         {user?.role === 'master' && (() => {
           const isOpen = collapsed || openSections['관리']
-          const hasActive = ADMIN_ITEMS.some(i => location.pathname.startsWith(i.to))
+          const hasActive = ADMIN_SECTION.items.some(i => location.pathname.startsWith(i.to))
           return (
             <div className="mt-1">
               {!collapsed ? (
@@ -270,7 +206,7 @@ export default function Sidebar({ collapsed, onCollapse, onNavClick }: Props) {
                 isOpen ? 'max-h-72 opacity-100' : 'max-h-0 opacity-0'
               }`}>
                 <div className={!collapsed ? 'pl-1 mt-0.5' : ''}>
-                  {ADMIN_ITEMS.map(item => (
+                  {ADMIN_SECTION.items.map(item => (
                     <NavLink
                       key={item.to}
                       to={item.to}
