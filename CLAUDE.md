@@ -1400,6 +1400,11 @@ baf8ef9 fix: 투자 집행 연동 저장 실패 수정 + 자산 구분(운용/�
 - **`docs/db/fx_trade_fill_reverse_rpc.sql`** ⭐ — RPC `reverse_fx_trade_fill` (세션26차 4일차, 개별 체결 1건만 취소). **실행 완료** (2026-08-19 사용자 확인, 브라우저 실화면에서 "이 체결만 취소" 버튼 정상 노출까지 스크린샷 확인).
 - **`docs/db/fx_lots_daily_report_source.sql`** ⭐ — `fx_lots_insert_authenticated` 정책에 `'daily_report_item'` 추가 + 신규 RPC `consume_fx_lots_for_source` (세션26차 6일차, 자금일보 ↔ 외화 원장 자동 반영). **실행 필요**. 미실행 시 원장 ①탭 "자금일보 미반영 증감" 패널의 "원장 반영" 버튼이 유입은 RLS 거부, 유출은 함수 없음 오류를 반환.
 - **`docs/db/fx_ledger_reconcile_ignore.sql`** ⭐ — `fx_ledger_reconcile_ignored` 테이블(세션26차 6일차 후속, 개시일 이전 미반영 항목 "무시" 처리). **실행 필요**. 미실행 시 "무시" 버튼이 테이블 없음 오류를 반환(원장 반영/타임라인 표시 자체는 영향 없음).
+- **`docs/db/fx_transfer_selfconsume_guard.sql`** ⭐⭐ — 계좌 대체 자기 소진 방어 hotfix
+  (세션26차 12일차 후속). **실행 필요.** `fx_txn_type.sql` 이후 실행.
+  ⚠ 재예치(정기예금→정기예금)처럼 출금·입금 계좌유형이 같으면 FIFO 루프가 **자기가 방금 만든
+  로트를 다시 소진**할 수 있었다(plpgsql 커서 가시성은 "절대 안 보인다"를 보장하지 않는다).
+  소진 대상 WHERE 에 `transfer_id <> v_transfer_id` 를 추가해 구조적으로 차단.
 - **`docs/db/fx_term_deposit_settle.sql`** ⭐⭐ — 정기예금 해지·재예치 + 운용자금 연동
   (세션26차 12일차 Phase 2). **실행 필요.** `fx_lot_transfer.sql`·`fx_txn_type.sql` 적용 후 실행할 것.
   미실행 시 데이터 등록 탭의 "정기예금 관리" 해지·연결이 함수 없음 오류를 반환한다.
