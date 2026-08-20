@@ -523,6 +523,7 @@ function buildAttentionItems(
 }
 
 function AttentionDigest({ items }: { items: AttentionItem[] }) {
+  const [open, setOpen] = useState(true)
   if (items.length === 0) {
     return (
       <div className="rounded-xl border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/20 px-4 py-3 flex items-center gap-2">
@@ -533,10 +534,14 @@ function AttentionDigest({ items }: { items: AttentionItem[] }) {
   }
   return (
     <div className="rounded-xl border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/20 overflow-hidden">
-      <div className="px-4 py-2.5 border-b border-red-100 dark:border-red-900/50">
+      {/* 접기/펼치기 — 건수가 많으면 화면 위쪽을 다 먹어 아래 내용이 밀린다(2026-08-21 리포트) */}
+      <button type="button" onClick={() => setOpen(o => !o)}
+        className="flex w-full items-center gap-2 px-4 py-2.5 text-left border-b border-red-100 dark:border-red-900/50
+                   hover:bg-red-100/50 dark:hover:bg-red-900/20 transition-colors">
         <h3 className="text-sm font-semibold text-red-700 dark:text-red-300">⚠ 주의 필요 {items.length}건</h3>
-      </div>
-      <div className="divide-y divide-red-100 dark:divide-red-900/40">
+        <span className="ml-auto text-xs text-red-500 dark:text-red-400">{open ? '접기 ▾' : '펼치기 ▸'}</span>
+      </button>
+      <div className={`divide-y divide-red-100 dark:divide-red-900/40 ${open ? '' : 'hidden'}`}>
         {items.map((item, i) => (
           <button key={i} onClick={item.onClick} disabled={!item.onClick}
             className={`w-full flex items-center justify-between gap-3 px-4 py-2.5 text-left transition-colors
@@ -1012,33 +1017,32 @@ export default function PolicyPage() {
     return (c && hasCompany(c as Company)) ? c as Company : 'all'
   })
 
-  // 접근 가능한 법인이 1개뿐이면 해당 법인으로 자동 고정
+  // ⚠ 법인은 **상단 TopBar 선택(currentCompany)** 을 따른다(2026-08-21).
+  //   과거엔 이 페이지에도 법인 칩이 따로 있어 TopBar 와 이중 선택이 되고,
+  //   어느 쪽이 적용된 건지 알 수 없었다. 칩을 없애고 여기서 동기화만 한다.
+  //   전 법인 요약(주의 필요·정책 적합성)은 '전체' 선택 없이도 항상 표시하므로
+  //   'all' 상태가 필요 없다.
   useEffect(() => {
-    if (accessibleCompanies.length === 1) {
+    if (currentCompany && hasCompany(currentCompany) && currentCompany !== companyTab) {
+      setCompanyTab(currentCompany as Company)
+    } else if (!currentCompany && accessibleCompanies.length > 0 && companyTab === 'all') {
       setCompanyTab(accessibleCompanies[0])
     }
-  }, [accessibleCompanies])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentCompany, accessibleCompanies])
 
   // 세부 정책 탭: 법인 자동 연동 (currentCompany 우선 사용)
   const isDetailTab = (tab: PolicyTab) => tab !== 'decisions'
 
   function handlePolicyTab(tab: PolicyTab) {
     setPolicyTab(tab)
-    if (isDetailTab(tab)) {
-      // 세부 탭 전환 시 currentCompany로 자동 설정
-      const target = (companyTab !== 'all' ? companyTab : currentCompany) as Company
-      if (target) { setCompanyTab(target); setCurrentCompany(target) }
+    // 법인은 TopBar 가 정한다 — 여기서 바꾸지 않는다.
+    // 다만 currentCompany 가 아직 비어 있으면(최초 진입) 접근 가능한 첫 법인으로 채운다.
+    if (isDetailTab(tab) && !currentCompany && accessibleCompanies.length > 0) {
+      setCurrentCompany(accessibleCompanies[0])
     }
   }
 
-  function handleCompanyTab(company: Company | 'all') {
-    // 접근 권한 없는 법인 선택 차단
-    if (company !== 'all' && !hasCompany(company)) return
-    setCompanyTab(company)
-    if (policyTab !== 'decisions' && company !== 'all') {
-      setCurrentCompany(company as Company)
-    }
-  }
 
   // "주의 필요" 다이제스트/매트릭스에서 특정 법인·탭으로 즉시 이동 (stale closure 방지 위해 3개 상태 동시 설정)
   function navigateToPolicy(company: Company, tab: PolicyTab) {
@@ -1192,19 +1196,9 @@ export default function PolicyPage() {
           )}
         </div>
 
-        {/* 법인 선택 칩 */}
-        <div className="flex gap-2 flex-wrap">
-          {(canSeeAll ? (['all', ...accessibleCompanies] as const) : accessibleCompanies).map(c => (
-            <button key={c} onClick={() => handleCompanyTab(c as Company | 'all')}
-              className={`text-sm px-3 py-1 rounded-full transition-colors ${
-                companyTab === c
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-slate-100'
-              }`}>
-              {c === 'all' ? '전체' : c}
-            </button>
-          ))}
-        </div>
+        {/* ⚠ 법인 선택 칩 제거(2026-08-21) — 상단 TopBar 법인 선택과 이중이라 혼란스러웠다.
+            이제 companyTab 은 currentCompany 를 그대로 따른다. 전 법인 요약(주의 필요·정책
+            적합성)은 '전체' 탭 없이도 항상 보이므로 선택 자체가 필요 없다. */}
 
         {/* 드릴다운 상세 뷰 */}
         {mobileDetailOpen ? (
@@ -1213,7 +1207,7 @@ export default function PolicyPage() {
             {policyTab !== 'decisions' && companyTab === 'all' && (
               <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl p-4 text-center">
                 <p className="text-sm font-medium text-amber-700 dark:text-amber-300 mb-1">법인을 선택해주세요</p>
-                <p className="text-xs text-amber-600 dark:text-amber-400">위 칩에서 법인을 선택하세요.</p>
+                <p className="text-xs text-amber-600 dark:text-amber-400">화면 우측 상단의 법인 선택기에서 법인을 고르세요.</p>
               </div>
             )}
 
@@ -1571,34 +1565,16 @@ export default function PolicyPage() {
         ))}
       </div>
 
-      {/* ── 법인 탭 (세부 탭에서는 '전체' 숨김, 단일 법인 계정은 탭 미표시) ── */}
-      <div className="flex gap-1.5 flex-wrap items-center">
-        {(isDetailTab(policyTab)
-          ? accessibleCompanies
-          : (canSeeAll ? (['all', ...accessibleCompanies] as const) : accessibleCompanies)
-        ).map(c => (
-          <button key={c} onClick={() => handleCompanyTab(c as Company | 'all')}
-            className={`text-sm px-3 py-1 rounded-full transition-colors ${
-              companyTab === c
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-slate-100 hover:bg-gray-200 dark:hover:bg-gray-600'
-            }`}>
-            {c === 'all' ? '전체' : c}
-            {c !== 'all' && policyTab === 'decisions' && (
-              <span className="ml-1 text-xs opacity-70">
-                ({decisions.data.filter(d => d.company === c).length})
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
+      {/* ⚠ 법인 탭 제거(2026-08-21) — 상단 TopBar 법인 선택과 이중이라 어느 쪽이 적용된
+          건지 알 수 없었다. 이제 currentCompany 를 그대로 따르고, 전 법인 요약은
+          '전체' 선택 없이 항상 표시한다. */}
 
       {/* ── FX 정책 탭 ──────────────────────────────────────────────── */}
       {policyTab === 'fx' && (
         companyTab === 'all' ? (
           <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl p-5 text-center">
             <p className="text-sm font-medium text-amber-700 dark:text-amber-300 mb-1">법인을 선택해주세요</p>
-            <p className="text-xs text-amber-600 dark:text-amber-400">FX 정책 분석은 법인별로 적용됩니다. 위 탭에서 특정 법인을 선택하세요.</p>
+            <p className="text-xs text-amber-600 dark:text-amber-400">화면 우측 상단의 법인 선택기에서 법인을 고르세요.</p>
           </div>
         ) : selectedParams && (
           <FxPolicyTab company={companyTab as Company} />
@@ -1610,7 +1586,7 @@ export default function PolicyPage() {
         companyTab === 'all' ? (
           <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl p-5 text-center">
             <p className="text-sm font-medium text-amber-700 dark:text-amber-300 mb-1">법인을 선택해주세요</p>
-            <p className="text-xs text-amber-600 dark:text-amber-400">변동성 리스크 분석은 법인별 국채 데이터를 사용합니다.</p>
+            <p className="text-xs text-amber-600 dark:text-amber-400">화면 우측 상단의 법인 선택기에서 법인을 고르세요.</p>
           </div>
         ) : selectedParams ? (
           <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-5">
@@ -1629,7 +1605,7 @@ export default function PolicyPage() {
         companyTab === 'all' ? (
           <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl p-5 text-center">
             <p className="text-sm font-medium text-amber-700 dark:text-amber-300 mb-1">법인을 선택해주세요</p>
-            <p className="text-xs text-amber-600 dark:text-amber-400">기관 한도 관리는 법인별로 적용됩니다.</p>
+            <p className="text-xs text-amber-600 dark:text-amber-400">화면 우측 상단의 법인 선택기에서 법인을 고르세요.</p>
           </div>
         ) : selectedData ? (
           <BankLimitsTab
@@ -1646,7 +1622,7 @@ export default function PolicyPage() {
         companyTab === 'all' ? (
           <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl p-5 text-center">
             <p className="text-sm font-medium text-amber-700 dark:text-amber-300 mb-1">법인을 선택해주세요</p>
-            <p className="text-xs text-amber-600 dark:text-amber-400">12주 롤링 포캐스트는 법인별로 관리됩니다.</p>
+            <p className="text-xs text-amber-600 dark:text-amber-400">화면 우측 상단의 법인 선택기에서 법인을 고르세요.</p>
           </div>
         ) : selectedData ? (
           <CashflowForecastTab
@@ -1663,7 +1639,7 @@ export default function PolicyPage() {
         companyTab === 'all' ? (
           <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl p-5 text-center">
             <p className="text-sm font-medium text-amber-700 dark:text-amber-300 mb-1">법인을 선택해주세요</p>
-            <p className="text-xs text-amber-600 dark:text-amber-400">만기 래더링은 법인별 운용·차입 데이터를 사용합니다.</p>
+            <p className="text-xs text-amber-600 dark:text-amber-400">화면 우측 상단의 법인 선택기에서 법인을 고르세요.</p>
           </div>
         ) : selectedData ? (
           <PolicyCTab
@@ -1681,7 +1657,7 @@ export default function PolicyPage() {
         companyTab === 'all' ? (
           <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl p-5 text-center">
             <p className="text-sm font-medium text-amber-700 dark:text-amber-300 mb-1">법인을 선택해주세요</p>
-            <p className="text-xs text-amber-600 dark:text-amber-400">정책 성과 분석은 법인별로 제공됩니다.</p>
+            <p className="text-xs text-amber-600 dark:text-amber-400">화면 우측 상단의 법인 선택기에서 법인을 고르세요.</p>
           </div>
         ) : (
           <PolicyKpiTab company={companyTab as string} isMaster={canEditPolicy} />
@@ -1691,11 +1667,15 @@ export default function PolicyPage() {
       {/* ── 회의·의결사항 (decisions 탭만 표시) ──────────────────────── */}
       {policyTab === 'decisions' && <>
 
-      {/* 정책 현황 패널 */}
-      {companyTab === 'all' ? (
+      {/* 정책 현황 패널
+          ⚠ 전 법인 요약(주의 필요·정책 적합성)은 **항상** 보여준다. 과거엔 '전체' 칩을
+             골라야만 보였는데, 칩을 없앴으므로 상시 노출한다. 여러 법인에 접근 가능한
+             계정에서만 의미가 있으므로 canSeeAll 로 가린다. */}
+      {canSeeAll && (
         <AllCompanySummary dataMap={dataMap} paramsMap={paramsReadMap} companies={accessibleCompanies}
           decisions={decisions.data} onNavigate={navigateToPolicy} />
-      ) : selectedData && selectedParams && (
+      )}
+      {selectedData && selectedParams && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <LiquidityCard data={selectedData} params={selectedParams} isMaster={canEditPolicy} userLabel={userLabel} />
           <FxStatusCard  data={selectedData} params={selectedParams}
