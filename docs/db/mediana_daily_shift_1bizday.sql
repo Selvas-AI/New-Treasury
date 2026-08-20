@@ -67,26 +67,57 @@ select 'daily_reports', count(*) from backup.daily_reports_20260820;
 
 -- ── 1. DRY-RUN — 무엇이 어떻게 바뀌는지 먼저 눈으로 확인 ───────────────────
 -- ⚠ 영업일 달력은 **daily 하나**를 쓴다. daily_reports 는 일보를 안 쓴 날이 비어 있어
---   자기 시퀀스로 밀면 영업일을 점프한다(실측: 2026-06-05 → 06-09).
-with bizcal as (
-  -- ⚠ daily.date 는 text 라 date 로 캐스팅해 달력을 만든다
-  select date::date as d,
+--   자기 시퀀스로 밀면 영업일을 점프한다(실측: 2026-06-05 → 06-09, 6/08 일보 없음).
+--
+-- ⚠ 이 쿼리는 §2 와 **완전히 같은 계산**을 한다(달력 마지막 칸 채우기 포함).
+--   따라서 여기 나오는 new_date 가 곧 최종 결과다 — NULL 이 하나도 없어야 정상이다.
+--   (처음엔 달력 채우기를 빼고 보여줘서 NULL 이 3건 나왔다. daily 마지막(8/19)뿐 아니라
+--    **report[8/19] 도 후속이 없어** NULL 이 됐는데, §2 는 달력을 먼저 채우므로
+--    실제로는 8/20 으로 정상 매핑된다. DRY-RUN 이 §2 와 달라 혼동을 줬다.)
+with base as (
+  select date::date as d,                                   -- daily.date 는 text
          lead(date::date) over (order by date::date) as next_d
     from public.daily where company = '메디아나'
+),
+bizcal as (
+  -- 달력 마지막(daily 최신)의 다음 영업일을 채운다 — §2 와 동일
+  select d, coalesce(next_d, date '2026-08-20') as next_d from base   -- ⚠ 실행 전 확인
 )
 select 'daily' as tbl, d.date::date as old_date, c.next_d as new_date
   from public.daily d join bizcal c on c.d = d.date::date
  where d.company = '메디아나'
 union all
-select 'daily_reports', r.report_date, c.next_d      -- report_date 는 이미 date
+select 'daily_reports', r.report_date,
+       coalesce(c.next_d, date '2026-08-21')                -- ⚠ 달력에 없는 초안(8/20)
   from public.daily_reports r left join bizcal c on c.d = r.report_date
  where r.company = '메디아나'
  order by 1, 2 desc;
--- ⚠ new_date 가 NULL 인 행 = 달력 마지막(daily 최신) 또는 달력에 없는 초안.
---   §2 에서 각각 '2026-08-20'(daily) / '2026-08-21'(초안) 로 지정한다.
---   그 외에 NULL 이 더 있으면 중단하고 원인을 확인할 것.
 
--- 비연속 구간 점검 — daily_reports 가 daily 달력 대비 얼마나 비어 있는지
+-- 확인 포인트
+--   ① new_date 에 NULL 이 하나도 없어야 한다
+--   ② daily         마지막: 2026-08-19 → 2026-08-20
+--   ③ daily_reports 마지막: 2026-08-20 → 2026-08-21, 그 앞 2026-08-19 → 2026-08-20
+--   ④ daily_reports 2026-06-05 → **2026-06-08** (자기 시퀀스였다면 06-09 로 튀었을 자리)
+
+-- 목표 날짜 중복 검사 — 둘 다 0 이어야 한다
+with base as (
+  select date::date as d, lead(date::date) over (order by date::date) as next_d
+    from public.daily where company = '메디아나'
+), bizcal as (
+  select d, coalesce(next_d, date '2026-08-20') as next_d from base
+), tgt as (
+  select 'daily' as tbl, c.next_d as new_date
+    from public.daily d join bizcal c on c.d = d.date::date
+   where d.company = '메디아나'
+  union all
+  select 'daily_reports', coalesce(c.next_d, date '2026-08-21')
+    from public.daily_reports r left join bizcal c on c.d = r.report_date
+   where r.company = '메디아나'
+)
+select tbl, count(*) - count(distinct new_date) as duplicated
+  from tgt group by tbl;
+
+-- daily 달력에 없는 report_date 건수 — **1** (오늘 작성 중인 초안)이어야 한다
 select count(*) as reports_not_in_daily_calendar
   from public.daily_reports r
  where r.company = '메디아나'
