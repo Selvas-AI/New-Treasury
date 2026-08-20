@@ -7,6 +7,7 @@ import { useFx } from '../hooks/useFx'
 import { useFxTradeHistory } from '../hooks/useFxTradeHistory'
 import { usePolicyParams } from '../hooks/usePolicyParams'
 import { useInvestments } from '../hooks/useInvestments'
+import { useFxTransfers } from '../hooks/useFxTransfers'
 import { fmtKRW } from '../lib/format'
 import { summarizeRealizedPnl } from '../lib/fxTxnType'
 import type { FxCode, FxTradeFill, FxLotConsumption } from '../types'
@@ -62,6 +63,8 @@ export default function FxLedgerPage() {
   const trades = useFxTradeHistory(company)
   // 운용자금 — 외화 정기예금 정합성 점검용(활성 건만)
   const invest = useInvestments(true, company)
+  // 계좌 대체 이력 — 데이터 등록 탭의 대체 카드에서 이벤트 단위 조회·원복에 쓴다
+  const transferHist = useFxTransfers(company, currency)
   const marketRate = fx.rates.find(row => row.code === currency)?.rate ?? 0
 
   const [fillsData, setFillsData] = useState<{
@@ -86,6 +89,7 @@ export default function FxLedgerPage() {
   const refreshAll = useCallback(() => {
     void ledger.refetch()
     void trades.load()
+    void transferHist.refetch()
     setRefreshKey(k => k + 1)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -169,6 +173,7 @@ export default function FxLedgerPage() {
       <FxLotAdminTab
         ledger={ledger} trades={trades} company={company} currency={currency}
         valuationMethod={valuationMethod} termInvestments={termInvestments}
+        transfers={transferHist.transfers}
         userCode={user?.code ?? 'unknown'}
         canEdit={canEdit()} canDelete={canDelete()} onChanged={refreshAll}
       />

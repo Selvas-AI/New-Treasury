@@ -5,6 +5,7 @@ import type { LotRepairPlanItem } from '../../hooks/useFxLots'
 import { fmtKRW } from '../../lib/format'
 import FxTransferCard from './FxTransferCard'
 import FxTermDepositCard from './FxTermDepositCard'
+import type { FxLotTransfer } from '../../hooks/useFxTransfers'
 import { OUTFLOW_TXN_LABEL, SELECTABLE_OUTFLOW_TXN } from '../../lib/fxTxnType'
 import type { Company, FxCode, FxTradeRecord, InvestmentRecord } from '../../types'
 
@@ -35,6 +36,7 @@ interface LedgerAdminApi {
     investmentId: string | null; memo: string; userCode: string
   }) => Promise<string | null>
   linkLotsToInvestment: (lotIds: string[], investmentId: string, userCode: string) => Promise<string | null>
+  reverseTransfer: (transferId: string, userCode: string) => Promise<string | null>
 }
 
 interface TradeAdminApi {
@@ -51,7 +53,7 @@ interface TradeAdminApi {
  * 이 탭의 항목들은 매일 쓰는 화면이 아니라 원장을 처음 세팅하거나 데이터를 바로잡을 때만
  * 쓰는 관리 도구라 ① 원장 탭에서 분리했다(세션26차 4일차 통폐합).
  */
-export function FxLotAdminTab({ ledger, trades, company, currency, valuationMethod, termInvestments, userCode, canEdit, canDelete, onChanged }: {
+export function FxLotAdminTab({ ledger, trades, company, currency, valuationMethod, termInvestments, transfers, userCode, canEdit, canDelete, onChanged }: {
   ledger: LedgerAdminApi
   trades: TradeAdminApi
   company: Company
@@ -60,6 +62,8 @@ export function FxLotAdminTab({ ledger, trades, company, currency, valuationMeth
   valuationMethod: 'carryover' | 'revalue'
   /** 이 법인·통화의 활성 외화 정기예금(운용자금) — 원장과의 정합성 점검·연결용 */
   termInvestments: InvestmentRecord[]
+  /** 계좌 대체 이력 — 원장 표에서 취득일 승계 때문에 눈에 안 띄므로 이벤트 단위로도 보여준다 */
+  transfers: FxLotTransfer[]
   userCode: string
   canEdit: boolean
   canDelete: boolean
@@ -278,7 +282,8 @@ export function FxLotAdminTab({ ledger, trades, company, currency, valuationMeth
       <FxTransferCard
         lots={ledger.lots} currency={currency} valuationMethod={valuationMethod}
         canEdit={canEdit} userCode={userCode}
-        onTransfer={ledger.transferLots} onChanged={onChanged}
+        transfers={transfers} onTransfer={ledger.transferLots}
+        onReverse={ledger.reverseTransfer} onChanged={onChanged}
       />
 
       {/* 정기예금 라이프사이클 — 해지 시 원금은 대체(원가승계), 이자는 해지일 환율의 신규 로트.

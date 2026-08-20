@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { fmtKRW, fmtNumber } from '../../lib/format'
 import { ACCOUNT_TYPE_LABEL, previewFifoConsumption, type FxAccountType, type FxLot } from '../../lib/fxLots'
+import type { FxLotTransfer } from '../../hooks/useFxTransfers'
 import type { FxCode } from '../../types'
 
 const ACCOUNT_TYPES: FxAccountType[] = ['demand_deposit', 'mmda', 'term_deposit']
@@ -23,20 +24,25 @@ function todayStr() { return new Date().toISOString().slice(0, 10) }
  * 평가 방식은 법인 정책(policy_params.fx_transfer_valuation)이 정한다 — 화면에서
  * 바꿀 수 없고, 저장 전에 그 방식의 결과(손익 0 vs 실현손익 N)를 보여주기만 한다.
  */
-export default function FxTransferCard({ lots, currency, valuationMethod, canEdit, userCode, onTransfer, onChanged }: {
+export default function FxTransferCard({ lots, currency, valuationMethod, canEdit, userCode, transfers, onTransfer, onReverse, onChanged }: {
   lots: FxLot[]
   currency: FxCode
   /** 'carryover'(원가승계, 기본) | 'revalue'(재평가) — 법인 정책 */
   valuationMethod: 'carryover' | 'revalue'
   canEdit: boolean
   userCode: string
+  /** 대체 이력 — 원장 표에서는 취득일 승계 때문에 눈에 안 띄므로 이벤트 단위로도 보여준다 */
+  transfers: FxLotTransfer[]
   onTransfer: (input: {
     date: string; fromAccountType: FxAccountType; toAccountType: FxAccountType
     amount: number; maturityDate: string | null; annualInterestRate: number
     transferRate: number | null; allowEarly: boolean; memo: string; userCode: string
   }) => Promise<string | null>
+  onReverse: (transferId: string, userCode: string) => Promise<string | null>
   onChanged: () => void
 }) {
+  const [reverseTarget, setReverseTarget] = useState<FxLotTransfer | null>(null)
+  const [reversing, setReversing] = useState(false)
   const [open, setOpen] = useState(false)
   const [date, setDate] = useState(todayStr())
   const [from, setFrom] = useState<FxAccountType>('demand_deposit')
@@ -243,6 +249,85 @@ export default function FxTransferCard({ lots, currency, valuationMethod, canEdi
       )}
 
       {msg && <p className="mt-2 text-[11px] font-medium text-blue-700 dark:text-blue-300">{msg}</p>}
+
+      {/* 대체 이력 — 원가승계 대체 로트는 원본의 취득일을 승계하므로 원장 표(유입일 정렬)에서
+          목록 중간에 끼어 들어가 눈에 띄지 않는다. 이벤트 단위로 다시 보여주고, 원복도 여기서. */}
+      {transfers.length > 0 && (
+        <div className="mt-4 border-t border-gray-200 pt-3 dark:border-slate-700">
+          <p className="text-xs font-semibold text-gray-700 dark:text-slate-200">대체 이력</p>
+          <p className="mt-0.5 text-[11px] text-gray-400">
+            원가승계 대체 로트는 <strong>원본의 취득일을 승계</strong>합니다 — 원장 표에서는 대체일이 아니라
+            원본 취득일 위치에 표시됩니다(FIFO 순서 보존).
+          </p>
+          <table className="mt-2 w-full text-[11px] tabular-nums">
+            <thead>
+              <tr className="text-left text-gray-400">
+                <th className="font-medium">대체일</th>
+                <th className="font-medium">이동</th>
+                <th className="text-right font-medium">금액</th>
+                <th className="font-medium">방식</th>
+                <th className="text-right font-medium">실현손익</th>
+                <th className="text-right font-medium">관리</th>
+              </tr>
+            </thead>
+            <tbody className="text-gray-600 dark:text-slate-300">
+              {transfers.map(t => (
+                <tr key={t.id} className="border-t border-gray-100 dark:border-slate-800">
+                  <td className="py-1">{t.transfer_date}</td>
+                  <td className="whitespace-nowrap">
+                    {ACCOUNT_TYPE_LABEL[t.from_account_type]} → {ACCOUNT_TYPE_LABEL[t.to_account_type]}
+                    {t.early_withdrawal && <span className="ml-1 text-amber-600 dark:text-amber-400">중도해지</span>}
+                  </td>
+                  <td className="text-right">{fmtNumber(t.amount, currency === 'JPY' ? 0 : 2)}</td>
+                  <td>{t.valuation_method === 'revalue' ? '재평가' : '원가승계'}</td>
+                  <td className={t.realized_pnl === 0 ? 'text-right text-gray-400'
+                    : `text-right ${t.realized_pnl > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>
+                    {t.realized_pnl === 0 ? '0' : `${t.realized_pnl > 0 ? '▲' : '▼'} ${fmtKRW(Math.abs(t.realized_pnl))}`}
+                  </td>
+                  <td className="text-right">
+                    {canEdit && (
+                      <button onClick={() => { setReverseTarget(t); setMsg(null) }}
+                        className="text-red-600 hover:underline dark:text-red-400">취소</button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* 원복 확인 — 화면 안 패널(window.confirm 금지 규칙) */}
+      {reverseTarget && (
+        <div className="mt-3 rounded-lg border border-red-300 bg-red-50 p-3 dark:border-red-700 dark:bg-red-900/20">
+          <p className="text-xs font-bold text-red-800 dark:text-red-200">대체 취소 확인</p>
+          <p className="mt-1 text-[11px] text-red-700 dark:text-red-300">
+            {reverseTarget.transfer_date} · {ACCOUNT_TYPE_LABEL[reverseTarget.from_account_type]} →{' '}
+            {ACCOUNT_TYPE_LABEL[reverseTarget.to_account_type]} ·{' '}
+            {fmtNumber(reverseTarget.amount, currency === 'JPY' ? 0 : 2)} {currency}
+            <br />
+            이 대체로 생긴 로트가 삭제되고 원본 로트 잔액이 복원됩니다.
+            <strong> 생긴 로트가 이미 일부라도 소진됐으면 서버가 거부합니다.</strong>
+          </p>
+          <div className="mt-2 flex gap-2">
+            <button disabled={reversing}
+              onClick={async () => {
+                setReversing(true)
+                const err = await onReverse(reverseTarget.id, userCode)
+                setReversing(false)
+                if (err) { setMsg(err); return }
+                setReverseTarget(null); setMsg('대체를 취소했습니다.'); onChanged()
+              }}
+              className="rounded bg-red-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">
+              {reversing ? '처리 중…' : '취소 실행'}
+            </button>
+            <button onClick={() => setReverseTarget(null)}
+              className="rounded border border-gray-300 bg-white px-3 py-1.5 text-xs dark:border-slate-600 dark:bg-slate-800">
+              닫기
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

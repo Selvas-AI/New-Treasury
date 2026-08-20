@@ -290,6 +290,19 @@ export function FxLedgerTab({
                           </td>
                           <td className="whitespace-nowrap">
                             {ACCOUNT_TYPE_LABEL[lot.accountType]}
+                            {/* ⚠ 대체 로트는 원본의 취득일을 승계해(FIFO 순서 보존) 유입일만 봐서는
+                                오늘 만든 것인지 알 수 없다 — 배지로 구분한다. */}
+                            {lot.transferId && (
+                              <span className="ml-1 rounded bg-blue-100 px-1 py-0.5 text-[10px] text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
+                                title="계좌 대체로 들어온 로트 — 유입일은 원본 취득일을 승계합니다">
+                                대체
+                              </span>
+                            )}
+                            {lot.sourceType === 'interest' && (
+                              <span className="ml-1 rounded bg-purple-100 px-1 py-0.5 text-[10px] text-purple-700 dark:bg-purple-900/40 dark:text-purple-300">
+                                이자
+                              </span>
+                            )}
                             {lot.accountType === 'term_deposit' && lot.maturityDate && (
                               <span className="ml-1 text-gray-400">(만기 {lot.maturityDate})</span>
                             )}
