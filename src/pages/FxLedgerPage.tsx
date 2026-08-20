@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { usePageCompany } from '../hooks/usePageCompany'
@@ -6,6 +6,7 @@ import { useFxLots } from '../hooks/useFxLots'
 import { useFx } from '../hooks/useFx'
 import { useFxTradeHistory } from '../hooks/useFxTradeHistory'
 import { usePolicyParams } from '../hooks/usePolicyParams'
+import { useInvestments } from '../hooks/useInvestments'
 import { fmtKRW } from '../lib/format'
 import { summarizeRealizedPnl } from '../lib/fxTxnType'
 import type { FxCode, FxTradeFill, FxLotConsumption } from '../types'
@@ -59,6 +60,8 @@ export default function FxLedgerPage() {
   // A패턴: 법인 단위 전체 통화 자동 로드 — 이행 대기 배너(원장 탭)·환차손익 요약(전체 실적
   // 포함)·과거 매각 CSV 이관 관리(로트 설정 탭)가 공유한다.
   const trades = useFxTradeHistory(company)
+  // 운용자금 — 외화 정기예금 정합성 점검용(활성 건만)
+  const invest = useInvestments(true, company)
   const marketRate = fx.rates.find(row => row.code === currency)?.rate ?? 0
 
   const [fillsData, setFillsData] = useState<{
@@ -86,6 +89,12 @@ export default function FxLedgerPage() {
     setRefreshKey(k => k + 1)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // 이 법인·통화의 활성 외화 정기예금 — 원장 term_deposit 로트와의 정합성 점검·연결용.
+  // ⚠ 두 장부가 서로를 참조하지 않아 따로 놀던 것을 잇는 지점이다(Phase 2).
+  const termInvestments = useMemo(
+    () => invest.data.filter(i => i.active && i.currency === currency && i.product === '정기예금'),
+    [invest.data, currency])
 
   const isPending = (s: string) => s === '발의' || s === '승인' || s === '부분체결'
   const pendingOrders = trades.data.filter(r => r.currency === currency && isPending(r.status))
@@ -159,7 +168,8 @@ export default function FxLedgerPage() {
     {activeTab === 'lots' && (
       <FxLotAdminTab
         ledger={ledger} trades={trades} company={company} currency={currency}
-        valuationMethod={valuationMethod} userCode={user?.code ?? 'unknown'}
+        valuationMethod={valuationMethod} termInvestments={termInvestments}
+        userCode={user?.code ?? 'unknown'}
         canEdit={canEdit()} canDelete={canDelete()} onChanged={refreshAll}
       />
     )}

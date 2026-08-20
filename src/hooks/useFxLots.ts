@@ -49,6 +49,7 @@ interface FxLotRow {
   original_amount: number; remaining_amount: number; acq_rate: number
   source_type: FxLot['sourceType']; source_id: string | null; memo: string | null
   account_type: FxLot['accountType']; annual_interest_rate: number; maturity_date: string | null
+  transfer_id?: string | null; investment_id?: string | null
 }
 
 function mapRow(row: FxLotRow): FxLot {
@@ -56,7 +57,9 @@ function mapRow(row: FxLotRow): FxLot {
     originalAmount: Number(row.original_amount), remainingAmount: Number(row.remaining_amount),
     acqRate: Number(row.acq_rate), accountType: row.account_type ?? 'demand_deposit',
     annualInterestRate: Number(row.annual_interest_rate ?? 0), maturityDate: row.maturity_date,
-    sourceType: row.source_type, sourceId: row.source_id, memo: row.memo }
+    sourceType: row.source_type, sourceId: row.source_id,
+    transferId: row.transfer_id ?? null, investmentId: row.investment_id ?? null,
+    memo: row.memo }
 }
 
 export function useFxLots(company: string, currency: string) {
@@ -308,6 +311,39 @@ export function useFxLots(company: string, currency: string) {
     return err?.message ?? null
   }, [company, currency, refetch])
 
+  /**
+   * 정기예금 해지·재예치 (세션26차 Phase 2, docs/db/fx_term_deposit_settle.sql).
+   * 원금 대체 + 이자 신규 로트를 한 트랜잭션으로 처리한다.
+   * ⚠ 이자는 새로 생긴 외화라 **해지일 환율의 신규 로트**다 — 원금 장부환율로 넣으면 원가가 희석된다.
+   */
+  const settleTermDeposit = useCallback(async (input: {
+    date: string; principal: number; toAccountType: FxLot['accountType']
+    interest: number; interestRate: number | null
+    maturityDate: string | null; annualInterestRate: number
+    transferRate: number | null; allowEarly: boolean
+    investmentId: string | null; memo: string; userCode: string
+  }) => {
+    const { error: err } = await restRpc('settle_fx_term_deposit', {
+      p_company: company, p_currency: currency, p_settle_date: input.date,
+      p_principal: input.principal, p_to_account_type: input.toAccountType,
+      p_interest: input.interest, p_interest_rate: input.interestRate,
+      p_maturity_date: input.maturityDate, p_annual_interest_rate: input.annualInterestRate,
+      p_transfer_rate: input.transferRate, p_allow_early: input.allowEarly,
+      p_investment_id: input.investmentId, p_memo: input.memo, p_by: input.userCode,
+    })
+    if (!err) await refetch()
+    return err?.message ?? null
+  }, [company, currency, refetch])
+
+  /** 이미 양쪽에 따로 들어가 있는 정기예금을 1회 연결한다(설계 §4 D). */
+  const linkLotsToInvestment = useCallback(async (lotIds: string[], investmentId: string, userCode: string) => {
+    const { error: err } = await restRpc('link_fx_lots_to_investment', {
+      p_lot_ids: lotIds, p_investment_id: investmentId, p_by: userCode,
+    })
+    if (!err) await refetch()
+    return err?.message ?? null
+  }, [refetch])
+
   const reverseTransfer = useCallback(async (transferId: string, userCode: string) => {
     const { error: err } = await restRpc('reverse_fx_lot_transfer', {
       p_transfer_id: transferId, p_reversed_by: userCode,
@@ -320,12 +356,12 @@ export function useFxLots(company: string, currency: string) {
   return useMemo(() => ({ lots, loading, error, refetch, addOpeningLot,
     importOpeningLots, updateLot, deleteLot, planLotRepair, applyLotRepair,
     reconcileDailyInflow, reconcileDailyOutflow, addManualOutflow,
-    transferLots, reverseTransfer,
+    transferLots, reverseTransfer, settleTermDeposit, linkLotsToInvestment,
     totalAmount: remainingAmount(lots),
     availableAmount: availableAmount(lots, today), lockedAmount: remainingAmount(lots)-availableAmount(lots, today),
     expectedInterestFx: lots.reduce((sum, lot) => sum + expectedTermInterestFx(lot), 0),
     bookRate: weightedBookRate(lots) }),
   [lots, loading, error, refetch, addOpeningLot, importOpeningLots, updateLot, deleteLot,
    planLotRepair, applyLotRepair, reconcileDailyInflow, reconcileDailyOutflow, addManualOutflow,
-   transferLots, reverseTransfer, today])
+   transferLots, reverseTransfer, settleTermDeposit, linkLotsToInvestment, today])
 }

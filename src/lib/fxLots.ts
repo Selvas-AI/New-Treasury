@@ -30,7 +30,12 @@ export interface FxLot {
   annualInterestRate: number
   maturityDate?: string | null
   sourceType: 'opening' | 'daily_report_item' | 'manual' | 'adjustment'
+    | 'transfer' | 'interest' | 'investment'
   sourceId?: string | null
+  /** 계좌 대체로 생긴 로트의 원천 대체 이벤트 (세션26차 Phase 1) */
+  transferId?: string | null
+  /** 연결된 운용자금(investments) 레코드 — 정기예금 연동 (Phase 2) */
+  investmentId?: string | null
   memo?: string | null
 }
 

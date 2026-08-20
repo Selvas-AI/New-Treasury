@@ -4,8 +4,9 @@ import { ACCOUNT_TYPE_LABEL, type FxAccountType, type FxLot } from '../../lib/fx
 import type { LotRepairPlanItem } from '../../hooks/useFxLots'
 import { fmtKRW } from '../../lib/format'
 import FxTransferCard from './FxTransferCard'
+import FxTermDepositCard from './FxTermDepositCard'
 import { OUTFLOW_TXN_LABEL, SELECTABLE_OUTFLOW_TXN } from '../../lib/fxTxnType'
-import type { Company, FxCode, FxTradeRecord } from '../../types'
+import type { Company, FxCode, FxTradeRecord, InvestmentRecord } from '../../types'
 
 const CARD = 'rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900'
 const ACCOUNT_TYPE_OPTIONS: { value: FxAccountType; label: string }[] = [
@@ -26,6 +27,14 @@ interface LedgerAdminApi {
     amount: number; maturityDate: string | null; annualInterestRate: number
     transferRate: number | null; allowEarly: boolean; memo: string; userCode: string
   }) => Promise<string | null>
+  settleTermDeposit: (input: {
+    date: string; principal: number; toAccountType: FxAccountType
+    interest: number; interestRate: number | null
+    maturityDate: string | null; annualInterestRate: number
+    transferRate: number | null; allowEarly: boolean
+    investmentId: string | null; memo: string; userCode: string
+  }) => Promise<string | null>
+  linkLotsToInvestment: (lotIds: string[], investmentId: string, userCode: string) => Promise<string | null>
 }
 
 interface TradeAdminApi {
@@ -42,13 +51,15 @@ interface TradeAdminApi {
  * 이 탭의 항목들은 매일 쓰는 화면이 아니라 원장을 처음 세팅하거나 데이터를 바로잡을 때만
  * 쓰는 관리 도구라 ① 원장 탭에서 분리했다(세션26차 4일차 통폐합).
  */
-export function FxLotAdminTab({ ledger, trades, company, currency, valuationMethod, userCode, canEdit, canDelete, onChanged }: {
+export function FxLotAdminTab({ ledger, trades, company, currency, valuationMethod, termInvestments, userCode, canEdit, canDelete, onChanged }: {
   ledger: LedgerAdminApi
   trades: TradeAdminApi
   company: Company
   currency: FxCode
   /** 계좌 대체 평가 방식 (법인 정책) */
   valuationMethod: 'carryover' | 'revalue'
+  /** 이 법인·통화의 활성 외화 정기예금(운용자금) — 원장과의 정합성 점검·연결용 */
+  termInvestments: InvestmentRecord[]
   userCode: string
   canEdit: boolean
   canDelete: boolean
@@ -268,6 +279,15 @@ export function FxLotAdminTab({ ledger, trades, company, currency, valuationMeth
         lots={ledger.lots} currency={currency} valuationMethod={valuationMethod}
         canEdit={canEdit} userCode={userCode}
         onTransfer={ledger.transferLots} onChanged={onChanged}
+      />
+
+      {/* 정기예금 라이프사이클 — 해지 시 원금은 대체(원가승계), 이자는 해지일 환율의 신규 로트.
+          운용자금(investments) 과의 잔액 정합성도 여기서 확인한다. */}
+      <FxTermDepositCard
+        lots={ledger.lots} currency={currency} investments={termInvestments}
+        canEdit={canEdit} userCode={userCode}
+        onSettle={ledger.settleTermDeposit} onLink={ledger.linkLotsToInvestment}
+        onChanged={onChanged}
       />
 
       {canEdit && <div className="grid gap-4 md:grid-cols-2">
