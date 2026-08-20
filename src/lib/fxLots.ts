@@ -89,16 +89,41 @@ export function unrealizedPnlKRW(
   )
 }
 
+/**
+ * 계좌유형 소진 우선순위 파싱 (세션26차 11일차).
+ *
+ * `policy_params.fx_fifo_account_priority`(param_text, 예: `"demand_deposit,mmda"`)를
+ * 순번 맵으로 바꾼다. 목록에 없는 유형은 999(항상 뒤). 빈 값이면 전부 999 →
+ * **정렬에 영향이 없어 현행(순수 취득일 FIFO)과 동일**하다.
+ *
+ * ⚠ 서버 RPC(`fx_fifo_account_rank`, docs/db/fx_fifo_account_priority.sql)와 반드시
+ *   같은 규칙이어야 한다 — 한쪽만 바꾸면 미리보기와 실제 소진 결과가 갈라진다.
+ */
+export function parseAccountPriority(text: string | null | undefined): Record<string, number> {
+  const out: Record<string, number> = {}
+  if (!text) return out
+  text.split(',').map(s => s.trim()).filter(Boolean)
+    .forEach((t, i) => { if (!(t in out)) out[t] = i + 1 })
+  return out
+}
+
+const rankOf = (priority: Record<string, number> | undefined, t: FxAccountType) =>
+  priority?.[t] ?? 999
+
 export function previewFifoConsumption(
   lots: FxLot[],
   requestedAmount: number,
   disposalRate: number,
   asOfDate = '9999-12-31',
+  /** 계좌유형 소진 우선순위 (parseAccountPriority 결과). 없으면 취득일 순만 적용 */
+  accountPriority?: Record<string, number>,
 ): FxLotConsumptionPreview[] {
   let remaining = Math.max(0, requestedAmount)
   const ordered = [...lots]
     .filter(lot => lot.remainingAmount > 0 && isLotAvailable(lot, asOfDate))
-    .sort((a, b) => a.acquiredDate.localeCompare(b.acquiredDate) || a.id.localeCompare(b.id))
+    .sort((a, b) =>
+      rankOf(accountPriority, a.accountType) - rankOf(accountPriority, b.accountType)
+      || a.acquiredDate.localeCompare(b.acquiredDate) || a.id.localeCompare(b.id))
   const rows: FxLotConsumptionPreview[] = []
 
   for (const lot of ordered) {
@@ -118,8 +143,9 @@ export function previewFifoConsumption(
 }
 
 /** FIFO 소진 결과. 원본 로트는 변경하지 않는다. */
-export function consumeFifoLots(lots: FxLot[], requestedAmount: number, disposalRate: number, asOfDate = '9999-12-31') {
-  const consumptions = previewFifoConsumption(lots, requestedAmount, disposalRate, asOfDate)
+export function consumeFifoLots(lots: FxLot[], requestedAmount: number, disposalRate: number, asOfDate = '9999-12-31',
+  accountPriority?: Record<string, number>) {
+  const consumptions = previewFifoConsumption(lots, requestedAmount, disposalRate, asOfDate, accountPriority)
   const usedById = new Map(consumptions.map(row => [row.lotId, row.amount]))
   const nextLots = lots.map(lot => ({
     ...lot,

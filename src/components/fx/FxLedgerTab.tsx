@@ -1,8 +1,7 @@
 import { Fragment, useMemo, useState } from 'react'
 import { useAuth } from '../../hooks/useAuth'
-import { fmtNumber } from '../../lib/format'
+import { fmtKRW, fmtNumber } from '../../lib/format'
 import { ACCOUNT_TYPE_LABEL, type FxAccountType, type FxLot } from '../../lib/fxLots'
-import { FillConsumptionCard } from './FillConsumptionDetail'
 import { useFxLedgerReconciliation } from '../../hooks/useFxLedgerReconciliation'
 import type { FxTradeFill, FxLotConsumption, FxTradeRecord, Company, FxCode } from '../../types'
 
@@ -13,27 +12,34 @@ const ACCOUNT_TYPE_OPTIONS: { value: FxAccountType; label: string }[] = [
   { value: 'term_deposit',   label: ACCOUNT_TYPE_LABEL.term_deposit },
 ]
 
-type TimelineRowBase =
-  | { kind: 'inflow';  date: string; amount: number; lot: FxLot }
-  | { kind: 'outflow'; date: string; amount: number; fill: FxTradeFill }
+const SOURCE_LABEL: Record<string, string> = {
+  fx_trade_history:   '매각 체결',
+  daily_report_item:  '자금일보 반영',
+  manual:             '수동 유출',
+}
 
 /**
- * ① 원장 탭 — 유입(로트 취득)과 유출(체결)을 날짜순으로 합쳐 잔액이 누적 계산되는
- * 단일 타임라인으로 보여준다. 계정잔액명세처럼 "언제 들어온 외화가 언제 얼마나
- * 처분됐고 지금 얼마 남았는지"를 한 화면에서 볼 수 있게 하는 것이 목적(세션26차 4일차).
+ * ① 원장 탭 — **재고 명세**(계정잔액명세형). 로트 1건 = 1행으로, 언제 들어온 외화가
+ * 얼마나 처분됐고 지금 얼마 남았는지를 보여준다. 처분금액을 펼치면 그 로트가 언제·
+ * 어떤 경로로 소진됐는지 상세가 나온다.
  *
- * 기존 "보유 로트"+"매각 이력" 두 탭을 대체한다. 개시 이전(2026년) CSV 로 이관한
- * 과거 매각 실적은 FIFO 로트를 소진하지 않은 순수 과거 실적이라 이 타임라인에는
- * 나타나지 않는다 — 그 건들은 ③ 로트 설정 탭에서 관리한다.
+ * ⚠ 과거엔 여기에 유출(체결) 행을 날짜순으로 섞어 넣은 "타임라인"이었다. 두 가지 문제가 있었다:
+ *   1. 같은 처분이 표에 **두 번** 나왔다 — 로트 행의 `처분금액`(생애 누적)과 유출 행의 금액.
+ *      축이 다른 두 모델(재고 명세 vs 거래 타임라인)을 한 표에 섞은 결과다.
+ *   2. 자금일보 반영·수동 유출은 `fx_trade_fills` 행이 없어 **원장에서 통째로 누락**됐다
+ *      (잔액만 조용히 줄어듦). 이제 소진 내역(fx_lot_consumptions)을 직접 읽어 전부 나온다.
+ *   시간순 처분 조회는 **외화매도이력 탭**이 정본이다 — 원장은 재고, 매도이력은 거래.
  */
 export function FxLedgerTab({
-  company, lots, fills, consumptionsByFillId, loading, currency, totalAmount, pendingOrders,
+  company, lots, fills, consumptionsByLotId, loading, currency, totalAmount, pendingOrders,
   onUpdateLot, onDeleteLot, onReconcileInflow, onReconcileOutflow, onGotoOrders, onChanged,
 }: {
   company: Company
   lots: FxLot[]
+  /** 로트별 소진 내역 — 매각 체결/자금일보/수동 유출을 모두 포함한다 */
+  consumptionsByLotId: Record<string, FxLotConsumption[]>
+  /** 소진 내역의 fill_id → 체결일 등 부가 표시용 */
   fills: FxTradeFill[]
-  consumptionsByFillId: Record<string, FxLotConsumption[]>
   loading: boolean
   currency: FxCode
   totalAmount: number
@@ -58,23 +64,19 @@ export function FxLedgerTab({
   const canWriteFxTrade = canAction('fx_trade', 'write')
   const [editingLot, setEditingLot] = useState<FxLot | null>(null)
   const [pendingDeleteLot, setPendingDeleteLot] = useState<FxLot | null>(null)
-  const [expandedFillId, setExpandedFillId] = useState<string | null>(null)
+  const [expandedLotId, setExpandedLotId] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
-  // FIFO 는 계좌유형과 무관하게 취득일 순으로 소진되지만(term_deposit 은 만기 전 제외),
-  // "이 유형이 지금 얼마나 남았는지"를 보고 싶을 때가 있어 표시만 유형별로 거를 수 있게 한다.
   const [accountFilter, setAccountFilter] = useState<'all' | FxAccountType>('all')
 
-  const merged = useMemo(() => {
-    const rows: TimelineRowBase[] = [
-      ...lots.filter(lot => accountFilter === 'all' || lot.accountType === accountFilter)
-        .map(lot => ({ kind: 'inflow' as const, date: lot.acquiredDate, amount: lot.originalAmount, lot })),
-      ...fills.map(fill => ({ kind: 'outflow' as const, date: fill.fill_date, amount: fill.amount_fx, fill })),
-    ]
-    rows.sort((a, b) => a.date === b.date
-      ? (a.kind === b.kind ? 0 : a.kind === 'inflow' ? -1 : 1)
-      : a.date.localeCompare(b.date))
-    return rows.reverse() // 최신순 표시
-  }, [lots, fills, accountFilter])
+  /** 체결일 등 부가 표시용 — 소진 내역의 fill_id 로 조회한다 */
+  const fillById = useMemo(() => new Map(fills.map(f => [f.id, f])), [fills])
+
+  const rows = useMemo(() => [...lots]
+    .filter(lot => accountFilter === 'all' || lot.accountType === accountFilter)
+    .sort((a, b) => b.acquiredDate.localeCompare(a.acquiredDate) || b.id.localeCompare(a.id)),
+    [lots, accountFilter])
+
+
 
   // 무결성 확인용 — 화면에는 표시하지 않고, 전체 로트 잔여 합계가 어긋날 때만 경고한다
   // (계좌유형 필터와 무관하게 항상 전체 기준으로 검증).
@@ -167,81 +169,129 @@ export function FxLedgerTab({
           </div>
           {loading ? (
             <div className="text-xs text-gray-500">조회 중…</div>
-          ) : merged.length === 0 ? (
-            <div className="text-xs text-gray-500">아직 유입·유출 이력이 없습니다.</div>
+          ) : rows.length === 0 ? (
+            <div className="text-xs text-gray-500">등록된 재고가 없습니다.</div>
           ) : (
             <div className="overflow-auto" style={{ maxHeight: '26rem' }}>
               <table className="w-full min-w-[760px] text-xs">
                 <thead className="sticky top-0 bg-white dark:bg-slate-900">
                   <tr className="border-b text-left text-gray-500 dark:border-slate-700 dark:text-slate-400">
                     <th className="py-2 w-6"></th>
-                    <th className="py-2">일자</th><th>구분</th><th>내용</th>
-                    <th className="text-right">최초유입</th><th className="text-right">처분금액</th>
-                    <th className="text-right">잔액</th><th className="text-right">환율</th><th className="text-right">관리</th>
+                    <th className="py-2 whitespace-nowrap">유입일</th>
+                    <th className="whitespace-nowrap">상태</th>
+                    <th className="whitespace-nowrap">계좌</th>
+                    <th className="text-right whitespace-nowrap">최초유입</th>
+                    <th className="text-right whitespace-nowrap">처분금액</th>
+                    <th className="text-right whitespace-nowrap">잔액</th>
+                    <th className="text-right whitespace-nowrap">장부환율</th>
+                    <th className="text-right whitespace-nowrap">관리</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {merged.map(row => row.kind === 'inflow' ? (
-                    <tr key={`lot-${row.lot.id}`} className="border-b border-gray-100 dark:border-slate-800">
-                      <td></td>
-                      <td className="py-2 whitespace-nowrap">{row.date}</td>
-                      <td><span className="rounded bg-emerald-100 px-1.5 py-0.5 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">유입</span></td>
-                      <td className="whitespace-nowrap">
-                        {ACCOUNT_TYPE_LABEL[row.lot.accountType]}
-                        {row.lot.accountType === 'term_deposit' && row.lot.maturityDate && (
-                          <span className="ml-1 text-gray-400">(만기 {row.lot.maturityDate})</span>
-                        )}
-                      </td>
-                      <td className="text-right tabular-nums text-emerald-600 dark:text-emerald-400">{row.lot.originalAmount.toLocaleString()}</td>
-                      <td className="text-right tabular-nums text-gray-500 dark:text-slate-400">
-                        {row.lot.remainingAmount < row.lot.originalAmount
-                          ? (row.lot.originalAmount - row.lot.remainingAmount).toLocaleString() : '—'}
-                      </td>
-                      <td className="text-right tabular-nums font-semibold">{row.lot.remainingAmount.toLocaleString()}</td>
-                      <td className="text-right tabular-nums">{row.lot.acqRate.toLocaleString()}</td>
-                      <td className="text-right whitespace-nowrap">
-                        {canEdit() && <button onClick={() => setEditingLot(row.lot)} className="text-blue-600 hover:underline">수정</button>}
-                        {canDelete() && <button onClick={() => setPendingDeleteLot(row.lot)} className="ml-2 text-red-600 hover:underline">삭제</button>}
-                      </td>
-                    </tr>
-                  ) : (
-                    <Fragment key={`fill-${row.fill.id}`}>
-                      <tr className="border-b border-gray-100 dark:border-slate-800">
-                        <td className="py-2">
-                          <button onClick={() => setExpandedFillId(expandedFillId === row.fill.id ? null : row.fill.id)}
-                            className="text-gray-400 hover:text-gray-700 dark:hover:text-slate-200" title="소진 로트 보기">
-                            {expandedFillId === row.fill.id ? '▾' : '▸'}
-                          </button>
-                        </td>
-                        <td className="py-2 whitespace-nowrap">{row.date}</td>
-                        <td><span className="rounded bg-orange-100 px-1.5 py-0.5 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300">유출</span></td>
-                        <td className="whitespace-nowrap">매각 체결{row.fill.completed_by && <span className="ml-1 text-gray-400">· {row.fill.completed_by}</span>}</td>
-                        <td className="text-right text-gray-300 dark:text-slate-600">—</td>
-                        <td className="text-right tabular-nums font-medium text-orange-600 dark:text-orange-400">-{row.amount.toLocaleString()}</td>
-                        <td className="text-right text-gray-300 dark:text-slate-600">—</td>
-                        <td className="text-right tabular-nums">{row.fill.completed_rate.toLocaleString()}</td>
-                        <td className="text-right whitespace-nowrap text-gray-400">—</td>
-                      </tr>
-                      {expandedFillId === row.fill.id && (
-                        <tr>
-                          <td colSpan={9} className="bg-gray-50 dark:bg-slate-900/60 pl-10 pr-4 py-3">
-                            <FillConsumptionCard fill={row.fill} index={0} label="매각 체결 상세"
-                              consumptions={consumptionsByFillId[row.fill.id] ?? []}
-                              canReverse={false} onRequestReverse={() => {}} />
-                            {(canApprove() && canWriteFxTrade) && (
-                              <p className="mt-1.5 text-[11px] text-gray-400">
-                                이 체결을 취소하려면 외화매도이력 탭에서 해당 지시를 펼쳐 "이 체결만 취소"를 사용하세요.
-                              </p>
+                  {rows.map(lot => {
+                    const cons = consumptionsByLotId[lot.id] ?? []
+                    const disposed = lot.originalAmount - lot.remainingAmount
+                    const state = lot.remainingAmount <= 0.000001 ? 'done'
+                      : disposed > 0.000001 ? 'partial' : 'open'
+                    const expanded = expandedLotId === lot.id
+                    return (
+                      <Fragment key={lot.id}>
+                        <tr className="border-b border-gray-100 dark:border-slate-800">
+                          <td className="py-2">
+                            {cons.length > 0 && (
+                              <button onClick={() => setExpandedLotId(expanded ? null : lot.id)}
+                                className="text-gray-400 hover:text-gray-700 dark:hover:text-slate-200" title="처분 내역 보기">
+                                {expanded ? '▾' : '▸'}
+                              </button>
                             )}
                           </td>
+                          <td className="py-2 whitespace-nowrap">{lot.acquiredDate}</td>
+                          <td className="whitespace-nowrap">
+                            <span className={`rounded px-1.5 py-0.5 whitespace-nowrap ${
+                              state === 'done'
+                                ? 'bg-gray-200 text-gray-600 dark:bg-slate-700 dark:text-slate-300'
+                                : state === 'partial'
+                                  ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
+                                  : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300'}`}>
+                              {state === 'done' ? '소진 완료' : state === 'partial' ? '소진 중' : '잔존'}
+                            </span>
+                          </td>
+                          <td className="whitespace-nowrap">
+                            {ACCOUNT_TYPE_LABEL[lot.accountType]}
+                            {lot.accountType === 'term_deposit' && lot.maturityDate && (
+                              <span className="ml-1 text-gray-400">(만기 {lot.maturityDate})</span>
+                            )}
+                          </td>
+                          <td className="text-right tabular-nums text-emerald-600 dark:text-emerald-400">{lot.originalAmount.toLocaleString()}</td>
+                          <td className="text-right tabular-nums">
+                            {disposed > 0.000001 ? (
+                              <button onClick={() => setExpandedLotId(expanded ? null : lot.id)}
+                                className="font-medium text-orange-600 underline decoration-dotted underline-offset-2 hover:text-orange-700 dark:text-orange-400"
+                                title="언제 어떤 경로로 처분됐는지 보기">
+                                -{disposed.toLocaleString()}
+                              </button>
+                            ) : <span className="text-gray-300 dark:text-slate-600">—</span>}
+                          </td>
+                          <td className="text-right tabular-nums font-semibold">{lot.remainingAmount.toLocaleString()}</td>
+                          <td className="text-right tabular-nums">{lot.acqRate.toLocaleString()}</td>
+                          <td className="text-right whitespace-nowrap">
+                            {canEdit() && <button onClick={() => setEditingLot(lot)} className="text-blue-600 hover:underline">수정</button>}
+                            {canDelete() && <button onClick={() => setPendingDeleteLot(lot)} className="ml-2 text-red-600 hover:underline">삭제</button>}
+                          </td>
                         </tr>
-                      )}
-                    </Fragment>
-                  ))}
+                        {expanded && (
+                          <tr>
+                            <td colSpan={9} className="bg-gray-50 dark:bg-slate-900/60 pl-10 pr-4 py-3">
+                              <p className="mb-1.5 text-[11px] font-semibold text-gray-600 dark:text-slate-300">
+                                처분 내역 — {lot.acquiredDate} 유입분 (장부환율 {lot.acqRate.toLocaleString()})
+                              </p>
+                              <table className="w-full text-[11px] tabular-nums">
+                                <thead>
+                                  <tr className="text-left text-gray-400">
+                                    <th className="font-medium">처분일</th>
+                                    <th className="font-medium">경로</th>
+                                    <th className="text-right font-medium">금액</th>
+                                    <th className="text-right font-medium">처분환율</th>
+                                    <th className="text-right font-medium">실현손익</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="text-gray-600 dark:text-slate-300">
+                                  {cons.map(c => (
+                                    <tr key={c.id}>
+                                      <td className="py-0.5 whitespace-nowrap">{c.disposed_date}</td>
+                                      <td className="whitespace-nowrap">
+                                        {SOURCE_LABEL[c.source_type ?? ''] ?? '기타'}
+                                        {c.fill_id && fillById.get(c.fill_id)?.completed_by && (
+                                          <span className="ml-1 text-gray-400">· {fillById.get(c.fill_id)?.completed_by}</span>
+                                        )}
+                                      </td>
+                                      <td className="text-right text-orange-600 dark:text-orange-400">-{c.amount.toLocaleString()}</td>
+                                      <td className="text-right">{c.disposal_rate.toLocaleString()}</td>
+                                      <td className={`text-right ${c.realized_pnl >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>
+                                        {c.realized_pnl >= 0 ? '▲' : '▼'} {fmtKRW(Math.abs(c.realized_pnl))}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                              {(canApprove() && canWriteFxTrade) && (
+                                <p className="mt-1.5 text-[11px] text-gray-400">
+                                  매각 체결분을 되돌리려면 외화매도이력 탭에서 해당 지시를 펼쳐 "이 체결만 취소"를 사용하세요.
+                                </p>
+                              )}
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
           )}
+          <p className="mt-2 text-[11px] text-gray-400">
+            재고(로트) 기준 명세입니다. 날짜순 처분 이력은 <strong>외화매도이력</strong> 탭에서 확인하세요.
+          </p>
         </div>
 
         <div className={CARD}>

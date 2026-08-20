@@ -49,6 +49,9 @@ import { fmtKRW, generateUUID } from '../lib/format'
 import { syncRegimeSnapshot, type RegimeSnapshotHistoryEntry } from '../lib/fxRegimeSnapshot'
 import { restInsert } from '../lib/supabase'
 import RegimeHistoryCard from '../components/fxRegime/RegimeHistoryCard'
+import FxBandExceedCard from '../components/fx/FxBandExceedCard'
+import { computeFxBandExceed, buildThresholdOrderPayload } from '../lib/fxBandExceed'
+import { useFx } from '../hooks/useFx'
 import { addBizDays, todayStr } from '../lib/bizDay'
 import {
   REGIME_CURRENCIES as CURRENCIES,
@@ -57,6 +60,7 @@ import {
   type FxTreasuryInputs,
   type InputSource,
 } from '../lib/fxRegimeInputs'
+import type { FxCode } from '../types'
 
 /**
  * 탭 순서 = **의사결정 흐름**을 따른다.
@@ -393,10 +397,17 @@ export default function FxRegimePage() {
   //    (세션26차 — 수동 입력으로 총자금까지 바꿔 권고를 만들 수 있던 잠금 우회 경로 차단)
   const [inputSource, setInputSource] = useState<InputSource>('live')
   const actualTradeHistory = useFxTradeHistory(company)
-  // 이 통화에 걸린, 아직 전량 체결되지 않은 리짐 매각 지시 — 라이브 판정이 "조치
-  // 불필요"로 바뀌어도 지시가 남아있는 한 계속 보여준다(세션26차 8일차 후속).
+  // 밴드 초과분(KRW)을 통화 수량으로 환산할 때만 쓴다. 공유 캐시라 추가 GAS 호출 없음.
+  const fxRates = useFx()
+  // 이 통화에 걸린, 아직 전량 체결되지 않은 매각 지시 — 라이브 판정이 "조치 불필요"로
+  // 바뀌어도 지시가 남아있는 한 계속 보여준다(세션26차 8일차 후속).
+  //
+  // ⚠ 과거엔 order_type==='regime' 만 봤다. 그런데 실무에서 진행 중인 매각은 대부분
+  //   정책회의 의결(discretionary)이나 한도초과(threshold)로 등록된다 — 리짐이 아니라는
+  //   이유로 숨기면 "300만불 중 200만불 체결, 잔여 100만불"이 화면 어디에도 안 보이는
+  //   바로 그 문제가 그대로 재현된다(2026-08-20 리포트). 발생 경로와 무관하게 보여준다.
   const pendingRegimeOrders = useMemo(
-    () => actualTradeHistory.data.filter(t => t.currency === currency && t.order_type === 'regime'
+    () => actualTradeHistory.data.filter(t => t.currency === currency && t.direction === 'sell'
       && (t.status === '발의' || t.status === '승인' || t.status === '부분체결')),
     [actualTradeHistory.data, currency])
 
@@ -537,6 +548,35 @@ export default function FxRegimePage() {
     return null
   }, [signal, treasuryInputs.avgAcquisitionRate, company, currency, actualTradeHistory, user])
 
+  /**
+   * 정책 밴드 상한 초과분 매도 발의 (세션26차 11일차).
+   *
+   * 리짐 권고(`registerRegimeOrder`, order_type='regime')와는 **발생 사유가 다르다** —
+   * 이건 "밴드를 넘겨 들고 있다"는 한도 위반이라 리짐이 조치 불필요라고 판정해도
+   * 별도로 발의할 수 있어야 한다. 그래서 order_type='threshold' 로 구분해 남긴다.
+   * payload 조립은 자금정책 화면과 동일하게 buildThresholdOrderPayload 하나로만 한다.
+   */
+  const registerThresholdOrder = useCallback(async (input: {
+    currency: FxCode; amountFx: number; rate: number; excessKRW: number
+  }): Promise<string | null> => {
+    const { error } = await actualTradeHistory.propose(buildThresholdOrderPayload({
+      company, currency: input.currency, amountFx: input.amountFx, rate: input.rate,
+      acqRate: input.currency === currency && treasuryInputs.avgAcquisitionRate > 0
+        ? treasuryInputs.avgAcquisitionRate : null,
+      excessKRW: input.excessKRW,
+      createdBy: user?.label ?? user?.code ?? 'unknown',
+      origin: 'FX 리짐 전략',
+    }))
+    if (error) return error.message ?? '등록 실패'
+    await actualTradeHistory.load()
+    return null
+  }, [company, currency, actualTradeHistory, treasuryInputs.avgAcquisitionRate, user])
+
+  // 정책 밴드 상한 대비 전사 외화 보유 — 분자·분모는 usePolicyDashboard(SSOT) 그대로.
+  const bandExceed = useMemo(() => computeFxBandExceed(policyData, params), [policyData, params])
+  const marketRates = useMemo(() => Object.fromEntries(
+    fxRates.rates.map(r => [r.code, r.rate])) as Partial<Record<FxCode, number>>, [fxRates.rates])
+
   // ── 차트 데이터 (최근 180 영업일) ──────────────────────────────────
   const chart = useMemo(() => {
     if (series.length < 21) return []
@@ -674,6 +714,26 @@ export default function FxRegimePage() {
           />
         )
       )}
+
+      {/* 정책 밴드 상한 초과 — 리짐 판정과 **별개**의 한도 위반 경로(세션26차 11일차).
+          발의가 자금정책 메뉴에만 있어 실무 담당자가 초과를 인지해도 손쓸 수 없던 문제를
+          해결한다. 리짐이 "조치 불필요"라고 해도 밴드를 넘겼으면 여기서 발의할 수 있다.
+          ⚠ 시뮬레이션 모드에서는 발의 버튼을 열지 않는다(가정값 기반 지시 방지). */}
+      <FxBandExceedCard
+        data={bandExceed}
+        marketRates={marketRates}
+        canPropose={inputSource === 'live' && canEdit()}
+        onPropose={registerThresholdOrder}
+        footer={
+          <p className="mt-3 text-[11px] text-gray-400">
+            상한은 정책회의가 의결한 밴드(fx_target_max)입니다. 승인·체결은{' '}
+            <Link to={`/fx-ledger/${company}?tab=orders`} className="text-blue-600 underline dark:text-blue-400">
+              외화거래명세 › 외화매도이력
+            </Link>
+            에서 진행합니다.
+          </p>
+        }
+      />
 
       {/* 조치 이력 — 과거 특정 날짜의 조치 카드 재조회(세션26차 7일차) */}
       <RegimeHistoryCard company={company} currency={currency} />

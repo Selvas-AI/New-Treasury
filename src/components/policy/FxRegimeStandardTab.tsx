@@ -11,6 +11,7 @@
  *   보이지도 않는 탭에서 미리 돌리면 불필요한 네트워크 비용이 든다.
  */
 import FxRegimeOpsCard from './FxRegimeOpsCard'
+import FxFifoPriorityCard from './FxFifoPriorityCard'
 import ProtocolTab from '../fxRegime/ProtocolTab'
 import { useFxRegime } from '../../hooks/useFxRegime'
 import { useCashflowPlan, get12Weeks } from '../../hooks/useCashflowPlan'
@@ -52,6 +53,8 @@ export default function FxRegimeStandardTab({
           plan.items, get12Weeks()[0], REGIME_CURRENCIES,
         )}
       />
+
+      <FxFifoPriorityCard company={company} params={params} canEdit={canEdit} userLabel={userCode} />
 
       {hist.loading ? (
         <div className="rounded-xl border border-gray-200 bg-white p-4 text-sm text-gray-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">

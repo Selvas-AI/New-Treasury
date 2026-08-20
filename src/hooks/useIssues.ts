@@ -5,7 +5,7 @@ import { generateUUID } from '../lib/format'
 import type { IssueComment, IssueStatus, UseQueryResult } from '../types'
 
 /** 이슈 식별자 생성 — D-day 없이 안정화된 키 */
-export function makeIssueKey(type: 'loan' | 'equity' | 'input_daily' | 'policy' | 'fx_sell' | 'fx_regime', id?: string): string {
+export function makeIssueKey(type: 'loan' | 'equity' | 'input_daily' | 'policy' | 'fx_sell' | 'fx_regime' | 'fx_band', id?: string): string {
   if (type === 'input_daily') return 'input_daily'
   if (!id) return type
   return `${type}_${id}`

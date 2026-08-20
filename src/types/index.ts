@@ -156,6 +156,13 @@ export interface FxLotConsumption {
   acq_rate: number       // 소진된 로트의 장부(취득)환율
   disposal_rate: number  // 처분(체결)환율
   realized_pnl: number
+  /**
+   * 이 소진을 일으킨 원천. 'fx_trade_history'(매각 체결) / 'daily_report_item'(자금일보
+   * 반영) / 'manual'(수동 유출 등록). ⚠ 매각 체결이 아닌 소진은 fill_id 가 null 이라,
+   * fill 기준으로만 화면을 만들면 **원장에서 통째로 사라진다**(세션26차 11일차 실사례).
+   */
+  source_type?: string | null
+  source_id?: string | null
 }
 
 // ─── 차입금 (loans) ──────────────────────────────────────

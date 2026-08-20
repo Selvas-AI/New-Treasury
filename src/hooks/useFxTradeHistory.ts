@@ -284,11 +284,16 @@ export function useFxTradeHistory(company?: Company | null) {
       match: { company: targetCompany, currency }, order: 'disposed_date.asc', limit: 2000,
     })
     const consumptionsByFillId: Record<string, FxLotConsumption[]> = {}
+    // ⚠ 로트별 그룹은 fill_id 유무와 무관하게 **전부** 담는다. 자금일보 반영·수동 유출은
+    //   fx_trade_fills 행이 없어(consume_fx_lots_for_source 는 fill_id 없이 기록) fill
+    //   기준 그룹에서 누락된다 — 원장이 "잔액만 조용히 줄어드는" 상태가 됐던 원인.
+    const consumptionsByLotId: Record<string, FxLotConsumption[]> = {}
     for (const row of consumptions ?? []) {
+      ;(consumptionsByLotId[row.lot_id] ??= []).push(row)
       if (!row.fill_id) continue
       ;(consumptionsByFillId[row.fill_id] ??= []).push(row)
     }
-    return { fills: fills ?? [], consumptionsByFillId }
+    return { fills: fills ?? [], consumptionsByFillId, consumptionsByLotId }
   }, [])
 
   /** 매각 지시 1건의 체결 내역 + 각 체결이 소진한 FIFO 로트 상세 (펼쳐보기 전용) */

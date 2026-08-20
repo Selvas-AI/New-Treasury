@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { fmtNumber } from '../../lib/format'
 import { bizDaysBetween, todayStr } from '../../lib/bizDay'
+import { orderTypeLabel } from '../../lib/fxOrderType'
 import type { FxTradeRecord } from '../../types'
 
 const CARD = 'rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900'
@@ -51,6 +52,7 @@ export default function PendingOrdersCard({ company, currency, orders }: {
                   {o.status}
                 </span>
                 <span className="text-gray-500 dark:text-slate-400">{o.trade_date} 발의</span>
+                <span className="text-gray-400">{orderTypeLabel(o.order_type)}</span>
                 {dday != null && (
                   <span className={dday < 0 ? 'font-semibold text-red-600 dark:text-red-400' : dday === 0 ? 'font-semibold text-amber-600 dark:text-amber-400' : 'text-gray-400'}>
                     {dday < 0 ? `기한초과 D+${Math.abs(dday)}` : dday === 0 ? 'D-day' : `D-${dday}`}

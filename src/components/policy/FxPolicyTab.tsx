@@ -118,7 +118,7 @@ function SellOrderList({ orders, company, onDelete, canEdit, canDeleteOrder }: {
                 </button>
               )}
               {canEdit && (
-                <button onClick={() => navigate(`/fx-ledger/${company}?tab=orders&currency=${o.currency}`)}
+                <button onClick={() => navigate(`/fx-ledger/${company}?tab=orders&currency=${o.currency}&order=${o.id}`)}
                   className="text-[11px] px-2 py-1 bg-green-600 hover:bg-green-700 text-white rounded font-medium">
                   체결 등록 →
                 </button>

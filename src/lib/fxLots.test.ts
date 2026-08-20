@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   consumeFifoLots, previewFifoConsumption, weightedBookRate,
-  isLotAvailable, availableAmount, type FxLot,
+  isLotAvailable, availableAmount, parseAccountPriority, type FxLot,
 } from './fxLots'
 
 const lot = (over: Partial<FxLot>): FxLot => ({
@@ -63,5 +63,51 @@ describe('fxLots FIFO', () => {
       annualInterestRate: 3.5, maturityDate: '2026-09-11' }
     expect(previewFifoConsumption([term, lots[1]], 100, 1400, '2026-09-10')[0].lotId).toBe('new')
     expect(previewFifoConsumption([term, lots[1]], 100, 1400, '2026-09-11')[0].lotId).toBe('term')
+  })
+})
+
+describe('계좌유형 소진 우선순위 (세션26차 11일차)', () => {
+  // ⚠ 이건 원가흐름 가정의 변경이다 — 순서가 바뀌면 실현손익이 달라진다.
+  //   서버 RPC(fx_fifo_account_rank)와 반드시 같은 규칙이어야 한다.
+  const mixed: FxLot[] = [
+    lot({ id: 'mmda-old',   accountType: 'mmda',           acquiredDate: '2026-01-01', acqRate: 1500 }),
+    lot({ id: 'demand-new', accountType: 'demand_deposit', acquiredDate: '2026-02-01', acqRate: 1300 }),
+  ]
+
+  it('미설정이면 취득일 순 — 현행 동작 유지', () => {
+    expect(parseAccountPriority(null)).toEqual({})
+    expect(previewFifoConsumption(mixed, 100, 1400)[0].lotId).toBe('mmda-old')
+    expect(previewFifoConsumption(mixed, 100, 1400, '9999-12-31', parseAccountPriority(''))[0].lotId).toBe('mmda-old')
+  })
+
+  it('보통예금 우선이면 취득일이 늦어도 보통예금부터 소진', () => {
+    const p = parseAccountPriority('demand_deposit,mmda')
+    expect(p).toEqual({ demand_deposit: 1, mmda: 2 })
+    expect(previewFifoConsumption(mixed, 100, 1400, '9999-12-31', p)[0].lotId).toBe('demand-new')
+  })
+
+  it('MMDA 우선이면 MMDA부터 소진', () => {
+    const p = parseAccountPriority('mmda,demand_deposit')
+    expect(previewFifoConsumption(mixed, 100, 1400, '9999-12-31', p)[0].lotId).toBe('mmda-old')
+  })
+
+  it('우선순위에 따라 실현손익이 달라진다 (정책 변경의 실질)', () => {
+    const demandFirst = consumeFifoLots(mixed, 100, 1400, '9999-12-31', parseAccountPriority('demand_deposit,mmda'))
+    const mmdaFirst   = consumeFifoLots(mixed, 100, 1400, '9999-12-31', parseAccountPriority('mmda,demand_deposit'))
+    expect(demandFirst.realizedPnlKRW).toBe(100 * (1400 - 1300))   // +10,000
+    expect(mmdaFirst.realizedPnlKRW).toBe(100 * (1400 - 1500))     // -10,000
+  })
+
+  it('우선순위와 무관하게 정기예금은 만기 전 제외', () => {
+    const term = lot({ id: 'term', accountType: 'term_deposit', acquiredDate: '2025-12-01',
+      acqRate: 1200, maturityDate: '2026-09-11' })
+    const p = parseAccountPriority('term_deposit,demand_deposit,mmda')
+    const rows = previewFifoConsumption([term, ...mixed], 100, 1400, '2026-08-20', p)
+    expect(rows[0].lotId).not.toBe('term')
+  })
+
+  it('목록에 없는 유형은 뒤로 밀린다', () => {
+    const p = parseAccountPriority('demand_deposit')
+    expect(previewFifoConsumption(mixed, 100, 1400, '9999-12-31', p)[0].lotId).toBe('demand-new')
   })
 })

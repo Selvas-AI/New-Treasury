@@ -8,7 +8,7 @@ import { usePolicyDashboard } from '../hooks/usePolicyDashboard'
 import { usePolicyParams } from '../hooks/usePolicyParams'
 import { usePolicyDecisionsByCompany } from '../hooks/usePolicyDecisions'
 import { useFxTradeHistory } from '../hooks/useFxTradeHistory'
-import { checkDecisionRule } from '../lib/policyChecks'
+import { checkDecisionRule, checkFx } from '../lib/policyChecks'
 import { readAllRegimeSnapshots, pendingDays } from '../lib/fxRegimeSnapshot'
 import { REGIME_CURRENCIES } from '../lib/fxRegimeInputs'
 import { orderTypeLabel } from '../lib/fxOrderType'
@@ -139,9 +139,32 @@ export default function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sellOrders.data, db.issues])
 
+  // ── 정책 밴드 상한 초과 (세션26차 11일차) ─────────────────────────
+  // 리짐 권고(regimeIssues)와 별개 경로다. 리짐은 "지금 국면상 얼마를 파는 게 좋은가",
+  // 이건 "의결된 밴드를 넘겨 들고 있다"는 한도 위반 — 밴드 안에서도 리짐 목표는
+  // 초과할 수 있고, 그 반대도 성립한다(세션26차 Phase 4에서 분리한 그 구분).
+  // 실무 담당자가 자금정책 메뉴 권한 없이도 초과를 인지할 수 있게 여기에 올린다.
+  const bandExceedIssues = useMemo<IssueItem[]>(() => {
+    const r = checkFx(policyData, policyParams)
+    if (r.status !== 'over' || r.max == null || r.ratio <= r.max) return []
+    const key = makeIssueKey('fx_band', company ?? '')
+    const thread = db.issues.threadOf(key)
+    const lastStatus = thread[thread.length - 1]?.status ?? 'open'
+    if (lastStatus === 'done') return []
+    const excess = r.fxKrw - r.totalFund * (r.max / 100)
+    return [{
+      key,
+      title: `외화 보유 정책 상한 초과: ${r.ratio.toFixed(1)}% (상한 ${r.max}%)`,
+      desc: `보유 ${fmtKRW(r.fxKrw)} · 상한 ${fmtKRW(r.totalFund * (r.max / 100))} · 초과 ${fmtKRW(excess)} — 외화거래명세에서 매도 발의`,
+      status: lastStatus,
+      commentCount: thread.length,
+    }]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [policyData, policyParams, company, db.issues])
+
   const allIssues = useMemo(
-    () => [...db.detectedIssues, ...policyIssues, ...regimeIssues, ...sellOrderIssues],
-    [db.detectedIssues, policyIssues, regimeIssues, sellOrderIssues])
+    () => [...db.detectedIssues, ...policyIssues, ...regimeIssues, ...bandExceedIssues, ...sellOrderIssues],
+    [db.detectedIssues, policyIssues, regimeIssues, bandExceedIssues, sellOrderIssues])
 
   const [hoverKey, setHoverKey] = useState<string | null>(null)
   const [fixedKey, setFixedKey] = useState<string | null>(null)

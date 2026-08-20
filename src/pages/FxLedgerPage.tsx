@@ -10,6 +10,7 @@ import type { FxCode, FxTradeFill, FxLotConsumption } from '../types'
 import { FxLedgerTab } from '../components/fx/FxLedgerTab'
 import { FxOrdersTab } from '../components/fx/FxOrdersTab'
 import { FxLotAdminTab } from '../components/fx/FxLotAdminTab'
+import FxBandExceedPanel from '../components/fx/FxBandExceedPanel'
 
 const CURRENCIES: FxCode[] = ['USD', 'EUR', 'JPY', 'GBP', 'CNY']
 const CARD = 'rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900'
@@ -54,7 +55,11 @@ export default function FxLedgerPage() {
   const trades = useFxTradeHistory(company)
   const marketRate = fx.rates.find(row => row.code === currency)?.rate ?? 0
 
-  const [fillsData, setFillsData] = useState<{ fills: FxTradeFill[]; consumptionsByFillId: Record<string, FxLotConsumption[]> }>({ fills: [], consumptionsByFillId: {} })
+  const [fillsData, setFillsData] = useState<{
+    fills: FxTradeFill[]
+    consumptionsByFillId: Record<string, FxLotConsumption[]>
+    consumptionsByLotId: Record<string, FxLotConsumption[]>
+  }>({ fills: [], consumptionsByFillId: {}, consumptionsByLotId: {} })
   const [fillsLoading, setFillsLoading] = useState(true)
   const [refreshKey, setRefreshKey] = useState(0)
 
@@ -76,7 +81,12 @@ export default function FxLedgerPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const pendingOrders = trades.data.filter(r => r.currency === currency && (r.status === '발의' || r.status === '승인' || r.status === '부분체결'))
+  const isPending = (s: string) => s === '발의' || s === '승인' || s === '부분체결'
+  const pendingOrders = trades.data.filter(r => r.currency === currency && isPending(r.status))
+  // 외화매도이력 탭의 "이행 대기" 고정 패널은 통화 탭과 무관하게 법인 전체를 본다 —
+  // 다른 통화 지시가 통화 탭 뒤에 숨어 기한을 넘기는 일이 없어야 한다.
+  const allPendingOrders = trades.data.filter(r => isPending(r.status))
+  const initialOrderId = searchParams.get('order')
 
   // 환차손익 요약 — 법인 전체 통화가 섞이던 기존 버그 수정, 선택된 통화만 집계
   const completedForPnl = trades.data.filter(r => r.currency === currency && (r.status === '완료' || r.status === '부분체결'))
@@ -119,7 +129,8 @@ export default function FxLedgerPage() {
     {activeTab === 'ledger' && (
       <FxLedgerTab
         company={company}
-        lots={ledger.lots} fills={fillsData.fills} consumptionsByFillId={fillsData.consumptionsByFillId}
+        lots={ledger.lots} consumptionsByLotId={fillsData.consumptionsByLotId}
+        fills={fillsData.fills}
         loading={ledger.loading || fillsLoading} currency={currency} totalAmount={ledger.totalAmount}
         pendingOrders={pendingOrders}
         onUpdateLot={ledger.updateLot} onDeleteLot={ledger.deleteLot}
@@ -129,7 +140,13 @@ export default function FxLedgerPage() {
       />
     )}
     {activeTab === 'orders' && (
-      <FxOrdersTab company={company} currency={currency} onChanged={refreshAll} />
+      <div className="space-y-4">
+        {/* 실무 담당자용 발의 경로 — 자금정책 메뉴 권한이 없어도 상한 초과를 인지하고
+            발의할 수 있어야 한다(세션26차 11일차). 실행(승인·체결)은 아래 목록에서. */}
+        <FxBandExceedPanel company={company} onProposed={refreshAll} />
+        <FxOrdersTab company={company} currency={currency} onChanged={refreshAll}
+          pendingOrders={allPendingOrders} initialOrderId={initialOrderId} />
+      </div>
     )}
     {activeTab === 'lots' && (
       <FxLotAdminTab
