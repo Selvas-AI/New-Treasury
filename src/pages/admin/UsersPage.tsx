@@ -6,7 +6,7 @@
  *   2. 해당 이메일 소유자가 LoginPage "최초 계정 설정" 탭에서 비밀번호 설정
  *   3. 이후 일반 로그인
  */
-import { useState, useEffect, useMemo, Fragment } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { supabase, restInsert, restUpdate, restDelete } from '../../lib/supabase'
@@ -92,23 +92,6 @@ const EMPTY: Omit<UserRow, 'id' | 'created_at'> = {
   allowed_categories: null, action_permissions: null,
 }
 
-// ── 작업권한 섹션 정의 ──────────────────────────────────────
-type ActionKey = 'view' | 'write' | 'delete'
-interface SectionDef { key: SectionKey; label: string; group: string; disabled?: ActionKey[] }
-const SECTIONS: SectionDef[] = [
-  { key: 'operating',    label: '운전자금',  group: '자금 입력' },
-  { key: 'invest',       label: '운용자금',  group: '자금 입력' },
-  { key: 'loans',        label: '차입금',    group: '자금 입력' },
-  { key: 'equity',       label: '지분투자',  group: '자금 입력' },
-  { key: 'daily_write',  label: '일보 작성', group: '자금일보',  disabled: ['delete'] },
-  { key: 'daily_submit', label: '결재 상신', group: '자금일보',  disabled: ['delete'] },
-  { key: 'history',      label: '자금 이력', group: '이력 관리', disabled: ['write','delete'] },
-  { key: 'issue_history',label: '이슈 이력', group: '이력 관리', disabled: ['delete'] },
-  // 외화매매거래: 승인/완료/취소가 있으나 하드 삭제는 없으므로 delete 비활성
-  { key: 'fx_trade',     label: '외화매매거래', group: '이력 관리', disabled: ['delete'] },
-  { key: 'policy',       label: '자금정책',  group: '자금정책',  disabled: ['delete'] },
-]
-
 // IN_CATEGORIES / OUT_CATEGORIES (ItemsSection과 동기화)
 const IN_CAT_LABELS: { code: string; label: string }[] = [
   { code: 'ar_collection',   label: '매출채권 회수' },
@@ -160,7 +143,6 @@ export default function UsersPage() {
   const [resettingId,    setResettingId]    = useState<string | null>(null)
 
   // ── 세분화 권한 탭 상태 ────────────────────────────────────
-  const [permTab,        setPermTab]        = useState<'menu' | 'category' | 'action'>('menu')
   // 카테고리 권한
   const [customCategory, setCustomCategory] = useState(false)
   const [allowedCatsIn,  setAllowedCatsIn]  = useState<string[]>([])
@@ -249,7 +231,6 @@ export default function UsersPage() {
     })
     setCustomMenu(row.menus !== null)
     // 세분화 권한 복원
-    setPermTab('menu')
     const hasCatPerm = row.allowed_categories !== null
     setCustomCategory(hasCatPerm)
     setAllowedCatsIn(row.allowed_categories?.in ?? [])
@@ -269,7 +250,6 @@ export default function UsersPage() {
   function resetForm() {
     setShowForm(false); setEditId(null); setError(null)
     setForm({ ...EMPTY }); setCustomMenu(false)
-    setPermTab('menu')
     setCustomCategory(false); setAllowedCatsIn([]); setAllowedCatsOut([])
     setCustomAction(false)
     setActionPerms(ACTION_DEFAULTS['editor'] as Partial<Record<SectionKey, SectionPermission>>)
@@ -516,201 +496,133 @@ export default function UsersPage() {
             ))}
           </div>
 
-          {/* ── 세분화 권한 탭 ────────────────────────────────── */}
+          {/* ── 권한 설정 — 사이드바와 동일한 트리 하나로 통합 (세션26차 13일차) ──
+              과거엔 `메뉴 접근 / 카테고리 권한 / 작업 권한` 3개 탭이라 같은 화면의 권한이
+              세 곳에 흩어져 있었고, 메뉴 목록이 평면 칩이라 실제 사이드바와 대조가 불가능했다.
+              작업 권한은 SectionKey 10개 중 8개가 메뉴와 1:1 이라 트리 행에 붙일 수 있고,
+              카테고리 권한만 축이 달라(자금일보 안의 입출금 항목 종류) 해당 행 아래 접이식으로 둔다. */}
           <div className="border border-gray-200 dark:border-slate-600 rounded-xl overflow-hidden">
-            {/* 탭 바 */}
-            <div className="flex border-b border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-700/50">
-              {(['menu','category','action'] as const).map((t, i) => {
-                const labels = ['메뉴 접근', '카테고리 권한', '작업 권한']
-                const badges = [
-                  customMenu ? '커스텀' : null,
-                  customCategory ? '커스텀' : null,
-                  customAction ? '커스텀' : null,
-                ]
-                return (
-                  <button key={t} type="button" onClick={() => setPermTab(t)}
-                    className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 text-xs font-medium border-b-2 transition-colors ${permTab === t ? 'border-blue-500 text-blue-600 dark:text-blue-400 bg-white dark:bg-slate-800' : 'border-transparent text-gray-500 dark:text-slate-400 hover:text-gray-700'}`}>
-                    {labels[i]}
-                    {badges[i] && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300">{badges[i]}</span>}
-                  </button>
-                )
-              })}
+            <div className="flex flex-wrap items-center gap-3 border-b border-gray-200 bg-gray-50 px-4 py-2.5 dark:border-slate-600 dark:bg-slate-700/50">
+              <span className="text-xs font-semibold text-gray-700 dark:text-slate-200">권한 설정</span>
+              <label className="flex cursor-pointer items-center gap-1.5 text-[11px] text-gray-600 dark:text-slate-300">
+                <input type="checkbox" checked={customMenu}
+                  onChange={e => { setCustomMenu(e.target.checked); if (!e.target.checked) setF('menus', null) }}
+                  className="h-3.5 w-3.5 accent-indigo-600" />
+                메뉴 커스텀
+              </label>
+              <label className="flex cursor-pointer items-center gap-1.5 text-[11px] text-gray-600 dark:text-slate-300">
+                <input type="checkbox" checked={customAction}
+                  onChange={e => {
+                    setCustomAction(e.target.checked)
+                    if (e.target.checked) {
+                      setActionPerms((ACTION_DEFAULTS[form.role] ?? ACTION_DEFAULTS.editor) as Partial<Record<SectionKey, SectionPermission>>)
+                    }
+                  }}
+                  className="h-3.5 w-3.5 accent-emerald-600" />
+                작업 커스텀
+              </label>
+              <label className="flex cursor-pointer items-center gap-1.5 text-[11px] text-gray-600 dark:text-slate-300">
+                <input type="checkbox" checked={customCategory}
+                  onChange={e => {
+                    setCustomCategory(e.target.checked)
+                    if (e.target.checked) {
+                      setAllowedCatsIn(IN_CAT_LABELS.map(c => c.code))
+                      setAllowedCatsOut(OUT_CAT_LABELS.map(c => c.code))
+                    }
+                  }}
+                  className="h-3.5 w-3.5 accent-blue-600" />
+                카테고리 커스텀
+              </label>
+              <span className="ml-auto text-[10px] text-gray-400">
+                커스텀을 끄면 역할 기본값이 적용됩니다 (아래 트리는 그 기본값을 미리보기로 표시)
+              </span>
             </div>
 
-            {/* 탭1: 메뉴 접근 */}
-            {permTab === 'menu' && (
-              <div className="p-4 space-y-3">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={customMenu}
-                    onChange={e => { setCustomMenu(e.target.checked); if (!e.target.checked) setF('menus', null) }}
-                    className="w-4 h-4 accent-blue-600" />
-                  <span className="text-xs text-gray-600 dark:text-slate-300">커스텀 설정 (미선택 시 역할 기본값 적용)</span>
-                </label>
-                {/* 트리는 커스텀 미설정 시에도 보여준다 — 역할 기본값으로 실제 무엇이 열리는지
-                    확인할 수 있어야 한다(과거엔 안내 문장만 있어 확인이 불가능했다). */}
-                <div className="pl-6 space-y-2">
-                  <div className="flex flex-wrap items-center gap-2 text-[11px]">
-                    <span className="text-gray-400">
-                      {customMenu
-                        ? '좌측 사이드바와 동일한 구조입니다. 체크한 메뉴만 이 사용자에게 노출됩니다.'
-                        : `역할 기본값(${form.role}) 미리보기 — 커스텀을 켜면 개별 지정할 수 있습니다.`}
-                    </span>
-                    {customMenu && (
-                      <span className="ml-auto flex gap-1.5">
-                        <button type="button" onClick={() => setF('menus', [...ASSIGNABLE_SLUGS])}
-                          className="rounded border border-gray-300 px-2 py-0.5 text-gray-600 dark:border-slate-600 dark:text-slate-300">
-                          전체 선택
-                        </button>
-                        <button type="button" onClick={() => setF('menus', [...roleDefaultMenus])}
-                          className="rounded border border-gray-300 px-2 py-0.5 text-gray-600 dark:border-slate-600 dark:text-slate-300">
-                          역할 기본값으로
-                        </button>
-                        <button type="button" onClick={() => setF('menus', [])}
-                          className="rounded border border-gray-300 px-2 py-0.5 text-gray-600 dark:border-slate-600 dark:text-slate-300">
-                          전체 해제
-                        </button>
-                      </span>
-                    )}
-                  </div>
-                  <MenuPermissionTree
-                    selected={form.menus ?? []}
-                    roleDefaults={roleDefaultMenus}
-                    enabled={customMenu}
-                    onChange={next => setF('menus', next)}
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* 탭2: 카테고리 권한 */}
-            {permTab === 'category' && (
-              <div className="p-4 space-y-4">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={customCategory}
-                    onChange={e => {
-                      setCustomCategory(e.target.checked)
-                      if (e.target.checked) {
-                        setAllowedCatsIn(IN_CAT_LABELS.map(c => c.code))
-                        setAllowedCatsOut(OUT_CAT_LABELS.map(c => c.code))
-                      }
-                    }}
-                    className="w-4 h-4 accent-blue-600" />
-                  <span className="text-xs text-gray-600 dark:text-slate-300">커스텀 설정 (미선택 시 모든 카테고리 허용)</span>
-                </label>
-                {customCategory && (
-                  <div className="space-y-3">
-                    <div>
-                      <p className="text-[11px] font-medium text-gray-500 dark:text-slate-400 mb-2">입금 항목</p>
-                      <div className="flex flex-wrap gap-2">
-                        {IN_CAT_LABELS.map(c => {
-                          const on = allowedCatsIn.includes(c.code)
-                          return (
-                            <label key={c.code}
-                              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border cursor-pointer text-xs transition-colors ${on ? 'border-green-400 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300' : 'border-gray-200 dark:border-slate-600 text-gray-500 dark:text-slate-300'}`}>
-                              <input type="checkbox" checked={on} onChange={() =>
-                                setAllowedCatsIn(prev => on ? prev.filter(x => x !== c.code) : [...prev, c.code])
-                              } className="sr-only" />
-                              {on ? '✓ ' : ''}{c.label}
-                            </label>
-                          )
-                        })}
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-[11px] font-medium text-gray-500 dark:text-slate-400 mb-2">출금 항목</p>
-                      <div className="flex flex-wrap gap-2">
-                        {OUT_CAT_LABELS.map(c => {
-                          const on = allowedCatsOut.includes(c.code)
-                          return (
-                            <label key={c.code}
-                              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border cursor-pointer text-xs transition-colors ${on ? 'border-red-400 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300' : 'border-gray-200 dark:border-slate-600 text-gray-500 dark:text-slate-300'}`}>
-                              <input type="checkbox" checked={on} onChange={() =>
-                                setAllowedCatsOut(prev => on ? prev.filter(x => x !== c.code) : [...prev, c.code])
-                              } className="sr-only" />
-                              {on ? '✓ ' : ''}{c.label}
-                            </label>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  </div>
+            <div className="space-y-2 p-4">
+              <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                <span className="text-gray-400">
+                  {customMenu
+                    ? '좌측 사이드바와 동일한 구조입니다. 체크한 메뉴만 이 사용자에게 노출됩니다.'
+                    : `역할 기본값(${form.role}) 미리보기 — 메뉴 커스텀을 켜면 개별 지정할 수 있습니다.`}
+                </span>
+                {customMenu && (
+                  <span className="ml-auto flex gap-1.5">
+                    <button type="button" onClick={() => setF('menus', [...ASSIGNABLE_SLUGS])}
+                      className="rounded border border-gray-300 px-2 py-0.5 text-gray-600 dark:border-slate-600 dark:text-slate-300">
+                      전체 선택
+                    </button>
+                    <button type="button" onClick={() => setF('menus', [...roleDefaultMenus])}
+                      className="rounded border border-gray-300 px-2 py-0.5 text-gray-600 dark:border-slate-600 dark:text-slate-300">
+                      역할 기본값으로
+                    </button>
+                    <button type="button" onClick={() => setF('menus', [])}
+                      className="rounded border border-gray-300 px-2 py-0.5 text-gray-600 dark:border-slate-600 dark:text-slate-300">
+                      전체 해제
+                    </button>
+                  </span>
                 )}
               </div>
-            )}
 
-            {/* 탭3: 작업 권한 매트릭스 */}
-            {permTab === 'action' && (
-              <div className="p-4 space-y-3">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={customAction}
-                    onChange={e => {
-                      setCustomAction(e.target.checked)
-                      if (e.target.checked) {
-                        setActionPerms((ACTION_DEFAULTS[form.role] ?? ACTION_DEFAULTS.editor) as Partial<Record<SectionKey, SectionPermission>>)
-                      }
-                    }}
-                    className="w-4 h-4 accent-blue-600" />
-                  <span className="text-xs text-gray-600 dark:text-slate-300">커스텀 설정 (미선택 시 역할 기본값 적용)</span>
-                </label>
-                {customAction && (() => {
-                  const groups = [...new Set(SECTIONS.map(s => s.group))]
-                  const toggleCell = (key: SectionKey, action: ActionKey) => {
-                    setActionPerms(prev => {
-                      const cur = prev[key] ?? (ACTION_DEFAULTS[form.role]?.[key] ?? { view: true, write: false, delete: false })
-                      return { ...prev, [key]: { ...cur, [action]: !cur[action] } }
-                    })
-                  }
-                  return (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-xs border-collapse">
-                        <thead>
-                          <tr className="border-b border-gray-200 dark:border-slate-600">
-                            <th className="text-left py-2 px-3 text-gray-500 dark:text-slate-400 font-medium w-32">섹션</th>
-                            {(['view','write','delete'] as ActionKey[]).map(a => (
-                              <th key={a} className="text-center py-2 px-2 text-gray-500 dark:text-slate-400 font-medium w-16">
-                                {a === 'view' ? '조회' : a === 'write' ? '입력·수정' : '삭제'}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {/* key 는 Fragment 에 — <> 축약형은 key 를 받지 못해 React 경고가 났었음 */}
-                          {groups.map(group => (
-                            <Fragment key={group}>
-                              <tr className="bg-gray-50 dark:bg-slate-700/40">
-                                <td colSpan={4} className="px-3 py-1.5 text-[11px] text-gray-400 dark:text-slate-500 font-medium">{group}</td>
-                              </tr>
-                              {SECTIONS.filter(s => s.group === group).map(s => {
-                                const perms = actionPerms[s.key] ?? ACTION_DEFAULTS[form.role]?.[s.key] ?? { view: true, write: false, delete: false }
-                                return (
-                                  <tr key={s.key} className="border-b border-gray-100 dark:border-slate-700 hover:bg-gray-50/50 dark:hover:bg-slate-700/20">
-                                    <td className="px-3 py-2 text-gray-700 dark:text-slate-200">{s.label}</td>
-                                    {(['view','write','delete'] as ActionKey[]).map(a => {
-                                      const disabled = s.disabled?.includes(a) ?? false
-                                      const checked = !disabled && perms[a]
-                                      return (
-                                        <td key={a} className="text-center py-2 px-2">
-                                          {disabled
-                                            ? <span className="inline-block w-4 h-4 rounded bg-gray-100 dark:bg-slate-600 border border-gray-200 dark:border-slate-500" title="해당 없음" />
-                                            : <input type="checkbox" checked={checked}
-                                                onChange={() => toggleCell(s.key, a)}
-                                                className="w-4 h-4 accent-blue-600 cursor-pointer" />
-                                          }
-                                        </td>
-                                      )
-                                    })}
-                                  </tr>
-                                )
-                              })}
-                            </Fragment>
-                          ))}
-                        </tbody>
-                      </table>
+              <MenuPermissionTree
+                selectedMenus={form.menus ?? []}
+                roleDefaultMenus={roleDefaultMenus}
+                menuEnabled={customMenu}
+                onMenuChange={next => setF('menus', next)}
+                actions={actionPerms}
+                roleDefaultActions={(ACTION_DEFAULTS[form.role] ?? {}) as Partial<Record<SectionKey, SectionPermission>>}
+                actionEnabled={customAction}
+                onActionChange={setActionPerms}
+                categorySlot={
+                  <div className="space-y-2 rounded-lg border border-gray-200 p-2.5 dark:border-slate-600">
+                    {!customCategory && (
+                      <p className="text-[10px] text-gray-400">
+                        카테고리 커스텀이 꺼져 있어 <strong>모든 항목이 허용</strong>됩니다. 제한하려면 상단에서 켜세요.
+                      </p>
+                    )}
+                    <div>
+                      <p className="mb-1 text-[10px] font-medium text-gray-500 dark:text-slate-400">입금 항목</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {IN_CAT_LABELS.map(c => {
+                          const on = !customCategory || allowedCatsIn.includes(c.code)
+                          return (
+                            <label key={c.code}
+                              className={`flex items-center gap-1 rounded border px-2 py-0.5 text-[11px] transition-colors
+                                ${customCategory ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}
+                                ${on ? 'border-green-400 bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-300'
+                                     : 'border-gray-200 text-gray-500 dark:border-slate-600 dark:text-slate-300'}`}>
+                              <input type="checkbox" checked={on} disabled={!customCategory}
+                                onChange={() => setAllowedCatsIn(prev => prev.includes(c.code) ? prev.filter(x => x !== c.code) : [...prev, c.code])}
+                                className="sr-only" />
+                              {on ? '✓ ' : ''}{c.label}
+                            </label>
+                          )
+                        })}
+                      </div>
                     </div>
-                  )
-                })()}
-              </div>
-            )}
+                    <div>
+                      <p className="mb-1 text-[10px] font-medium text-gray-500 dark:text-slate-400">출금 항목</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {OUT_CAT_LABELS.map(c => {
+                          const on = !customCategory || allowedCatsOut.includes(c.code)
+                          return (
+                            <label key={c.code}
+                              className={`flex items-center gap-1 rounded border px-2 py-0.5 text-[11px] transition-colors
+                                ${customCategory ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}
+                                ${on ? 'border-red-400 bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300'
+                                     : 'border-gray-200 text-gray-500 dark:border-slate-600 dark:text-slate-300'}`}>
+                              <input type="checkbox" checked={on} disabled={!customCategory}
+                                onChange={() => setAllowedCatsOut(prev => prev.includes(c.code) ? prev.filter(x => x !== c.code) : [...prev, c.code])}
+                                className="sr-only" />
+                              {on ? '✓ ' : ''}{c.label}
+                            </label>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                }
+              />
+            </div>
           </div>
 
           {error && <p className="text-sm text-red-500">{error}</p>}

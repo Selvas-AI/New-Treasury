@@ -23,7 +23,22 @@ export interface NavItem {
   icon: string
   /** hasMenu() 체크용 메뉴 슬러그 = treasury_users.menus 의 값 */
   slug: string
+  /**
+   * 이 화면의 작업 권한(조회/입력·수정/삭제) 섹션 키 = `action_permissions` 의 키.
+   * 없으면 조회 전용 화면이라 작업 권한 대상이 아니다(대시보드·환율 현황·리짐·감사로그).
+   *
+   * ⚠ menu slug 와 1:1 이 아니다 — `자금 변동 이력`(history)과 `이슈 이력`(issue_history)은
+   *   **menu slug 는 공유하지만 작업 권한은 따로**다. 그래서 권한 트리는 메뉴 체크는 slug
+   *   단위로 묶되, 작업 권한은 **항목 단위**로 그린다.
+   */
+  section?: SectionKey
+  /** 이 화면에서 추가로 갈라지는 작업 권한 (예: 자금일보 작성 화면의 상신·결재) */
+  extraSections?: { key: SectionKey; label: string }[]
+  /** 자금일보 입출금 카테고리 권한(allowed_categories)이 걸리는 화면 */
+  hasCategories?: boolean
 }
+
+import type { SectionKey } from '../types'
 
 export interface NavGroup {
   /** 섹션 헤더 (사이드바 collapsed 시 구분선으로만 표시) */
@@ -44,22 +59,24 @@ export const NAV_GROUPS: NavGroup[] = [
     section: 'DASHBOARD',
     items: [
       { to: '/dashboard', label: '통합 상황판', icon: '⊞', slug: 'dashboard' },
-      { to: '/policy',    label: '자금정책',    icon: '📋', slug: 'policy'    },
+      { to: '/policy',    label: '자금정책',    icon: '📋', slug: 'policy',    section: 'policy' },
     ],
   },
   {
     section: '자금입력',
     items: [
-      { to: '/input',   label: '운전자금',     icon: '✏️', slug: 'input'  },
-      { to: '/invest',  label: '운용자금',      icon: '📈', slug: 'invest' },
-      { to: '/equity',  label: '지분/장기투자', icon: '💹', slug: 'equity' },
-      { to: '/loans',   label: '차입금',        icon: '🏦', slug: 'loans'  },
+      { to: '/input',   label: '운전자금',     icon: '✏️', slug: 'input',  section: 'operating' },
+      { to: '/invest',  label: '운용자금',      icon: '📈', slug: 'invest', section: 'invest' },
+      { to: '/equity',  label: '지분/장기투자', icon: '💹', slug: 'equity', section: 'equity' },
+      { to: '/loans',   label: '차입금',        icon: '🏦', slug: 'loans',  section: 'loans' },
     ],
   },
   {
     section: '자금일보',
     items: [
-      { to: '/daily-report',      label: '자금일보 작성',     icon: '📄', slug: 'daily' },
+      { to: '/daily-report',      label: '자금일보 작성',     icon: '📄', slug: 'daily',
+        section: 'daily_write', hasCategories: true,
+        extraSections: [{ key: 'daily_submit', label: '상신·결재' }] },
       { to: '/daily-report-list', label: '일별 자금일보 목록', icon: '📅', slug: 'daily' },
     ],
   },
@@ -73,15 +90,15 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       // 기본 비공개 — 사용자 관리에서 별도 메뉴 권한을 받은 계정만 표시된다.
       { to: '/fx-regime', label: 'FX 리짐 전략', icon: '🧭', slug: 'fx-regime' },
-      { to: '/fx-ledger', label: '외화거래명세', icon: '📚', slug: 'fx-ledger' },
+      { to: '/fx-ledger', label: '외화거래명세', icon: '📚', slug: 'fx-ledger', section: 'fx_trade' },
       { to: '/fx',        label: '환율 현황',    icon: '💱', slug: 'fx'        },
     ],
   },
   {
     section: '이력관리',
     items: [
-      { to: '/history',       label: '자금 변동 이력', icon: '📂', slug: 'history'   },
-      { to: '/issue-history', label: '이슈 이력',      icon: '🔔', slug: 'history'   },
+      { to: '/history',       label: '자금 변동 이력', icon: '📂', slug: 'history',   section: 'history' },
+      { to: '/issue-history', label: '이슈 이력',      icon: '🔔', slug: 'history',   section: 'issue_history' },
       { to: '/audit-log',     label: '변경 이력 로그', icon: '🗒️', slug: 'audit-log' },
     ],
   },
