@@ -565,17 +565,24 @@ function AttentionDigest({ items }: { items: AttentionItem[] }) {
 
 // ── 전체 법인 정책 신호등 매트릭스 ────────────────────────────────────────
 function AllCompanySummary({
-  dataMap, paramsMap, companies, decisions, onNavigate,
+  dataMap, paramsMap, companies, digestCompanies, decisions, onNavigate,
 }: {
   dataMap: Record<Company, PolicyRealData>
   paramsMap: Record<Company, PolicyParamReader>
+  /** 적합성 매트릭스에 표시할 법인 — 전 법인 조망용 */
   companies: Company[]
+  /**
+   * "주의 필요" 알림에 표시할 법인 — **상단에서 선택한 법인만**(2026-08-21).
+   * 매트릭스는 전 법인을 한눈에 보는 게 목적이지만, 알림은 지금 보고 있는 법인의
+   * 조치 사항이어야 한다. 다른 법인 경고가 섞이면 내 일이 뭔지 흐려진다.
+   */
+  digestCompanies: Company[]
   decisions: PolicyDecision[]
   onNavigate: (company: Company, tab: PolicyTab) => void
 }) {
   const attentionItems = useMemo(
-    () => buildAttentionItems(companies, dataMap, paramsMap, decisions, onNavigate),
-    [companies, dataMap, paramsMap, decisions, onNavigate],
+    () => buildAttentionItems(digestCompanies, dataMap, paramsMap, decisions, onNavigate),
+    [digestCompanies, dataMap, paramsMap, decisions, onNavigate],
   )
 
   return (
@@ -1057,6 +1064,14 @@ export default function PolicyPage() {
   const paramsReadMap = usePolicyParamsReadMap(accessibleCompanies)
 
   // 선택된 단일 법인의 편집 가능한 파라미터 (set 필요 — FVPL Duration 등)
+  // 주의 필요 알림은 **선택 법인만** — 매트릭스(전 법인)와 목적이 다르다.
+  // 아직 법인이 정해지기 전(첫 렌더)에는 전 법인을 보여준다(빈 화면 방지).
+  const digestCompanies = useMemo(
+    () => (companyTab !== 'all' && hasCompany(companyTab as Company)
+      ? [companyTab as Company] : accessibleCompanies),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [companyTab, accessibleCompanies])
+
   const selectedCompany = companyTab !== 'all' ? companyTab : null
   const selectedParams  = usePolicyParams(selectedCompany)
   const selectedData    = companyTab !== 'all' ? (dataMap[companyTab] ?? null) : null
@@ -1265,6 +1280,7 @@ export default function PolicyPage() {
                 {/* 정책 현황 카드 */}
                 {companyTab === 'all' ? (
                   <AllCompanySummary dataMap={dataMap} paramsMap={paramsReadMap} companies={accessibleCompanies}
+                    digestCompanies={digestCompanies}
                     decisions={decisions.data} onNavigate={navigateToPolicy} />
                 ) : selectedData && selectedParams && (
                   <div className="grid grid-cols-2 gap-3">
@@ -1673,6 +1689,7 @@ export default function PolicyPage() {
              계정에서만 의미가 있으므로 canSeeAll 로 가린다. */}
       {canSeeAll && (
         <AllCompanySummary dataMap={dataMap} paramsMap={paramsReadMap} companies={accessibleCompanies}
+          digestCompanies={digestCompanies}
           decisions={decisions.data} onNavigate={navigateToPolicy} />
       )}
       {selectedData && selectedParams && (
