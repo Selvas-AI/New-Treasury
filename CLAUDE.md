@@ -1402,9 +1402,10 @@ baf8ef9 fix: 투자 집행 연동 저장 실패 수정 + 자산 구분(운용/�
 - **`docs/db/fx_ledger_reconcile_ignore.sql`** ⭐ — `fx_ledger_reconcile_ignored` 테이블(세션26차 6일차 후속, 개시일 이전 미반영 항목 "무시" 처리). **실행 필요**. 미실행 시 "무시" 버튼이 테이블 없음 오류를 반환(원장 반영/타임라인 표시 자체는 영향 없음).
 - **`docs/db/fx_fifo_account_priority.sql`** ⭐⭐ — FIFO 계좌유형 소진 우선순위 (세션26차 11일차).
   헬퍼 `fx_fifo_account_rank()` 신규 + `complete_fx_trade_fill`/`consume_fx_lots_for_source`
-  재정의(order by 한 줄만 변경). **실행 필요**. 미실행 시 정책 기준 탭에서 우선순위를 저장해도
-  서버는 계속 취득일 순으로 소진한다(= 현행 동작 유지, 오류는 없지만 설정이 무시됨).
-  ⚠ 원가흐름 가정 변경이라 **기본값(미설정)에서는 동작이 전혀 바뀌지 않는다** — 안전하게 적용 가능.
+  재정의(order by 한 줄만 변경). **실행 완료** (2026-08-20 사용자 확인).
+  ⚠ 원가흐름 가정 변경이지만 `fx_fifo_account_priority` 파라미터가 **미설정이면 기존과
+  동일하게 취득일 순으로 소진**한다 — 실제로 순서가 바뀌려면 자금정책 › FX 정책 ›
+  ② 정책 기준에서 법인별로 우선순위를 의결 저장해야 한다.
 - **`docs/db/fx_regime_snapshot_history.sql`** ⭐ — `fx_regime_snapshot_history` append-only 이력 테이블(세션26차 7일차, 조치 카드 일자별 조회). **실행 필요**. 미실행 시 이력 기록이 조용히 스킵되고(recordHistory insert 실패, 판정 자체엔 영향 없음) "조치 이력 조회" 카드가 항상 "기록된 이력이 없습니다"로 표시됨.
 
 ### ⚠️ 비밀번호 찾기/초기화 — 배포 전 필수 수동 작업 3건 (세션18차)
