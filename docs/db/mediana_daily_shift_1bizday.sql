@@ -18,9 +18,15 @@
 --      ⚠⚠ **`daily_reports` 를 자기 시퀀스로 밀면 안 된다.** 일보를 안 쓴 날이 비어 있어
 --      영업일을 점프한다(실측: 2026-06-05 → 06-09, 6/08 일보 없음). 양쪽 모두
 --      **daily 달력**으로 민다.
---   3. UNIQUE(company, date) 충돌을 피하려고 **2단계**로 옮긴다
+--   3. ⚠ **두 테이블의 날짜 컬럼 타입이 다르다.**
+--        `public.daily.date`                = **text** (YYYY-MM-DD)
+--        `public.daily_reports.report_date` = **date**
+--      비교·대입에 명시적 캐스팅이 필요하다. 캐스팅 없이 조인하면
+--      `operator does not exist: text = date` 오류가 난다.
+--
+--   4. UNIQUE(company, date) 충돌을 피하려고 **2단계**로 옮긴다
 --      (한 번에 밀면 이동 도중 중복이 생겨 실패한다).
---   4. `fx_lots.source_id` · `fx_ledger_reconcile_ignored.daily_id` 는 daily 의 **id**
+--   5. `fx_lots.source_id` · `fx_ledger_reconcile_ignored.daily_id` 는 daily 의 **id**
 --      를 참조한다 — id 는 바뀌지 않으므로 영향 없다.
 --
 -- 실행 절차
@@ -63,14 +69,16 @@ select 'daily_reports', count(*) from backup.daily_reports_20260820;
 -- ⚠ 영업일 달력은 **daily 하나**를 쓴다. daily_reports 는 일보를 안 쓴 날이 비어 있어
 --   자기 시퀀스로 밀면 영업일을 점프한다(실측: 2026-06-05 → 06-09).
 with bizcal as (
-  select date as d, lead(date) over (order by date) as next_d
+  -- ⚠ daily.date 는 text 라 date 로 캐스팅해 달력을 만든다
+  select date::date as d,
+         lead(date::date) over (order by date::date) as next_d
     from public.daily where company = '메디아나'
 )
-select 'daily' as tbl, d.date as old_date, c.next_d as new_date
-  from public.daily d join bizcal c on c.d = d.date
+select 'daily' as tbl, d.date::date as old_date, c.next_d as new_date
+  from public.daily d join bizcal c on c.d = d.date::date
  where d.company = '메디아나'
 union all
-select 'daily_reports', r.report_date, c.next_d
+select 'daily_reports', r.report_date, c.next_d      -- report_date 는 이미 date
   from public.daily_reports r left join bizcal c on c.d = r.report_date
  where r.company = '메디아나'
  order by 1, 2 desc;
@@ -82,7 +90,7 @@ select 'daily_reports', r.report_date, c.next_d
 select count(*) as reports_not_in_daily_calendar
   from public.daily_reports r
  where r.company = '메디아나'
-   and r.report_date not in (select date from public.daily where company = '메디아나');
+   and r.report_date not in (select date::date from public.daily where company = '메디아나');
 
 
 -- ── 2. 실행 ────────────────────────────────────────────────────────────────
@@ -98,7 +106,8 @@ begin;
 -- 2-0. 영업일 달력 — daily 의 날짜 시퀀스가 곧 영업일 목록이다.
 --      공휴일 테이블이 필요 없고 대체공휴일도 자동으로 맞는다.
 create temp table _bizcal on commit drop as
-  select date as d, lead(date) over (order by date) as next_d
+  select date::date as d,
+         lead(date::date) over (order by date::date) as next_d
     from public.daily
    where company = '메디아나';
 
@@ -108,9 +117,9 @@ update _bizcal set next_d = date '2026-08-20' where next_d is null;
 
 -- 2-1. daily
 create temp table _shift_daily on commit drop as
-  select d.id, d.date as old_date, c.next_d as new_date
+  select d.id, d.date::date as old_date, c.next_d as new_date
     from public.daily d
-    join _bizcal c on c.d = d.date
+    join _bizcal c on c.d = d.date::date
    where d.company = '메디아나';
 
 do $$
@@ -127,10 +136,13 @@ begin
 end $$;
 
 -- 1단계: 충돌 회피용 임시 이동 (UNIQUE(company,date) 위반 방지)
-update public.daily d set date = m.old_date + interval '10000 day'
+-- ⚠ date 컬럼이 text 라 to_char 로 문자열을 만들어 넣는다
+update public.daily d
+   set date = to_char(m.old_date + interval '10000 day', 'YYYY-MM-DD')
   from _shift_daily m where d.id = m.id;
 -- 2단계: 목표 날짜로 확정
-update public.daily d set date = m.new_date
+update public.daily d
+   set date = to_char(m.new_date, 'YYYY-MM-DD')
   from _shift_daily m where d.id = m.id;
 
 -- 2-2. daily_reports — **daily 달력**으로 민다(자기 시퀀스로 밀면 안 된다).
@@ -176,21 +188,24 @@ select b.date as old_date, b.fx_usd as old_usd,
        d.date as new_date, d.fx_usd as new_usd
   from backup.daily_20260820 b
   join public.daily d on d.id = b.id
- order by b.date desc
+ order by b.date::date desc
  limit 10;
 
 -- 3-3. 미래 날짜로 잘못 밀린 행이 없는가 (10000일 임시 오프셋 잔존 확인)
 select count(*) from public.daily
- where company = '메디아나' and date > current_date + 10;
+ where company = '메디아나' and date::date > current_date + 10;
+select count(*) from public.daily_reports
+ where company = '메디아나' and report_date > current_date + 10;
 
 -- 3-4. 다른 법인은 건드리지 않았는가
-select company, max(date) from public.daily group by company order by company;
+select company, max(date::date) as max_date from public.daily group by company order by company;
 
 
 -- ── 4. 롤백 (문제 발생 시에만) ─────────────────────────────────────────────
 -- ⚠ 백업 테이블이 있어야 한다. 실행 전 반드시 §3 으로 상태를 확인할 것.
 -- begin;
--- update public.daily d set date = b.date + interval '10000 day'
+-- update public.daily d
+--    set date = to_char(b.date::date + interval '10000 day', 'YYYY-MM-DD')
 --   from backup.daily_20260820 b where d.id = b.id;
 -- update public.daily d set date = b.date
 --   from backup.daily_20260820 b where d.id = b.id;
