@@ -1400,6 +1400,13 @@ baf8ef9 fix: 투자 집행 연동 저장 실패 수정 + 자산 구분(운용/�
 - **`docs/db/fx_trade_fill_reverse_rpc.sql`** ⭐ — RPC `reverse_fx_trade_fill` (세션26차 4일차, 개별 체결 1건만 취소). **실행 완료** (2026-08-19 사용자 확인, 브라우저 실화면에서 "이 체결만 취소" 버튼 정상 노출까지 스크린샷 확인).
 - **`docs/db/fx_lots_daily_report_source.sql`** ⭐ — `fx_lots_insert_authenticated` 정책에 `'daily_report_item'` 추가 + 신규 RPC `consume_fx_lots_for_source` (세션26차 6일차, 자금일보 ↔ 외화 원장 자동 반영). **실행 필요**. 미실행 시 원장 ①탭 "자금일보 미반영 증감" 패널의 "원장 반영" 버튼이 유입은 RLS 거부, 유출은 함수 없음 오류를 반환.
 - **`docs/db/fx_ledger_reconcile_ignore.sql`** ⭐ — `fx_ledger_reconcile_ignored` 테이블(세션26차 6일차 후속, 개시일 이전 미반영 항목 "무시" 처리). **실행 필요**. 미실행 시 "무시" 버튼이 테이블 없음 오류를 반환(원장 반영/타임라인 표시 자체는 영향 없음).
+- **`docs/db/fx_txn_type.sql`** ⭐⭐ — 거래 유형(`txn_type`) 도입 (세션26차 12일차 Phase 3).
+  **실행 필요 — 다음 세션 최우선.** 미실행 시 수동 유출 등록·자금일보 반영이 `p_txn_type` 을
+  넘기는데 서버는 8인자 버전이라 **시그니처 불일치로 실패**한다(다른 기능은 영향 없음).
+  ⚠ `fx_lot_transfer.sql` 적용 후에 실행할 것(transfer_fx_lots 를 재정의한다).
+- **`docs/db/fx_lot_transfer.sql`** ⭐⭐ — 계좌 간 대체 (세션26차 12일차). `fx_lot_transfers` 테이블 +
+  `transfer_fx_lots`/`reverse_fx_lot_transfer` RPC + `fx_lots.transfer_id`/`investment_id` 컬럼 +
+  `source_type` CHECK 확장. **실행 완료** (2026-08-20 사용자 확인).
 - **`docs/db/fx_fifo_account_priority.sql`** ⭐⭐ — FIFO 계좌유형 소진 우선순위 (세션26차 11일차).
   헬퍼 `fx_fifo_account_rank()` 신규 + `complete_fx_trade_fill`/`consume_fx_lots_for_source`
   재정의(order by 한 줄만 변경). **실행 완료** (2026-08-20 사용자 확인).
@@ -2854,6 +2861,82 @@ DecisionTab은 이제 분석(손익현황·손익분기·분할실현계획)만 
 
 검증: tsc -b 0 errors · eslint 0 errors(전체 src). DB 마이그레이션 불필요(전부 클라이언트).
 실화면 검증(발의 → 목록 노출 → 승인 → 체결 → 원장 잔액 → 대시보드 경보)은 사용자 확인 예정.
+
+---
+
+### 2026-08-20 세션26차 12일차 — 외화 원장 계좌 간 대체 (Phase 1) ⭐
+
+설계: `docs/기획/외화원장_계좌간거래_설계.md`
+
+#### 배경 — 원장이 "외부 유입/유출"만 알고 있었다
+```
+외화가 나가는 케이스가 "원화로 매각" 하나만 구현돼 있었다. 실제로는
+매입대금 결제 / 보통예금↔MMDA 계좌대체 / 정기예금 예치·해지·재예치 / 이자 수취가
+있는데, 그중 **총액이 변하지 않는 내부 이동**은 표현할 방법이 아예 없었다
+(source_type CHECK 에 transfer 없음). 로트를 `수정`해 계좌유형만 바꾸면
+일부 금액만 옮길 수 없고 이력도 안 남아 과거 사실이 왜곡된다.
+
+실측으로 확인된 단절: investments 의 외화 정기예금 3건과 원장의 term_deposit 로트가
+금액·만기는 일치하지만 **서로 참조하는 컬럼이 없다.** 그중 2026-03-17 건은 이미
+해지(active=false)됐는데 원장엔 흔적이 없다 — 두 장부가 우연히 맞아 보일 뿐이었다.
+```
+
+#### ⭐ 대체 = 원자적 [FIFO 소진 + 신규 로트 생성] 쌍
+`docs/db/fx_lot_transfer.sql` ⭐⭐ (**실행 필요**) — `fx_lot_transfers` 테이블 +
+`transfer_fx_lots` / `reverse_fx_lot_transfer` RPC. `source_type` CHECK 에
+`transfer`/`interest`/`investment` 추가.
+
+금지: 계좌 대체를 **유출 등록 + 유입 등록 두 번으로 처리하지 말 것** — 잔액이 잠깐
+어긋나고 실현손익이 두 번 잡힌다. 반드시 서버 단일 트랜잭션(RPC)을 쓴다.
+
+⚠ `fx_lots` 의 `unique (company,currency,source_type,source_id)` 때문에 원가승계로
+여러 로트를 만들 때 `source_id` 에 대체 id 를 넣으면 충돌한다 → 링크는 **별도 컬럼
+`transfer_id`** 로 두고 `source_id` 는 NULL(Postgres 는 unique 에서 NULL 을 서로 다르게 봄).
+
+#### 평가 방식은 법인별 정책 (사용자 결정 2026-08-20 — "회사마다 다를 것 같다")
+`policy_params.fx_transfer_valuation` (`carryover` 기본 | `revalue`).
+자금정책 › FX 정책 › ② 정책 기준의 `외화 원장 회계정책` 카드에서 편집(FIFO 우선순위와 같은 카드).
+
+| | carryover (기본) | revalue |
+|---|---|---|
+| 신규 로트 | 소진 로트마다 **1:1** | **1건** (환율이 하나로 통일) |
+| 장부환율·취득일 | 원본 승계 → FIFO 순서 보존 | 대체환율 / 대체일 |
+| 실현손익 | **0** | (대체환율 − 장부환율) × 금액 |
+
+⚠ 각 대체 건에 **그때 적용한 방식을 기록**한다(`fx_lot_transfers.valuation_method`) —
+정책이 나중에 바뀌어도 과거 이력의 해석이 흔들리면 안 된다.
+
+#### UI
+외화거래명세 › 데이터 등록 탭에 `🔄 계좌 간 대체` 카드(`FxTransferCard`).
+대체일·출금/입금 계좌유형·금액·만기·연이율·(재평가면)대체환율·중도해지 허용.
+저장 전 **원가승계 미리보기**(어느 로트가 어떤 장부환율로 넘어가는지 + 예상 손익)를 보여준다.
+정기예금 중도해지는 실무에 존재하므로 체크박스로 명시 허용(기본은 만기 도래분만).
+
+#### Phase 3 — 거래 유형(txn_type) 도입
+`docs/db/fx_txn_type.sql` ⭐⭐ (**실행 필요**) — `source_type`(어디서 만들었나)과
+`txn_type`(무슨 거래인가)을 분리. 매입대금 결제가 매각과 똑같이 기록돼 **환차손익 요약의
+매각 실적이 부풀려지던** 문제를 해소한다.
+- 유출 `sale`(환전)/`payment`(대외 지급)/`transfer` · 유입 `opening`/`acquisition`/`interest`/`transfer`
+- backfill: `fx_trade_history`→sale, `transfer`→transfer, 나머지 유출→payment
+- ⚠ `consume_fx_lots_for_source` 에 인자를 추가하면 `create or replace` 가 아니라 **새 오버로드**가
+  생긴다 → 구 8인자 버전을 **drop 후 재생성**한다(SQL 안에 포함). 미실행 상태에서 클라이언트가
+  `p_txn_type` 을 넘기면 시그니처 불일치로 실패하므로 **실행 전에는 유출 등록을 쓰지 말 것.**
+- SSOT `src/lib/fxTxnType.ts`(`summarizeRealizedPnl` 포함) · 유출 등록 폼 유형 선택 ·
+  환차손익 요약 유형별 3줄 · 원장 처분 내역 유형 배지
+
+#### 원장 정렬·필터
+7개 컬럼 헤더 클릭 정렬(↕/▲/▼) + 상태 필터(잔존/소진 중/소진 완료) + 잔액 하한 + 건수 표시.
+
+#### 남은 것 (Phase 2 — 설계 문서 §3)
+정기예금 ↔ `investments` 반자동 연동(예치·해지·재예치·이자) + 정합성 점검 패널.
+`fx_lots.investment_id` 컬럼은 `fx_lot_transfer.sql` 에 미리 넣어뒀다.
+착수 전 사용자 확인 필요 항목은 설계 문서 §4 B·C·D 참조.
+
+> **인수인계**: `docs/기획/인수인계_세션26_11-12일차.md` — 다음 세션(다른 LLM 포함)은 이것부터 읽을 것.
+
+검증: tsc -b 0 errors · eslint 0 errors · vitest 253/253.
+⚠ `npx vitest run`(전체)은 `.claude/worktrees/agent-*` 의 스테일 사본에서 날짜 의존 테스트가
+깨진다 — 실제 소스와 무관하다. 검증은 `npx vitest run src/lib` 로 범위를 지정할 것.
 
 ---
 

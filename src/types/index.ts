@@ -163,6 +163,8 @@ export interface FxLotConsumption {
    */
   source_type?: string | null
   source_id?: string | null
+  /** 거래 유형 — sale(환전) / payment(대외 지급) / transfer(계좌 대체). null=레거시(=payment) */
+  txn_type?: string | null
 }
 
 // ─── 차입금 (loans) ──────────────────────────────────────

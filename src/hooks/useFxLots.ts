@@ -245,6 +245,8 @@ export function useFxLots(company: string, currency: string) {
       p_company: company, p_currency: currency, p_source_type: 'daily_report_item',
       p_source_id: input.dailyId, p_amount: input.amount, p_disposal_rate: input.rate,
       p_disposed_date: input.date, p_disposed_by: input.userCode,
+      // 자금일보 잔액 감소는 지급·이체가 섞여 있어 매각으로 단정할 수 없다 → 대외 지급으로 본다.
+      p_txn_type: 'payment',
     })
     if (!err) await refetch()
     return err?.message ?? null
@@ -259,25 +261,71 @@ export function useFxLots(company: string, currency: string) {
    */
   const addManualOutflow = useCallback(async (input: {
     date: string; amount: number; rate: number; memo: string; userCode: string
+    /** 'sale'(환전) | 'payment'(대외 지급). 미지정 시 대외 지급 — 매각 실적에 섞이지 않게 */
+    txnType?: 'sale' | 'payment'
   }) => {
     const sourceId = crypto.randomUUID()
     const { error: err } = await restRpc('consume_fx_lots_for_source', {
       p_company: company, p_currency: currency, p_source_type: 'manual',
       p_source_id: sourceId, p_amount: input.amount, p_disposal_rate: input.rate,
       p_disposed_date: input.date, p_disposed_by: input.userCode,
+      p_txn_type: input.txnType ?? 'payment',
     })
     if (!err) await refetch()
     return err?.message ?? null
   }, [company, currency, refetch])
 
+  /**
+   * 계좌 간 대체 (세션26차 12일차, docs/db/fx_lot_transfer.sql).
+   *
+   * 총 외화 잔액이 변하지 않는 **내부 이동**이다 — 출금 계좌유형에서 FIFO 로 소진하고
+   * 입금 계좌유형에 신규 로트를 만드는 것을 서버가 한 트랜잭션으로 처리한다.
+   * 평가 방식(원가승계/재평가)은 법인 정책(policy_params.fx_transfer_valuation)이 정하며
+   * 각 대체 건에 그때 쓴 방식이 기록된다.
+   */
+  const transferLots = useCallback(async (input: {
+    date: string
+    fromAccountType: FxLot['accountType']
+    toAccountType: FxLot['accountType']
+    amount: number
+    maturityDate: string | null
+    annualInterestRate: number
+    /** 재평가 방식일 때만 사용 */
+    transferRate: number | null
+    allowEarly: boolean
+    memo: string
+    userCode: string
+  }) => {
+    const { error: err } = await restRpc('transfer_fx_lots', {
+      p_company: company, p_currency: currency, p_transfer_date: input.date,
+      p_from_account_type: input.fromAccountType, p_to_account_type: input.toAccountType,
+      p_amount: input.amount, p_maturity_date: input.maturityDate,
+      p_annual_interest_rate: input.annualInterestRate,
+      p_transfer_rate: input.transferRate, p_allow_early: input.allowEarly,
+      p_investment_id: null, p_memo: input.memo, p_by: input.userCode,
+    })
+    if (!err) await refetch()
+    return err?.message ?? null
+  }, [company, currency, refetch])
+
+  const reverseTransfer = useCallback(async (transferId: string, userCode: string) => {
+    const { error: err } = await restRpc('reverse_fx_lot_transfer', {
+      p_transfer_id: transferId, p_reversed_by: userCode,
+    })
+    if (!err) await refetch()
+    return err?.message ?? null
+  }, [refetch])
+
   const today = new Date().toISOString().slice(0, 10)
   return useMemo(() => ({ lots, loading, error, refetch, addOpeningLot,
     importOpeningLots, updateLot, deleteLot, planLotRepair, applyLotRepair,
     reconcileDailyInflow, reconcileDailyOutflow, addManualOutflow,
+    transferLots, reverseTransfer,
     totalAmount: remainingAmount(lots),
     availableAmount: availableAmount(lots, today), lockedAmount: remainingAmount(lots)-availableAmount(lots, today),
     expectedInterestFx: lots.reduce((sum, lot) => sum + expectedTermInterestFx(lot), 0),
     bookRate: weightedBookRate(lots) }),
   [lots, loading, error, refetch, addOpeningLot, importOpeningLots, updateLot, deleteLot,
-   planLotRepair, applyLotRepair, reconcileDailyInflow, reconcileDailyOutflow, addManualOutflow, today])
+   planLotRepair, applyLotRepair, reconcileDailyInflow, reconcileDailyOutflow, addManualOutflow,
+   transferLots, reverseTransfer, today])
 }

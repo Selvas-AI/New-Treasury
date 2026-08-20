@@ -5,7 +5,9 @@ import { usePageCompany } from '../hooks/usePageCompany'
 import { useFxLots } from '../hooks/useFxLots'
 import { useFx } from '../hooks/useFx'
 import { useFxTradeHistory } from '../hooks/useFxTradeHistory'
+import { usePolicyParams } from '../hooks/usePolicyParams'
 import { fmtKRW } from '../lib/format'
+import { summarizeRealizedPnl } from '../lib/fxTxnType'
 import type { FxCode, FxTradeFill, FxLotConsumption } from '../types'
 import { FxLedgerTab } from '../components/fx/FxLedgerTab'
 import { FxOrdersTab } from '../components/fx/FxOrdersTab'
@@ -50,6 +52,10 @@ export default function FxLedgerPage() {
 
   const ledger = useFxLots(company, currency)
   const fx = useFx()
+  // 계좌 대체 평가 방식 — 법인 정책. 미설정이면 원가승계(실현손익 0).
+  const policyParams = usePolicyParams(company)
+  const valuationMethod: 'carryover' | 'revalue' =
+    policyParams.getText('fx_transfer_valuation') === 'revalue' ? 'revalue' : 'carryover'
   // A패턴: 법인 단위 전체 통화 자동 로드 — 이행 대기 배너(원장 탭)·환차손익 요약(전체 실적
   // 포함)·과거 매각 CSV 이관 관리(로트 설정 탭)가 공유한다.
   const trades = useFxTradeHistory(company)
@@ -91,6 +97,8 @@ export default function FxLedgerPage() {
   // 환차손익 요약 — 법인 전체 통화가 섞이던 기존 버그 수정, 선택된 통화만 집계
   const completedForPnl = trades.data.filter(r => r.currency === currency && (r.status === '완료' || r.status === '부분체결'))
   const pnlValues = completedForPnl.map(r => r.completed_pnl ?? r.fx_pnl ?? 0)
+  // 거래 유형별 실현손익 — FIFO 소진 내역 기준(개시 이후). 위 카드(거래 이력 기준)와 축이 다르다.
+  const txnPnl = summarizeRealizedPnl(Object.values(fillsData.consumptionsByLotId).flat())
   const pnlSummary = {
     gain: pnlValues.filter(v => v > 0).reduce((a, b) => a + b, 0),
     loss: pnlValues.filter(v => v < 0).reduce((a, b) => a + b, 0),
@@ -150,7 +158,8 @@ export default function FxLedgerPage() {
     )}
     {activeTab === 'lots' && (
       <FxLotAdminTab
-        ledger={ledger} trades={trades} company={company} userCode={user?.code ?? 'unknown'}
+        ledger={ledger} trades={trades} company={company} currency={currency}
+        valuationMethod={valuationMethod} userCode={user?.code ?? 'unknown'}
         canEdit={canEdit()} canDelete={canDelete()} onChanged={refreshAll}
       />
     )}
@@ -161,6 +170,29 @@ export default function FxLedgerPage() {
           <Stat label="누적 실현손실" value={fmtKRW(pnlSummary.loss)} />
           <Stat label="순 실현손익" value={fmtKRW(pnlSummary.net)} />
           <Stat label={`${currency} 미실현손익`} value={ledger.bookRate && marketRate ? fmtKRW(ledger.totalAmount * (marketRate - ledger.bookRate)) : '—'} />
+        </div>
+        {/* 거래 유형별 분리 (세션26차 Phase 3) — 매각과 대외 지급을 합치면 매각 실적이 부풀려진다.
+            위 카드는 매각 지시(fx_trade_history) 기준이라 개시 이전 CSV 실적까지 포함하고,
+            아래 표는 FIFO 소진 내역(fx_lot_consumptions) 기준이라 개시 이후만 잡힌다 — 축이 다르다. */}
+        <div className={CARD}>
+          <div className="text-sm font-semibold">거래 유형별 실현손익 <span className="text-xs font-normal text-gray-400">· FIFO 소진 내역 기준(개시 이후)</span></div>
+          <table className="mt-2 w-full max-w-md text-xs tabular-nums">
+            <tbody className="text-gray-700 dark:text-slate-300">
+              {([
+                ['매각(환전)', txnPnl.sale, '환차손익 정본 — 원화로 환전한 실적'],
+                ['대외 지급',   txnPnl.payment, '매입대금·수수료 등 — 매각 실적이 아님'],
+                ['계좌 대체',   txnPnl.transfer, '원가승계면 0, 재평가 정책일 때만 발생'],
+              ] as const).map(([label, v, hint]) => (
+                <tr key={label} className="border-b border-gray-100 dark:border-slate-800">
+                  <td className="py-1.5 font-medium whitespace-nowrap">{label}</td>
+                  <td className={`py-1.5 text-right ${v >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>
+                    {v === 0 ? '—' : `${v >= 0 ? '▲' : '▼'} ${fmtKRW(Math.abs(v))}`}
+                  </td>
+                  <td className="py-1.5 pl-3 text-[11px] text-gray-400">{hint}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
         <div className={CARD}>
           <div className="text-sm font-semibold">읽는 법</div>

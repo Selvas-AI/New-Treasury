@@ -2,6 +2,7 @@ import { Fragment, useMemo, useState } from 'react'
 import { useAuth } from '../../hooks/useAuth'
 import { fmtKRW, fmtNumber } from '../../lib/format'
 import { ACCOUNT_TYPE_LABEL, type FxAccountType, type FxLot } from '../../lib/fxLots'
+import { outflowTxnLabel } from '../../lib/fxTxnType'
 import { useFxLedgerReconciliation } from '../../hooks/useFxLedgerReconciliation'
 import type { FxTradeFill, FxLotConsumption, FxTradeRecord, Company, FxCode } from '../../types'
 
@@ -12,10 +13,24 @@ const ACCOUNT_TYPE_OPTIONS: { value: FxAccountType; label: string }[] = [
   { value: 'term_deposit',   label: ACCOUNT_TYPE_LABEL.term_deposit },
 ]
 
+type SortKey = 'acquiredDate' | 'state' | 'account' | 'original' | 'disposed' | 'remaining' | 'acqRate'
+type LotState = 'open' | 'partial' | 'done'
+
+const STATE_LABEL: Record<LotState, string> = { open: '잔존', partial: '소진 중', done: '소진 완료' }
+const STATE_ORDER: Record<LotState, number> = { open: 0, partial: 1, done: 2 }
+
+function lotState(lot: FxLot): LotState {
+  if (lot.remainingAmount <= 0.000001) return 'done'
+  return lot.originalAmount - lot.remainingAmount > 0.000001 ? 'partial' : 'open'
+}
+
 const SOURCE_LABEL: Record<string, string> = {
   fx_trade_history:   '매각 체결',
   daily_report_item:  '자금일보 반영',
   manual:             '수동 유출',
+  transfer:           '계좌 대체',
+  interest:           '이자 수취',
+  investment:         '운용자금 연동',
 }
 
 /**
@@ -71,10 +86,36 @@ export function FxLedgerTab({
   /** 체결일 등 부가 표시용 — 소진 내역의 fill_id 로 조회한다 */
   const fillById = useMemo(() => new Map(fills.map(f => [f.id, f])), [fills])
 
-  const rows = useMemo(() => [...lots]
-    .filter(lot => accountFilter === 'all' || lot.accountType === accountFilter)
-    .sort((a, b) => b.acquiredDate.localeCompare(a.acquiredDate) || b.id.localeCompare(a.id)),
-    [lots, accountFilter])
+  // 정렬·필터 — 로트가 수십 건 쌓이면 눈으로 훑기 어려워진다.
+  const [sortKey, setSortKey] = useState<SortKey>('acquiredDate')
+  const [sortAsc, setSortAsc] = useState(false)
+  const [stateFilter, setStateFilter] = useState<'all' | LotState>('all')
+  const [minAmount, setMinAmount] = useState('')   // 잔액 기준 하한
+
+  function toggleSort(k: SortKey) {
+    if (k === sortKey) setSortAsc(v => !v)
+    else { setSortKey(k); setSortAsc(k === 'acquiredDate' ? false : true) }
+  }
+
+  const rows = useMemo(() => {
+    const min = Number(minAmount) || 0
+    const filtered = lots.filter(lot =>
+      (accountFilter === 'all' || lot.accountType === accountFilter)
+      && (stateFilter === 'all' || lotState(lot) === stateFilter)
+      && lot.remainingAmount >= min)
+    const dir = sortAsc ? 1 : -1
+    return filtered.sort((a, b) => {
+      const cmp =
+        sortKey === 'acquiredDate' ? a.acquiredDate.localeCompare(b.acquiredDate)
+        : sortKey === 'state'      ? STATE_ORDER[lotState(a)] - STATE_ORDER[lotState(b)]
+        : sortKey === 'account'    ? a.accountType.localeCompare(b.accountType)
+        : sortKey === 'original'   ? a.originalAmount - b.originalAmount
+        : sortKey === 'disposed'   ? (a.originalAmount - a.remainingAmount) - (b.originalAmount - b.remainingAmount)
+        : sortKey === 'remaining'  ? a.remainingAmount - b.remainingAmount
+        : a.acqRate - b.acqRate
+      return (cmp || a.id.localeCompare(b.id)) * dir
+    })
+  }, [lots, accountFilter, stateFilter, minAmount, sortKey, sortAsc])
 
 
 
@@ -167,23 +208,55 @@ export function FxLedgerTab({
               ))}
             </div>
           </div>
+          {/* 상태·잔액 필터 (계좌유형은 위 탭) */}
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px]">
+            <span className="text-gray-400">상태</span>
+            {(['all', 'open', 'partial', 'done'] as const).map(s => (
+              <button key={s} onClick={() => setStateFilter(s)}
+                className={`rounded px-2 py-0.5 font-medium ${stateFilter === s
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-600 dark:bg-slate-800 dark:text-slate-300'}`}>
+                {s === 'all' ? '전체' : STATE_LABEL[s]}
+              </button>
+            ))}
+            <label className="ml-2 flex items-center gap-1 text-gray-400">
+              잔액 ≥
+              <input type="number" min={0} value={minAmount} onChange={e => setMinAmount(e.target.value)}
+                placeholder="0"
+                className="w-24 rounded border border-gray-300 px-1.5 py-0.5 text-right tabular-nums dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" />
+            </label>
+            <span className="ml-auto text-gray-400">{rows.length} / {lots.length}건</span>
+          </div>
           {loading ? (
             <div className="text-xs text-gray-500">조회 중…</div>
           ) : rows.length === 0 ? (
-            <div className="text-xs text-gray-500">등록된 재고가 없습니다.</div>
+            <div className="text-xs text-gray-500">조건에 맞는 재고가 없습니다.</div>
           ) : (
             <div className="overflow-auto" style={{ maxHeight: '26rem' }}>
               <table className="w-full min-w-[760px] text-xs">
                 <thead className="sticky top-0 bg-white dark:bg-slate-900">
                   <tr className="border-b text-left text-gray-500 dark:border-slate-700 dark:text-slate-400">
                     <th className="py-2 w-6"></th>
-                    <th className="py-2 whitespace-nowrap">유입일</th>
-                    <th className="whitespace-nowrap">상태</th>
-                    <th className="whitespace-nowrap">계좌</th>
-                    <th className="text-right whitespace-nowrap">최초유입</th>
-                    <th className="text-right whitespace-nowrap">처분금액</th>
-                    <th className="text-right whitespace-nowrap">잔액</th>
-                    <th className="text-right whitespace-nowrap">장부환율</th>
+                    {([
+                      ['acquiredDate', '유입일',   'left'],
+                      ['state',        '상태',     'left'],
+                      ['account',      '계좌',     'left'],
+                      ['original',     '최초유입', 'right'],
+                      ['disposed',     '처분금액', 'right'],
+                      ['remaining',    '잔액',     'right'],
+                      ['acqRate',      '장부환율', 'right'],
+                    ] as [SortKey, string, 'left' | 'right'][]).map(([k, label, align]) => (
+                      <th key={k} className={`whitespace-nowrap py-2 ${align === 'right' ? 'text-right' : 'text-left'}`}>
+                        <button onClick={() => toggleSort(k)}
+                          className="inline-flex items-center gap-0.5 hover:text-gray-800 dark:hover:text-slate-100"
+                          title="클릭해 정렬">
+                          {label}
+                          <span className={sortKey === k ? 'text-blue-600 dark:text-blue-400' : 'text-gray-300 dark:text-slate-600'}>
+                            {sortKey === k ? (sortAsc ? '▲' : '▼') : '↕'}
+                          </span>
+                        </button>
+                      </th>
+                    ))}
                     <th className="text-right whitespace-nowrap">관리</th>
                   </tr>
                 </thead>
@@ -191,8 +264,7 @@ export function FxLedgerTab({
                   {rows.map(lot => {
                     const cons = consumptionsByLotId[lot.id] ?? []
                     const disposed = lot.originalAmount - lot.remainingAmount
-                    const state = lot.remainingAmount <= 0.000001 ? 'done'
-                      : disposed > 0.000001 ? 'partial' : 'open'
+                    const state = lotState(lot)
                     const expanded = expandedLotId === lot.id
                     return (
                       <Fragment key={lot.id}>
@@ -213,7 +285,7 @@ export function FxLedgerTab({
                                 : state === 'partial'
                                   ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
                                   : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300'}`}>
-                              {state === 'done' ? '소진 완료' : state === 'partial' ? '소진 중' : '잔존'}
+                              {STATE_LABEL[state]}
                             </span>
                           </td>
                           <td className="whitespace-nowrap">
@@ -260,6 +332,9 @@ export function FxLedgerTab({
                                     <tr key={c.id}>
                                       <td className="py-0.5 whitespace-nowrap">{c.disposed_date}</td>
                                       <td className="whitespace-nowrap">
+                                        <span className="mr-1 rounded bg-gray-100 px-1 py-0.5 text-[10px] text-gray-600 dark:bg-slate-700 dark:text-slate-300">
+                                          {outflowTxnLabel(c.txn_type)}
+                                        </span>
                                         {SOURCE_LABEL[c.source_type ?? ''] ?? '기타'}
                                         {c.fill_id && fillById.get(c.fill_id)?.completed_by && (
                                           <span className="ml-1 text-gray-400">· {fillById.get(c.fill_id)?.completed_by}</span>

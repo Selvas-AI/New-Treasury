@@ -1,9 +1,11 @@
 import { useRef, useState } from 'react'
 import { INVENTORY_CSV_TEMPLATE, SALES_CSV_TEMPLATE, parseInventoryCsv, parseSalesCsv, type InventoryCsvRow, type SalesCsvRow } from '../../lib/fxCsvImport'
-import { ACCOUNT_TYPE_LABEL, type FxAccountType } from '../../lib/fxLots'
+import { ACCOUNT_TYPE_LABEL, type FxAccountType, type FxLot } from '../../lib/fxLots'
 import type { LotRepairPlanItem } from '../../hooks/useFxLots'
 import { fmtKRW } from '../../lib/format'
-import type { Company, FxTradeRecord } from '../../types'
+import FxTransferCard from './FxTransferCard'
+import { OUTFLOW_TXN_LABEL, SELECTABLE_OUTFLOW_TXN } from '../../lib/fxTxnType'
+import type { Company, FxCode, FxTradeRecord } from '../../types'
 
 const CARD = 'rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900'
 const ACCOUNT_TYPE_OPTIONS: { value: FxAccountType; label: string }[] = [
@@ -17,7 +19,13 @@ interface LedgerAdminApi {
   planLotRepair: (rows?: InventoryCsvRow[]) => Promise<{ plan: LotRepairPlanItem[]; unmatched: number; missingRate: number; error: string | null }>
   applyLotRepair: (plan: LotRepairPlanItem[]) => Promise<{ updated: number; failures: string[] }>
   addOpeningLot: (input: { date: string; amount: number; acqRate: number; accountType: FxAccountType; annualInterestRate: number; maturityDate: string | null; memo: string; userCode: string }) => Promise<string | null>
-  addManualOutflow: (input: { date: string; amount: number; rate: number; memo: string; userCode: string }) => Promise<string | null>
+  addManualOutflow: (input: { date: string; amount: number; rate: number; memo: string; userCode: string; txnType?: 'sale' | 'payment' }) => Promise<string | null>
+  lots: FxLot[]
+  transferLots: (input: {
+    date: string; fromAccountType: FxAccountType; toAccountType: FxAccountType
+    amount: number; maturityDate: string | null; annualInterestRate: number
+    transferRate: number | null; allowEarly: boolean; memo: string; userCode: string
+  }) => Promise<string | null>
 }
 
 interface TradeAdminApi {
@@ -34,10 +42,13 @@ interface TradeAdminApi {
  * 이 탭의 항목들은 매일 쓰는 화면이 아니라 원장을 처음 세팅하거나 데이터를 바로잡을 때만
  * 쓰는 관리 도구라 ① 원장 탭에서 분리했다(세션26차 4일차 통폐합).
  */
-export function FxLotAdminTab({ ledger, trades, company, userCode, canEdit, canDelete, onChanged }: {
+export function FxLotAdminTab({ ledger, trades, company, currency, valuationMethod, userCode, canEdit, canDelete, onChanged }: {
   ledger: LedgerAdminApi
   trades: TradeAdminApi
   company: Company
+  currency: FxCode
+  /** 계좌 대체 평가 방식 (법인 정책) */
+  valuationMethod: 'carryover' | 'revalue'
   userCode: string
   canEdit: boolean
   canDelete: boolean
@@ -57,6 +68,8 @@ export function FxLotAdminTab({ ledger, trades, company, userCode, canEdit, canD
   const [outAmount, setOutAmount] = useState(0)
   const [outRate, setOutRate] = useState(0)
   const [outMemo, setOutMemo] = useState('')
+  // 거래 유형 — 매각(환전)과 대외 지급을 구분해야 환차손익 요약의 "매각 실적"이 정확해진다.
+  const [outTxnType, setOutTxnType] = useState<'sale' | 'payment'>('payment')
   const [outSaving, setOutSaving] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [inventoryPreview, setInventoryPreview] = useState<{ rows: InventoryCsvRow[]; errors: string[]; skipped: number } | null>(null)
@@ -126,7 +139,8 @@ export function FxLotAdminTab({ ledger, trades, company, userCode, canEdit, canD
   async function saveOutflow() {
     if (!(outAmount > 0) || !(outRate > 0)) { setMessage('외화 금액과 처분(체결) 환율을 입력하세요.'); return }
     setOutSaving(true)
-    const err = await ledger.addManualOutflow({ date: outDate, amount: outAmount, rate: outRate, memo: outMemo, userCode })
+    const err = await ledger.addManualOutflow({ date: outDate, amount: outAmount, rate: outRate,
+      memo: outMemo, userCode, txnType: outTxnType })
     setOutSaving(false)
     if (err) setMessage(err)
     else { setMessage('외화 유출이 등록되었습니다 — FIFO 순서대로 로트에서 차감됐습니다.'); setShowOutflow(false); setOutAmount(0); setOutRate(0); setOutMemo(''); onChanged() }
@@ -247,6 +261,15 @@ export function FxLotAdminTab({ ledger, trades, company, userCode, canEdit, canD
         </div>
       </div>}
 
+      {/* 계좌 간 대체 — 유입/유출과 달리 총 외화 잔액이 변하지 않는 내부 이동.
+          유출·유입으로 따로 등록하면 잔액이 잠깐 어긋나고 손익도 두 번 잡히므로
+          반드시 이 카드(서버 단일 트랜잭션)를 쓴다. */}
+      <FxTransferCard
+        lots={ledger.lots} currency={currency} valuationMethod={valuationMethod}
+        canEdit={canEdit} userCode={userCode}
+        onTransfer={ledger.transferLots} onChanged={onChanged}
+      />
+
       {canEdit && <div className="grid gap-4 md:grid-cols-2">
         <div className={CARD}>
           <div className="flex items-center justify-between">
@@ -294,8 +317,18 @@ export function FxLotAdminTab({ ledger, trades, company, userCode, canEdit, canD
               <label className="text-xs">처분일<input type="date" value={outDate} onChange={e => setOutDate(e.target.value)} className="mt-1 w-full rounded border px-2 py-1.5 dark:bg-slate-800" /></label>
               <label className="text-xs">외화 금액<input type="number" min={0} value={outAmount || ''} onChange={e => setOutAmount(Number(e.target.value))} className="mt-1 w-full rounded border px-2 py-1.5 text-right dark:bg-slate-800" /></label>
               <label className="text-xs">처분(체결) 환율<input type="number" min={0} value={outRate || ''} onChange={e => setOutRate(Number(e.target.value))} className="mt-1 w-full rounded border px-2 py-1.5 text-right dark:bg-slate-800" /></label>
-              <label className="text-xs">메모<input value={outMemo} onChange={e => setOutMemo(e.target.value)} className="mt-1 w-full rounded border px-2 py-1.5 dark:bg-slate-800" /></label>
+              <label className="text-xs">거래 유형
+                <select value={outTxnType} onChange={e => setOutTxnType(e.target.value as 'sale' | 'payment')}
+                  className="mt-1 w-full rounded border px-2 py-1.5 dark:bg-slate-800">
+                  {SELECTABLE_OUTFLOW_TXN.map(t => <option key={t} value={t}>{OUTFLOW_TXN_LABEL[t]}</option>)}
+                </select>
+              </label>
+              <label className="text-xs sm:col-span-2">메모<input value={outMemo} onChange={e => setOutMemo(e.target.value)} className="mt-1 w-full rounded border px-2 py-1.5 dark:bg-slate-800" /></label>
             </div>
+            <p className="mt-2 text-[11px] text-gray-500 dark:text-slate-400">
+              <strong>대외 지급</strong>(매입대금·수수료 등)은 환차손익이 나더라도 <strong>매각 실적에 잡히지 않습니다.</strong>
+              원화로 환전한 것이라면 <strong>매각(환전)</strong>을 고르세요.
+            </p>
             <button disabled={outSaving} onClick={() => void saveOutflow()} className="mt-3 rounded bg-orange-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">{outSaving ? '저장 중…' : '확인 후 저장'}</button>
           </>}
         </div>
