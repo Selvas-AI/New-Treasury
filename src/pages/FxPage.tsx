@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { useDaily } from '../hooks/useDaily'
 import { useFx } from '../hooks/useFx'
+import { usePageCompany } from '../hooks/usePageCompany'
+import { usePolicyDashboard } from '../hooks/usePolicyDashboard'
 import { fmtKRW, fmtNumber } from '../lib/format'
 import type { FxCode } from '../types'
 
@@ -18,8 +19,11 @@ const FX_CODES: FxCode[] = ['USD', 'EUR', 'JPY', 'GBP', 'CNY']
 export default function FxPage() {
   const { currency: paramCurrency } = useParams<{ currency?: string }>()
   const navigate = useNavigate()
-  const daily = useDaily()
   const fx    = useFx()
+  // ⚠ 외화 보유액은 usePolicyDashboard 가 SSOT — 운전자금(daily.fx_*) 만 보면
+  //   운용자금 외화(외화 정기예금·MMF 등)가 통째로 빠진다(세션26차 14일차 실사고).
+  const { company } = usePageCompany()
+  const policy = usePolicyDashboard(company)
 
   const [highlight, setHighlight]     = useState<FxCode | null>(null)
   const [calcMode, setCalcMode]       = useState<'krw' | 'fx'>('fx')
@@ -48,15 +52,26 @@ export default function FxPage() {
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const latestDaily = useMemo(() => daily.data[0] ?? null, [daily.data])
+  const latestDaily = policy.latestDaily
 
-  const fxBalances: Record<FxCode, number> = {
-    USD: latestDaily?.fx_usd ?? 0,
-    EUR: latestDaily?.fx_eur ?? 0,
-    JPY: latestDaily?.fx_jpy ?? 0,
-    GBP: latestDaily?.fx_gbp ?? 0,
-    CNY: latestDaily?.fx_cny ?? 0,
-  }
+  /** 통화별 보유 외화(운전 + 운용) — SSOT: usePolicyDashboard.fxByCurrency */
+  const fxBalances = useMemo(
+    () => Object.fromEntries(FX_CODES.map(c => [c, policy.fxByCurrency[c]?.nativeAmount ?? 0])) as Record<FxCode, number>,
+    [policy.fxByCurrency],
+  )
+
+  /**
+   * 표시 전용 운전/운용 분리 — 합계·비중은 절대 여기서 재계산하지 않는다.
+   * (FxPolicyTab 과 동일한 원칙: 분리 표시만 로컬, 수치는 SSOT)
+   */
+  const fxSplit = useMemo(() => {
+    const rec = latestDaily as unknown as Record<string, unknown> | null
+    return Object.fromEntries(FX_CODES.map(c => {
+      const operating = Number(rec?.[`fx_${c.toLowerCase()}`] ?? 0)
+      const total = policy.fxByCurrency[c]?.nativeAmount ?? 0
+      return [c, { operating, invest: total - operating }]
+    })) as Record<FxCode, { operating: number; invest: number }>
+  }, [latestDaily, policy.fxByCurrency])
 
   const calcResult = useMemo(() => {
     const v = Number(calcInput) || 0
@@ -108,7 +123,7 @@ export default function FxPage() {
           const meta    = FX_META[code]
           const rate    = fx.rates.find(r => r.code === code)
           const balance = fxBalances[code]
-          const krwVal  = fx.toKRW(balance, code)
+          const krwVal  = policy.fxByCurrency[code]?.krwAmount ?? 0
           const isHL    = highlight === code
           return (
             <button key={code} onClick={() => setHighlight(isHL ? null : code)}
@@ -132,6 +147,11 @@ export default function FxPage() {
                     {fmtNumber(balance, 2)} {code}
                   </p>
                   <p className="text-xs text-blue-600 font-medium">{fmtKRW(krwVal)}</p>
+                  {fxSplit[code].invest > 0 && (
+                    <p className="mt-0.5 text-[10px] text-gray-400 dark:text-gray-500">
+                      운전 {fmtNumber(fxSplit[code].operating, 0)} · 운용 {fmtNumber(fxSplit[code].invest, 0)}
+                    </p>
+                  )}
                 </div>
               )}
             </button>
@@ -140,17 +160,17 @@ export default function FxPage() {
       </div>
 
       {/* 외화 잔고 요약 */}
-      {latestDaily && (
+      {(latestDaily || policy.fxPortfolioHoldings > 0) && (
         <div className="bg-white rounded-xl shadow p-5 dark:bg-slate-800">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-semibold text-gray-600 dark:text-slate-100">외화 잔고 현황</h3>
-            <span className="text-xs text-gray-400 dark:text-gray-500">기준: {latestDaily.date}</span>
+            <span className="text-xs text-gray-400 dark:text-gray-500">기준: {latestDaily?.date ?? '—'}</span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100 dark:border-slate-700">
-                  {['통화', '보유잔고', '환율', '원화환산', '비중'].map(h => (
+                  {['통화', '보유잔고', '운전 / 운용', '환율', '원화환산', '비중'].map(h => (
                     <th key={h} className="text-left text-xs text-gray-400 dark:text-gray-500 font-medium pb-2 pr-4">{h}</th>
                   ))}
                 </tr>
@@ -158,8 +178,8 @@ export default function FxPage() {
               <tbody>
                 {FX_CODES.filter(c => fxBalances[c] > 0).map(code => {
                   const rate      = fx.rates.find(r => r.code === code)
-                  const krwVal    = fx.toKRW(fxBalances[code], code)
-                  const totalFxKrw = latestDaily.fx_krw || 1
+                  const krwVal    = policy.fxByCurrency[code]?.krwAmount ?? 0
+                  const totalFxKrw = policy.fxPortfolioHoldings || 1
                   const pct       = totalFxKrw > 0 ? (krwVal / totalFxKrw) * 100 : 0
                   return (
                     <tr key={code} className="border-b border-gray-50 dark:border-slate-700/50 hover:bg-gray-50 dark:hover:bg-slate-700">
@@ -171,6 +191,13 @@ export default function FxPage() {
                       </td>
                       <td className="py-2.5 pr-4 tabular-nums text-gray-700 dark:text-gray-200">
                         {fmtNumber(fxBalances[code], 2)}
+                      </td>
+                      <td className="py-2.5 pr-4 text-xs tabular-nums text-gray-500 dark:text-slate-400">
+                        {fmtNumber(fxSplit[code].operating, 0)}
+                        <span className="mx-1 text-gray-300 dark:text-slate-600">/</span>
+                        {fxSplit[code].invest > 0
+                          ? <span className="text-emerald-600 dark:text-emerald-400">{fmtNumber(fxSplit[code].invest, 0)}</span>
+                          : '—'}
                       </td>
                       <td className="py-2.5 pr-4 tabular-nums text-gray-500 dark:text-slate-300">
                         {rate ? `₩${fmtNumber(rate.rate)}` : '—'}
@@ -192,15 +219,19 @@ export default function FxPage() {
                   )
                 })}
                 <tr className="border-t border-gray-200 dark:border-slate-700">
-                  <td colSpan={3} className="pt-2.5 text-xs text-gray-400 dark:text-gray-500 font-medium">합계</td>
+                  <td colSpan={4} className="pt-2.5 text-xs text-gray-400 dark:text-gray-500 font-medium">합계</td>
                   <td className="pt-2.5 tabular-nums font-bold text-blue-800 dark:text-blue-300">
-                    {fmtKRW(latestDaily.fx_krw)}
+                    {fmtKRW(policy.fxPortfolioHoldings)}
                   </td>
                   <td />
                 </tr>
               </tbody>
             </table>
           </div>
+          <p className="mt-3 text-[11px] text-gray-400 dark:text-gray-500">
+            운전자금(자금현황 외화 잔액) + 운용자금 외화(외화 정기예금·MMF 등)를 합산한 전사 보유액입니다.
+            FX 리짐 전략·자금정책의 외화비중과 같은 기준(SSOT)을 씁니다.
+          </p>
         </div>
       )}
 
