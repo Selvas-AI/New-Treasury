@@ -1,4 +1,15 @@
 -- ============================================================
+-- ⛔⛔ 폐기 (2026-08-26) — 실행하지 말 것. docs/db/rls_enable_safe.sql 을 사용할 것.
+--
+-- 이유: 이 스크립트는 public 의 **모든** 테이블에 allow_all_<t>
+--   (FOR ALL TO anon, authenticated USING true) 정책을 만든다.
+--   Postgres 는 permissive 정책을 OR 로 결합하므로, 세션23~26차에 authenticated
+--   전용으로 잠가둔 FX 원장 계열(fx_lots / fx_lot_consumptions / fx_trade_fills /
+--   fx_lot_transfers / fx_regime_snapshot_history / fx_ledger_reconcile_ignored)이
+--   **anon 에게 열린다.** 작성 당시(2026-06)에는 그 테이블들이 없었다.
+-- ============================================================
+
+-- ============================================================
 -- rls_enable_all.sql
 -- 목적: Supabase Security Advisor 'rls_disabled_in_public' 경고 해소
 --   public 스키마의 모든 테이블에 RLS 활성화 + anon/authenticated 허용 정책 부여

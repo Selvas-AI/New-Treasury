@@ -1,31 +1,33 @@
 ﻿/**
  * LoginPage — 듀얼 인증 로그인
  *
- * 탭 1: 이메일 + 비밀번호 (Supabase Auth — 신규 표준)
- * 탭 2: 접근 코드 (access_codes — 레거시 fallback)
- * 탭 3: 최초 계정 설정 (신규 사용자 비밀번호 등록)
- * 탭 4: 비밀번호 찾기
+ * 탭 1: 이메일 + 비밀번호 (Supabase Auth)
+ * 탭 2: 최초 계정 설정 (신규 사용자 비밀번호 등록)
+ * 탭 3: 비밀번호 찾기
+ *
+ * ⛔ 접근 코드(access_codes) 로그인은 2026-08-26 제거됐다.
+ *   평문 코드를 anon 으로 대조하는 방식이라 access_codes 테이블만 읽으면
+ *   누구나 master 로 로그인할 수 있었고, Supabase Auth 를 거치지 않아
+ *   DB 입장에서는 계속 anon 이었다(= RLS 를 authenticated 로 조일 수 없었다).
  */
 import { useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 
-type Mode = 'login' | 'code' | 'register' | 'reset'
+type Mode = 'login' | 'register' | 'reset'
 
 const TABS: { mode: Mode; icon: string; label: string }[] = [
   { mode: 'login',    icon: '✉️', label: '이메일 로그인' },
-  { mode: 'code',     icon: '🔑', label: '접근 코드'    },
   { mode: 'register', icon: '🆕', label: '최초 설정'    },
   { mode: 'reset',    icon: '🔒', label: '비밀번호 찾기' },
 ]
 
 export default function LoginPage() {
-  const { user, loading, login, loginWithCode, register, resetPassword } = useAuth()
+  const { user, loading, login, register, resetPassword } = useAuth()
   const [mode,     setMode]     = useState<Mode>('login')
   const [email,    setEmail]    = useState('')
   const [password, setPassword] = useState('')
   const [confirm,  setConfirm]  = useState('')
-  const [code,     setCode]     = useState('')
   const [error,    setError]    = useState('')
   const [info,     setInfo]     = useState('')
   const [busy,     setBusy]     = useState(false)
@@ -39,7 +41,7 @@ export default function LoginPage() {
 
   function switchMode(m: Mode) {
     setMode(m); setError(''); setInfo('')
-    setPassword(''); setConfirm(''); setCode('')
+    setPassword(''); setConfirm('')
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -51,11 +53,6 @@ export default function LoginPage() {
       if (mode === 'login') {
         if (!email.trim()) { setError('이메일을 입력하세요.'); return }
         const err = await login(email, password)
-        if (err) setError(err)
-
-      } else if (mode === 'code') {
-        if (!code.trim()) { setError('접근 코드를 입력하세요.'); return }
-        const err = await loginWithCode(code)
         if (err) setError(err)
 
       } else if (mode === 'register') {
@@ -92,14 +89,12 @@ export default function LoginPage() {
 
   const btnLabel: Record<Mode, string> = {
     login:    '로그인',
-    code:     '접근 코드 로그인',
     register: '계정 설정',
     reset:    '재설정 링크 발송',
   }
 
   const btnColor: Record<Mode, string> = {
     login:    'bg-blue-600 hover:bg-blue-700',
-    code:     'bg-amber-500 hover:bg-amber-600',
     register: 'bg-emerald-600 hover:bg-emerald-700',
     reset:    'bg-gray-600 hover:bg-gray-700',
   }
@@ -145,31 +140,8 @@ export default function LoginPage() {
         {/* 폼 */}
         <form onSubmit={handleSubmit} className="px-8 py-6 flex flex-col gap-3.5">
 
-          {/* 접근 코드 탭 */}
-          {mode === 'code' && (
-            <>
-              <div>
-                <label className="block text-xs font-medium text-gray-500 dark:text-slate-300 mb-1.5">접근 코드</label>
-                <input
-                  type="password"
-                  value={code}
-                  onChange={e => setCode(e.target.value)}
-                  placeholder="접근 코드 입력"
-                  autoFocus
-                  autoComplete="current-password"
-                  className={inputCls}
-                />
-              </div>
-              <div className="flex items-start gap-2 text-[11px] text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40 rounded-xl px-3 py-2.5">
-                <span className="mt-px shrink-0">⚠</span>
-                <span>레거시 방식입니다. 관리자로부터 이메일 계정 전환을 안내받으세요.</span>
-              </div>
-            </>
-          )}
-
           {/* 이메일 (로그인 / 최초설정 / 비밀번호찾기) */}
-          {mode !== 'code' && (
-            <div>
+          <div>
               <label className="block text-xs font-medium text-gray-500 dark:text-slate-300 mb-1.5">이메일</label>
               <input
                 type="email"
@@ -180,8 +152,7 @@ export default function LoginPage() {
                 autoFocus
                 className={inputCls}
               />
-            </div>
-          )}
+          </div>
 
           {/* 비밀번호 (로그인 / 최초설정) */}
           {(mode === 'login' || mode === 'register') && (

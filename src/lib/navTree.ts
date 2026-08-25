@@ -106,7 +106,6 @@ export const NAV_GROUPS: NavGroup[] = [
     section: '관리',
     masterOnly: true,
     items: [
-      { to: '/admin/mycode',    label: '코드 변경',   icon: '🔑', slug: 'admin' },
       { to: '/admin/companies', label: '회사 관리',   icon: '🏢', slug: 'admin' },
       { to: '/admin/users',     label: '사용자 관리', icon: '👥', slug: 'admin' },
       { to: '/admin/data',      label: '데이터 관리', icon: '🗄️', slug: 'admin' },

@@ -16,7 +16,6 @@ import IssueHistoryPage from './pages/IssueHistoryPage'
 import FxPage from './pages/FxPage'
 import PolicyPage from './pages/PolicyPage'
 import DailyReportPage from './pages/DailyReportPage'
-import MyCodePage from './pages/admin/MyCodePage'
 import UsersPage from './pages/admin/UsersPage'
 import CompaniesPage from './pages/admin/CompaniesPage'
 import DataPage from './pages/admin/DataPage'
@@ -144,7 +143,6 @@ export default function App() {
             <Route path="/audit-log/:company"  element={<AuditLogPage />} />
 
             {/* 관리 */}
-            <Route path="/admin/mycode"     element={<MyCodePage />} />
             <Route path="/admin/users"      element={<UsersPage />} />
             <Route path="/admin/companies"  element={<CompaniesPage />} />
             <Route path="/admin/data"       element={<DataPage />} />

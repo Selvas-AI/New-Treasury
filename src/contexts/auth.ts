@@ -53,7 +53,6 @@ export interface AuthContextValue {
 
   // 인증
   login:          (email: string, password: string) => Promise<string | null>
-  loginWithCode:  (code: string) => Promise<string | null>   // 레거시 fallback
   register:       (email: string, password: string) => Promise<string | null>
   resetPassword:  (email: string) => Promise<string | null>
   logout:         () => Promise<void>

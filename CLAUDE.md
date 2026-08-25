@@ -3348,6 +3348,74 @@ setActive(id,false) 가 closed_date = 오늘 로 고정하고 있었다.
 
 ---
 
+### 2026-08-26 세션27차 — Supabase RLS 경고 대응 + 레거시 접근코드 로그인 폐기 ⭐
+
+Supabase Security Advisor 메일(`rls_disabled_in_public`, Critical)에서 출발해
+실제 노출 범위를 실측한 결과, 경고 자체보다 큰 문제 두 가지를 함께 정리했다.
+
+#### ⛔ [중요] `docs/db/rls_enable_all.sql` 을 실행하면 안 된다 — 폐기
+```
+그 스크립트는 public 의 **모든** 테이블에
+  create policy allow_all_<t> for all to anon, authenticated using (true)
+를 만든다. Postgres 는 permissive 정책을 **OR 로 결합**하므로,
+세션23~26차에 authenticated 전용으로 잠가둔 FX 원장 계열이 anon 에게 열린다:
+  fx_lots · fx_lot_consumptions · fx_trade_fills · fx_lot_transfers ·
+  fx_regime_snapshot_history · fx_ledger_reconcile_ignored
+(스크립트는 2026-06 작성 — 그 테이블들이 생기기 전이다)
+
+→ docs/db/rls_enable_safe.sql 신규. RLS 는 전부 켜되 허용 정책은
+  **정책이 하나도 없는 테이블에만** 부여한다. 기존 정책은 건드리지 않는다.
+  1단계 현황 확인(읽기 전용) → 2단계 적용 → 3단계 검증 2건 구성.
+금지: RLS 일괄 처리 스크립트를 만들 때 이미 정책이 있는 테이블에
+      permissive 정책을 덧씌우지 말 것 — 잠근 것이 조용히 풀린다.
+```
+
+#### 실측 — anon 키만으로 읽히는 범위 (로그인 없이 REST 조회)
+| 테이블 | anon 가시 행 |
+|---|---|
+| `daily` 358 · `equities` 694 · `daily_report_items` 594 · `investments` 102 · `treasury_users` 21 | 전량 |
+| `fx_lots` | **0** (authenticated 전용 정책이 실제로 동작) |
+
+anon 키는 빌드 산출물에 포함되어 공개될 수밖에 없다.
+**RLS 를 켜도 `allow_all_*` 가 붙는 한 노출은 그대로**다 — Advisor 경고 해소는
+보안 조치가 아니라 토대 마련일 뿐임을 혼동하지 말 것.
+
+#### [CRITICAL] 레거시 접근코드 로그인 제거 (사용자 확인 — 9건 전부 미사용)
+```
+access_codes 로그인의 실제 위험:
+  ① 평문 코드를 anon 으로 대조 + 테이블 자체가 anon 으로 읽힘
+     → 코드만 읽으면 누구나 master 로 로그인 가능한 상태였다
+  ② sessionStorage 에 프로필 행을 통째로 저장 → 클라이언트에서 세션 위조 가능
+  ③ Supabase Auth 를 거치지 않아 DB 입장에선 계속 anon
+     → 이 경로가 살아 있는 한 RLS 를 authenticated 로 조일 수 없다(전환의 실질 걸림돌)
+
+제거한 것:
+  · AuthContext — loginWithCode / mapLegacy / AccessCodeRow / legacyRef /
+    LEGACY_SESSION_KEY, 그리고 sessionStorage 세션 복원 경로
+  · auth.ts — AuthContextValue.loginWithCode
+  · LoginPage — '접근 코드' 탭 (4탭 → 3탭)
+  · MyCodePage(/admin/mycode, '코드 변경') — access_codes 를 직접 update 하던 화면.
+    navTree(SSOT)에서 항목 제거 → 사이드바·권한 트리가 함께 갱신된다.
+    slug 는 'admin' 공유라 treasury_users.menus 마이그레이션 불필요.
+  · DB: docs/db/access_codes_retire.sql (**사용자 실행 필요**) —
+    전량 is_active=false + RLS 켜고 정책 전부 제거(anon 차단). 테이블은 남긴다.
+    ⚠ rls_enable_safe.sql **이후에** 실행할 것(allow_all_access_codes 를 걷어내야 함).
+
+⚠ 개발 중 sessionStorage['treasury_user'] 주입으로 master 를 흉내내던 방법도 사라졌다.
+  디버깅도 실제 계정으로 로그인할 것.
+```
+
+#### 남은 것 — authenticated 전용 전환 (다음 단계, 미착수)
+로그인 방식(이메일+비밀번호)은 **바뀌지 않는다.** 정책의 대상 역할만 anon → authenticated.
+선행 작업은 하나뿐이다:
+- `AuthContext.register()` 가 signUp 전에 **anon 으로** `treasury_users` 를 사전조회한다
+  (등록된 이메일인지 확인) → `SECURITY DEFINER` RPC 로 옮겨야 한다.
+  그 외 로그인 전 경로(비밀번호 찾기 등)는 `auth` 스키마라 영향 없다.
+
+검증: tsc -b 0 errors · eslint 0 errors · vitest --dir src 70/70 · vite build 성공.
+
+---
+
 ## 17. 개발 시 체크리스트
 
 새 세션에서 작업 시작 전:
@@ -3356,7 +3424,7 @@ setActive(id,false) 가 closed_date = 오늘 로 고정하고 있었다.
       열어 사이드바와 대조할 것 (§1-A "메뉴를 바꾸면 반드시 함께 바뀌어야 하는 것")
 - [ ] `pnpm dev` 로 개발 서버 기동 확인 (port 5175)
 - [ ] `.env.local` 존재 확인 (없으면 섹션 6 참조해서 생성)
-- [ ] `sessionStorage['treasury_user']` 에 master 세션 주입 or 로그인
+- [ ] 실제 계정으로 로그인 (⚠ `sessionStorage['treasury_user']` 주입 방식은 2026-08-26 폐기 — 접근코드 로그인 제거)
 - [ ] `pnpm build` 로 빌드 에러 없는지 확인 후 코드 작업 시작
 
 ---

@@ -1,21 +1,20 @@
 /**
- * AuthContext — 듀얼 인증 (Supabase Auth + 접근코드 레거시 fallback)
+ * AuthContext — Supabase Auth (이메일 + 비밀번호) 단일 인증
  *
- * 우선순위:
- *   1. Supabase Auth (이메일 + 비밀번호) — 신규 표준
- *   2. access_codes 테이블 코드 입력 — 레거시 fallback (기존 운영 사이트 호환)
+ * ⛔ 접근코드(access_codes) 레거시 로그인은 2026-08-26 제거됐다.
+ *   · 평문 코드를 anon 으로 대조하는 방식이라 access_codes 만 읽으면 master 로 로그인 가능
+ *   · sessionStorage 에 프로필을 통째로 저장해 클라이언트에서 세션 위조가 가능
+ *   · Supabase Auth 를 거치지 않아 DB 입장에선 계속 anon → RLS 를 authenticated 로 조일 수 없었다
+ *   되살리지 말 것. 계정 추가는 사용자 관리에서 이메일 등록 → '최초 계정 설정' 경로를 쓴다.
  *
- * 세션 복원 순서:
- *   Supabase Auth 세션 확인 → 없으면 sessionStorage 레거시 확인
- *
- * 마이그레이션 완료 후: loginWithCode 제거, LoginPage 레거시 탭 제거
+ * ⚠ 개발 중 sessionStorage['treasury_user'] 주입으로 master 세션을 흉내내던 방법도
+ *   함께 사라졌다. 개발/디버깅도 실제 계정으로 로그인할 것.
  */
 import { useState, useEffect, useMemo, useCallback, useRef, type ReactNode } from 'react'
 import { supabase, restUpdate, withTimeout, resetSupabaseClient } from '../lib/supabase'
 import { AuthContext, MENU_DEFAULTS, ACTION_DEFAULTS } from './auth'
 import type { TreasuryUser, Company, UserRole, SectionKey } from '../types'
 
-const LEGACY_SESSION_KEY  = 'treasury_user'
 const SB_AUTH_KEY = `sb-${import.meta.env.VITE_SUPABASE_URL?.match(/\/\/([^.]+)/)?.[1]}-auth-token`
 // 프로필 캐시 — 네트워크 없이 즉시 복원, 새로고침 시 로그아웃 방지
 const PROFILE_CACHE_KEY = 'treasury_profile_cache'
@@ -79,31 +78,6 @@ async function loadProfile(email: string, authId: string): Promise<TreasuryUser 
   }
 }
 
-// ── access_codes 레거시 프로필 변환 ──────────────────────────
-interface AccessCodeRow {
-  id: string; access_code: string; role: string
-  company: string | null; label: string; is_active: boolean
-}
-
-function mapLegacy(row: AccessCodeRow): TreasuryUser {
-  const company = row.company as Company | null
-  return {
-    sb_id: row.id,
-    email: '',                     // 레거시 — 이메일 없음
-    code:  row.access_code,
-    label: row.label,
-    role:  row.role as UserRole,
-    company,
-    companies: company ? [company] : [],
-    menus:              null,             // 역할 기본값 사용
-    can_delete:         row.role === 'master',
-    can_approve:        row.role === 'master',
-    allowed_categories: null,
-    action_permissions: null,
-    must_change_password: false,   // 레거시 접근코드 계정은 정책 대상 아님
-  }
-}
-
 // ── Provider ─────────────────────────────────────────────────
 export default function AuthProvider({ children }: { children: ReactNode }) {
   const [user,            setUser]            = useState<TreasuryUser | null>(null)
@@ -111,26 +85,14 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
   const [loading,         setLoading]         = useState(true)
   const [recoveryMode,    setRecoveryMode]    = useState(false)
   // Ref: onAuthStateChange 클로저 안에서 최신값 읽기 위해 ref 사용
-  const legacyRef = useRef(false)
   const userRef   = useRef<TreasuryUser | null>(null)
   useEffect(() => { userRef.current = user }, [user])
 
   useEffect(() => {
     let mounted = true
 
-    // ── 1. 레거시 sessionStorage 즉시 복원 (네트워크 없음) ─────
-    const storedLegacy = sessionStorage.getItem(LEGACY_SESSION_KEY)
-    if (storedLegacy) {
-      try {
-        const legacy = JSON.parse(storedLegacy) as AccessCodeRow
-        setUser(mapLegacy(legacy))
-        legacyRef.current = true
-      } catch { sessionStorage.removeItem(LEGACY_SESSION_KEY) }
-      setLoading(false)
-    }
-
-    // ── 2. Supabase 세션 localStorage에서 즉시 읽기 (네트워크 없음) ─
-    if (!legacyRef.current) {
+    // ── 1. Supabase 세션 localStorage에서 즉시 읽기 (네트워크 없음) ─
+    {
       const localSession = readLocalSession()
       const cached = loadProfileCache()
 
@@ -203,12 +165,12 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
     // ── 안전장치: 8초 내 loading 미해제 시 강제 해제 ─
     const hardTimeout = window.setTimeout(() => { if (mounted) setLoading(false) }, 8000)
 
-    // ── 3. onAuthStateChange — 이벤트별 분기 ──────────────────
+    // ── 2. onAuthStateChange — 이벤트별 분기 ──────────────────
     // ⭐ 핵심: 세션이 유효한 한 절대 로그아웃하지 않는다.
     //   과거 버그: TOKEN_REFRESHED(1시간마다·탭 복귀 시) 마다 loadProfile 재조회 →
     //   순간 네트워크 지연/실패 시 setUser(null) → "튕기듯 로그아웃" 반복.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!mounted || legacyRef.current) return
+      if (!mounted) return
       // INITIAL_SESSION 은 위 readLocalSession() 으로 이미 처리 → 건너뜀
       if (event === 'INITIAL_SESSION') return
 
@@ -301,21 +263,6 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  // ── 레거시: 접근 코드 로그인 (access_codes 테이블) ──────
-  const loginWithCode = useCallback(async (code: string): Promise<string | null> => {
-    const { data, error } = await supabase
-      .from('access_codes').select('*')
-      .eq('access_code', code.trim()).eq('is_active', true).single()
-    if (error || !data) return '접근 코드가 올바르지 않습니다.'
-    const row = data as AccessCodeRow
-    // sessionStorage에 저장 (기존 방식 유지)
-    sessionStorage.setItem(LEGACY_SESSION_KEY, JSON.stringify(row))
-    legacyRef.current = true
-    setUser(mapLegacy(row))
-    setSelectedCompany(null)
-    return null
-  }, [])
-
   // ── 최초 계정 설정 (신규 사용자 비밀번호 등록) ──────────
   const register = useCallback(async (email: string, password: string): Promise<string | null> => {
     const lc = email.trim().toLowerCase()
@@ -353,14 +300,12 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
     return null
   }, [])
 
-  // ── 로그아웃 (양쪽 세션 모두 클리어) ────────────────────
+  // ── 로그아웃 ────────────────────────────────────────────
   const logout = useCallback(async () => {
-    sessionStorage.removeItem(LEGACY_SESSION_KEY)
     clearProfileCache()
-    legacyRef.current = false
     setUser(null)
     setSelectedCompany(null)
-    await supabase.auth.signOut()  // 레거시 모드면 no-op
+    await supabase.auth.signOut()
   }, [])
 
   // ── 권한 헬퍼 ──────────────────────────────────────────
@@ -409,13 +354,13 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
   // 불필요하게 리렌더됨(앱 전반 성능·상태 안정성 저하). 의존값만 바뀔 때 갱신.
   const ctxValue = useMemo(() => ({
     user, currentCompany, loading,
-    login, loginWithCode, register, resetPassword, logout,
+    login, register, resetPassword, logout,
     recoveryMode, updatePassword,
     setCurrentCompany,
     canEdit, canDelete, canApprove, hasMenu, hasCompany, hasCategory, canAction,
   }), [
     user, currentCompany, loading,
-    login, loginWithCode, register, resetPassword, logout,
+    login, register, resetPassword, logout,
     recoveryMode, updatePassword, setCurrentCompany,
     canEdit, canDelete, canApprove, hasMenu, hasCompany, hasCategory, canAction,
   ])
