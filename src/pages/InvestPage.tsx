@@ -14,7 +14,7 @@ import NegoLogPanel from '../components/common/NegoLogPanel'
 import AvailabilityModal, { type AvailItem } from '../components/common/AvailabilityModal'
 import type { InvestmentRecord } from '../types'
 
-const PRODUCT_OPTIONS = ['정기예금', 'RP', 'MMF', '발행어음', 'CMA', '채권', '기타']
+const PRODUCT_OPTIONS = ['정기예금', '중금채', 'RP', 'MMF', '발행어음', 'CMA', '채권', '기타']
 const CURRENCY_OPTIONS = ['KRW', 'USD', 'EUR', 'JPY', 'GBP', 'CNY']
 
 const EMPTY_FORM = {

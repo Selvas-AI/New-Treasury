@@ -40,7 +40,7 @@ const DESTS: { key: Dest; label: string; hint: string }[] = [
   { key: 'unlisted', label: '비상장주식', hint: 'RCPS·CB 등 · 지분/장기투자 > 비상장 탭' },
 ]
 
-const PRODUCTS  = ['정기예금', 'MMF', 'RP', 'CP', '전자단기사채', '기타']
+const PRODUCTS  = ['정기예금', '중금채', 'MMF', 'RP', 'CP', '전자단기사채', '기타']
 const PURPOSES  = ['단순투자', '경영참여', '전략적제휴', '기타']
 
 /** 자산 구분별 가용여부 기본값 — 비상장·상장은 즉시 현금화가 어렵거나 매각제한이 흔함 */
