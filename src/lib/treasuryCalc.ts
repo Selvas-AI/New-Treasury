@@ -61,3 +61,28 @@ export function investValueKRW(i: InvestLikeFields, toKRW: ToKRWFn): number {
   if (i.product === '국채') return bondValueOf(i)
   return toKRWAmount(i.amount || 0, i.currency, toKRW)
 }
+
+export interface OpenPeriodFields {
+  active?:      boolean | null
+  closed_date?: string | null
+}
+
+/**
+ * 특정 일자 종료 시점에 이 건이 "열려 있었는가" (point-in-time).
+ *
+ * ⚠ closed_date 는 세션19차에 신설된 컬럼이라, 그 이전에 이미 상환·해지되어
+ *   active=false 로 남은 레거시 건은 closed_date 가 null 이다.
+ *   "closed_date 없음 = 열려있음" 으로 판단하면 이미 닫힌 자금까지 산입되므로
+ *   반드시 active 플래그를 최종 폴백으로 쓴다(세션19차 Task 6 회귀 사고).
+ */
+export function wasOpenOn(rec: OpenPeriodFields, date: string): boolean {
+  if (rec.closed_date) return rec.closed_date > date
+  return rec.active !== false
+}
+
+/** 개시일(start)까지 반영해 특정 일자에 잔액으로 잡히는지 판정. start 미기재는 항상 개시된 것으로 본다. */
+export function isOpenOn(rec: OpenPeriodFields & { start?: string | null }, date: string): boolean {
+  if (!date) return rec.active !== false
+  if (rec.start && rec.start > date) return false
+  return wasOpenOn(rec, date)
+}

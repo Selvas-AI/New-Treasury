@@ -541,6 +541,21 @@ export default function DailyReportPage() {
     const byAccount:    Record<string, { inKrw: number; outKrw: number; inRaw: number; outRaw: number }> = {}
     const byEquityName: Record<string, { inKrw: number; outKrw: number }> = {}
     const byBondLabel:  Record<string, { inKrw: number; outKrw: number }> = {}
+    // 운용자금·차입금 행별 귀속: linked_id 로 원천 레코드를 찾아 해당 그룹 라벨에 더한다.
+    // (과거에는 product==='정기예금' 행에만 전액을 하드코딩으로 붙여, 중금채·MMF 등
+    //  다른 행은 입출금 칸이 구조적으로 항상 0 이었다)
+    const byInvestLabel: Record<string, { inKrw: number; outKrw: number }> = {}
+    const byLoanLabel:   Record<string, { inKrw: number; outKrw: number }> = {}
+    const byEquityFlow:  Record<string, { inKrw: number; outKrw: number }> = {}
+    const bump = (
+      bucket: Record<string, { inKrw: number; outKrw: number }>,
+      label: string | undefined, dir: 'in' | 'out', krw: number,
+    ) => {
+      if (!label) return
+      if (!bucket[label]) bucket[label] = { inKrw: 0, outKrw: 0 }
+      if (dir === 'in') bucket[label].inKrw  += krw
+      else              bucket[label].outKrw += krw
+    }
 
     for (const item of itemHook.items) {
       const acct = item.account_type
@@ -548,6 +563,24 @@ export default function DailyReportPage() {
         if (!byAccount[acct]) byAccount[acct] = { inKrw: 0, outKrw: 0, inRaw: 0, outRaw: 0 }
         if (item.direction === 'in') { byAccount[acct].inKrw  += krwAmt(item); byAccount[acct].inRaw  += item.amount }
         else                         { byAccount[acct].outKrw += krwAmt(item); byAccount[acct].outRaw += item.amount }
+      }
+      // 운용자금 잔액 관점: 신규집행=입금↑, 회수/해지=출금↓ (현금 방향과 반대)
+      if (item.linked_type === 'investment' && item.linked_id) {
+        const label = summary.investLabelById[item.linked_id]
+        if (item.category === 'invest_execute') bump(byInvestLabel, label, 'in',  krwAmt(item))
+        if (item.category === 'invest_return')  bump(byInvestLabel, label, 'out', krwAmt(item))
+      }
+      // 지분 매입·매도도 같은 잔액 관점 — 과거엔 지분 매입이 '정기예금' 행 입금액으로 잘못 표시됐다
+      if (item.linked_type === 'equity' && item.linked_id) {
+        const name = summary.equityNameById[item.linked_id]
+        if (item.category === 'invest_execute') bump(byEquityFlow, name, 'in',  krwAmt(item))
+        if (item.category === 'invest_return')  bump(byEquityFlow, name, 'out', krwAmt(item))
+      }
+      // 차입금 잔액 관점: 실행=입금↑, 상환=출금↓
+      if (item.linked_type === 'loan' && item.linked_id) {
+        const label = summary.loanLabelById[item.linked_id]
+        if (item.category === 'loan_drawdown')  bump(byLoanLabel, label, 'in',  krwAmt(item))
+        if (item.category === 'loan_repayment') bump(byLoanLabel, label, 'out', krwAmt(item))
       }
       const isEval = item.category === 'invest_eval_in' || item.category === 'invest_eval_out'
       if (isEval) {
@@ -569,8 +602,9 @@ export default function DailyReportPage() {
       // invest_eval은 현금 이동 없으므로 운전자금 opIn/opOut에서 제외
       opIn:      itemHook.items.filter(i => i.direction === 'in'  && i.category !== 'invest_eval_in' ).reduce((s, i) => s + krwAmt(i), 0),
       opOut:     itemHook.items.filter(i => i.direction === 'out' && i.category !== 'invest_eval_out').reduce((s, i) => s + krwAmt(i), 0),
-      investIn:  itemHook.items.filter(i => i.direction === 'out' && i.category === 'invest_execute').reduce((s, i) => s + krwAmt(i), 0),
-      investOut: itemHook.items.filter(i => i.direction === 'in'  && i.category === 'invest_return' ).reduce((s, i) => s + krwAmt(i), 0),
+      // ⚠ 지분(linked_type='equity')은 운용자금이 아니라 지분·장기투자 섹션 소속이므로 제외한다
+      investIn:  itemHook.items.filter(i => i.direction === 'out' && i.category === 'invest_execute' && i.linked_type !== 'equity').reduce((s, i) => s + krwAmt(i), 0),
+      investOut: itemHook.items.filter(i => i.direction === 'in'  && i.category === 'invest_return'  && i.linked_type !== 'equity').reduce((s, i) => s + krwAmt(i), 0),
       loanIn:    itemHook.items.filter(i => i.direction === 'in'  && i.category === 'loan_drawdown' ).reduce((s, i) => s + krwAmt(i), 0),
       loanOut:   itemHook.items.filter(i => i.direction === 'out' && i.category === 'loan_repayment').reduce((s, i) => s + krwAmt(i), 0),
       evalIn:    itemHook.items.filter(i => i.category === 'invest_eval_in' ).reduce((s, i) => s + krwAmt(i), 0),
@@ -578,9 +612,12 @@ export default function DailyReportPage() {
       byAccount,
       byEquityName,
       byBondLabel,
+      byInvestLabel,
+      byLoanLabel,
+      byEquityFlow,
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [itemHook.items, summary.toKRW])
+  }, [itemHook.items, summary.toKRW, summary.investLabelById, summary.loanLabelById, summary.equityNameById])
 
   // 활성 계좌 목록 (daily 데이터에서 추출)
   const activeAccounts = useMemo(() => {
@@ -1177,6 +1214,7 @@ export default function DailyReportPage() {
                   onRemove={itemHook.removeItem}
                   onFetchThreads={itemHook.fetchThreads}
                   onAddThread={itemHook.addThread}
+                  onSourceChanged={() => void summary.fetch(resolvedCompany, selectedDate)}
                 />
               ))}
             </div>

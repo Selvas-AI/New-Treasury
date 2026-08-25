@@ -10,7 +10,8 @@ import { supabase } from '../lib/supabase'
 import { useFx } from './useFx'
 import { prevBizDay } from '../lib/bizDay'
 import { calcBondValue } from '../lib/format'
-import { opCashKRW } from '../lib/treasuryCalc'
+import { opCashKRW, isOpenOn } from '../lib/treasuryCalc'
+import { investFromDb } from './useInvestments'
 import type { DailyRecord, InvestmentRecord, LoanRecord, EquityRecord, Company, FxCode } from '../types'
 
 export interface ReportItem {
@@ -56,6 +57,7 @@ export interface InvestGroup {
 export interface LoanGroup {
   label:    string
   totalKrw: number
+  prevKrw:  number   // 기초(전일) 잔액 — point-in-time 재구성
 }
 
 export interface EquityGroup {
@@ -84,6 +86,12 @@ export interface ItemSums {
   byEquityName: Record<string, { inKrw: number; outKrw: number }>
   /** 국채 종목명별 평가손익 (memo='@auto:bond:채권명') */
   byBondLabel:  Record<string, { inKrw: number; outKrw: number }>
+  /** 운용자금 그룹 라벨별 집행/회수 (linked_id → investLabelById 로 귀속) */
+  byInvestLabel: Record<string, { inKrw: number; outKrw: number }>
+  /** 차입금 그룹 라벨별 실행/상환 (linked_id → loanLabelById 로 귀속) */
+  byLoanLabel:   Record<string, { inKrw: number; outKrw: number }>
+  /** 지분 종목명별 매입/매도 (linked_id → equityNameById 로 귀속, 평가손익과 별개) */
+  byEquityFlow:  Record<string, { inKrw: number; outKrw: number }>
 }
 
 const FX_CODES: FxCode[] = ['USD', 'EUR', 'JPY', 'GBP', 'CNY']
@@ -129,8 +137,10 @@ export function useDailyReportSummary() {
       const [pRes, cRes, iRes, lRes, eRes] = await Promise.all([
         supabase.from('daily').select('*').eq('company', company).eq('date', prev).maybeSingle(),
         supabase.from('daily').select('*').eq('company', company).eq('date', curr).maybeSingle(),
-        supabase.from('investments').select('*').eq('company', company).eq('active', true),
-        supabase.from('loans').select('*').eq('company', company).eq('active', true),
+        // ⚠ active 필터를 걸지 않는다 — 기초(전일) 잔액을 point-in-time 으로 재구성하려면
+        //   보고대상일 이후에 해지·상환된 건도 필요하다(closed_date 기준 판정: isOpenOn).
+        supabase.from('investments').select('*').eq('company', company),
+        supabase.from('loans').select('*').eq('company', company),
         supabase.from('equities').select('*').eq('company', company).order('date', { ascending: false }),
       ])
       if (pRes.error) throw pRes.error
@@ -141,7 +151,10 @@ export function useDailyReportSummary() {
 
       setPrevDaily(pRes.data as DailyRecord | null)
       setCurrDaily(cRes.data as DailyRecord | null)
-      setInvestments((iRes.data ?? []) as InvestmentRecord[])
+      // ⚠ supabase.from().select() 는 DB 행(snake_case)을 그대로 준다.
+      //   investFromDb 를 거치지 않으면 bondQty/bondPrice/bondName/priceDate 가 전부
+      //   undefined 가 되어 국채가 시가평가 없이 취득원금으로만 잡히고 행 이름도 은행명이 된다.
+      setInvestments(((iRes.data ?? []) as Record<string, unknown>[]).map(investFromDb))
       setLoans((lRes.data ?? []) as LoanRecord[])
       setEquities((eRes.data ?? []) as EquityRecord[])
 
@@ -167,35 +180,58 @@ export function useDailyReportSummary() {
   // ── 운용자금 집계 ─────────────────────────────────────────
   // 예금성: product + currency 조합별 분리 (KRW/외화 구분 표기)
   // 비예금성: 국채 ticker별 1행 (priceDate 최신 2건), 나머지 합산
+  //
+  // ⚠ 기초(전일)·마감(당일) 잔액은 point-in-time 으로 각각 재구성한다.
+  //   과거에는 "현재 활성 잔액"을 기초·마감 양쪽에 그대로 넣어, 신규 집행·해지가
+  //   Δ=0 이 되어 표에 전혀 나타나지 않았다(중금채 30억 신규 미반영 리포트).
   const investGroups = useMemo((): InvestGroup[] => {
-    // 국채 거래일 기준일 = 보고 대상일(reportDate = 작성일 직전영업일)
-    const reportDate = selectedDate ? prevBizDay(selectedDate) : ''
-    // key: `${product}|${currency}` → { krw합계, raw합계, currency, product }
-    const depositMap = new Map<string, { krw: number; raw: number; currency: string; product: string }>()
-    const nonDepositMap = new Map<string, number>()
+    // 마감일 = 보고 대상일(작성일 직전영업일), 기초일 = 그 직전영업일
+    const closeDate = selectedDate ? prevBizDay(selectedDate) : ''
+    const baseDate  = closeDate ? prevBizDay(closeDate) : ''
+    const reportDate = closeDate   // 국채 기준일(기존 명칭 유지)
+
+    // key: `${product}|${currency}` → { 마감/기초 각각의 krw·raw 합계 }
+    const depositMap = new Map<string, {
+      krw: number; raw: number; prevKrw: number; prevRaw: number; currency: string; product: string
+    }>()
+    const nonDepositMap = new Map<string, { krw: number; prevKrw: number }>()
     const bondByTicker  = new Map<string, InvestmentRecord[]>()
 
     for (const inv of investments) {
       const ccy = (inv.currency || 'KRW').toUpperCase()
 
       if (inv.product === '국채') {
+        // 국채는 기준일(priceDate)별 이력 행이 누적되는 구조 — 기존 로직 유지.
+        // (해지·매도된 행이 되살아나지 않도록 active 게이트도 그대로 둔다)
+        if (inv.active === false) continue
         const key = inv.bondTicker || inv.bondName || inv.bank || '국채_default'
         if (!bondByTicker.has(key)) bondByTicker.set(key, [])
         bondByTicker.get(key)!.push(inv)
+        continue
+      }
 
-      } else if (DEPOSIT_PRODUCTS.has(inv.product)) {
+      const openCurr = isOpenOn(inv, closeDate)
+      const openPrev = isOpenOn(inv, baseDate)
+      if (!openCurr && !openPrev) continue
+
+      if (DEPOSIT_PRODUCTS.has(inv.product)) {
         const raw = inv.amount ?? 0
         const krw = toKRW(raw, ccy)
         const key = `${inv.product}|${ccy}`
-        if (!depositMap.has(key)) depositMap.set(key, { krw: 0, raw: 0, currency: ccy, product: inv.product })
+        if (!depositMap.has(key)) {
+          depositMap.set(key, { krw: 0, raw: 0, prevKrw: 0, prevRaw: 0, currency: ccy, product: inv.product })
+        }
         const e = depositMap.get(key)!
-        e.krw += krw
-        e.raw += raw
+        if (openCurr) { e.krw     += krw; e.raw     += raw }
+        if (openPrev) { e.prevKrw += krw; e.prevRaw += raw }
 
       } else {
         const val = toKRW(inv.amount ?? 0, ccy)
         const key = ['MMF', 'RP'].includes(inv.product) ? inv.product : '기타'
-        nonDepositMap.set(key, (nonDepositMap.get(key) ?? 0) + val)
+        if (!nonDepositMap.has(key)) nonDepositMap.set(key, { krw: 0, prevKrw: 0 })
+        const e = nonDepositMap.get(key)!
+        if (openCurr) e.krw     += val
+        if (openPrev) e.prevKrw += val
       }
     }
 
@@ -209,6 +245,7 @@ export function useDailyReportSummary() {
         .filter(v => v.product === p)
         .sort((a, b) => CCY_ORDER.indexOf(a.currency) - CCY_ORDER.indexOf(b.currency))
       for (const v of entries) {
+        if (v.krw === 0 && v.prevKrw === 0) continue
         const isFx = v.currency !== 'KRW'
         result.push({
           product:  p,
@@ -216,6 +253,8 @@ export function useDailyReportSummary() {
           currency: v.currency,
           totalKrw: v.krw,
           totalRaw: isFx ? v.raw : undefined,
+          prevKrw:  v.prevKrw,
+          prevRaw:  isFx ? v.prevRaw : undefined,
           category: 'deposit',
         })
       }
@@ -223,6 +262,7 @@ export function useDailyReportSummary() {
     // 그 외 예금성 (추가 product 있을 경우)
     for (const v of depositMap.values()) {
       if (!DEPOSIT_ORDER.includes(v.product)) {
+        if (v.krw === 0 && v.prevKrw === 0) continue
         const isFx = v.currency !== 'KRW'
         result.push({
           product:  v.product,
@@ -230,6 +270,8 @@ export function useDailyReportSummary() {
           currency: v.currency,
           totalKrw: v.krw,
           totalRaw: isFx ? v.raw : undefined,
+          prevKrw:  v.prevKrw,
+          prevRaw:  isFx ? v.prevRaw : undefined,
           category: 'deposit',
         })
       }
@@ -272,38 +314,84 @@ export function useDailyReportSummary() {
 
     // MMF, RP, 기타
     for (const p of ['MMF', 'RP', '기타']) {
-      if (nonDepositMap.has(p)) result.push({
+      const v = nonDepositMap.get(p)
+      if (!v || (v.krw === 0 && v.prevKrw === 0)) continue
+      result.push({
         product: p, label: p, currency: 'KRW',
-        totalKrw: nonDepositMap.get(p)!, category: 'non-deposit',
+        totalKrw: v.krw, prevKrw: v.prevKrw, category: 'non-deposit',
       })
     }
 
     return result
   }, [investments, toKRW, selectedDate])
 
+  /**
+   * 운용자금 레코드 id → 자금현황 표의 그룹 라벨.
+   * 자금일보 입출금 항목(linked_type='investment')을 어느 행에 붙일지 결정한다.
+   * ⚠ investGroups 의 label 생성 규칙과 반드시 동일해야 한다 — 어긋나면 입출금액이
+   *   어느 행에도 붙지 않고 조용히 사라진다.
+   */
+  const investLabelById = useMemo((): Record<string, string> => {
+    const map: Record<string, string> = {}
+    for (const inv of investments) {
+      const ccy = (inv.currency || 'KRW').toUpperCase()
+      if (inv.product === '국채') {
+        map[inv.id] = inv.bondName || inv.bondTicker || inv.bank || '국채'
+      } else if (DEPOSIT_PRODUCTS.has(inv.product)) {
+        map[inv.id] = ccy === 'KRW' ? inv.product : `${inv.product} (${ccy})`
+      } else {
+        map[inv.id] = ['MMF', 'RP'].includes(inv.product) ? inv.product : '기타'
+      }
+    }
+    return map
+  }, [investments])
+
+  /** 지분 레코드 id → 종목명 (지분 매입·매도 항목 귀속용) */
+  const equityNameById = useMemo((): Record<string, string> => {
+    const map: Record<string, string> = {}
+    for (const e of equities) map[e.id] = e.name
+    return map
+  }, [equities])
+
+  /** 차입금 레코드 id → 표의 그룹 라벨(단기/장기) */
+  const loanLabelById = useMemo((): Record<string, string> => {
+    const cutoff = new Date()
+    cutoff.setFullYear(cutoff.getFullYear() + 1)
+    const cutoffStr = cutoff.toISOString().slice(0, 10)
+    const map: Record<string, string> = {}
+    for (const l of loans) map[l.id] = l.maturity <= cutoffStr ? '단기차입금' : '장기차입금'
+    return map
+  }, [loans])
+
   // 예금성/비예금성 소계
   const depositSubtotal    = useMemo(() => investGroups.filter(g => g.category === 'deposit').reduce((s, g) => s + g.totalKrw, 0), [investGroups])
   const nonDepositSubtotal = useMemo(() => investGroups.filter(g => g.category === 'non-deposit').reduce((s, g) => s + g.totalKrw, 0), [investGroups])
 
   // ── 차입금 집계 ──────────────────────────────────────────
+  // 운용자금과 동일하게 기초·마감을 point-in-time 으로 각각 재구성한다
+  // (신규 차입/상환이 Δ 로 드러나야 입출금 항목과 대사가 된다).
   const loanGroups = useMemo((): LoanGroup[] => {
+    const closeDate = selectedDate ? prevBizDay(selectedDate) : ''
+    const baseDate  = closeDate ? prevBizDay(closeDate) : ''
     const cutoff = new Date()
     cutoff.setFullYear(cutoff.getFullYear() + 1)
     const cutoffStr = cutoff.toISOString().slice(0, 10)
-    let short = 0, long = 0
+
+    let short = 0, long = 0, prevShort = 0, prevLong = 0
     for (const l of loans) {
+      const openCurr = isOpenOn({ ...l, start: l.start_date }, closeDate)
+      const openPrev = isOpenOn({ ...l, start: l.start_date }, baseDate)
+      if (!openCurr && !openPrev) continue
       const krw = toKRW(l.amount || 0, l.currency || 'KRW')
-      if (l.maturity <= cutoffStr) short += krw
-      else                          long  += krw
+      const isShort = l.maturity <= cutoffStr
+      if (openCurr) { if (isShort) short     += krw; else long     += krw }
+      if (openPrev) { if (isShort) prevShort += krw; else prevLong += krw }
     }
     const result: LoanGroup[] = []
-    if (short > 0) result.push({ label: '단기차입금', totalKrw: short })
-    if (long  > 0) result.push({ label: '장기차입금', totalKrw: long  })
-    if (result.length === 0 && loans.length > 0) {
-      result.push({ label: '차입금', totalKrw: loans.reduce((s, l) => s + toKRW(l.amount || 0, l.currency || 'KRW'), 0) })
-    }
+    if (short > 0 || prevShort > 0) result.push({ label: '단기차입금', totalKrw: short, prevKrw: prevShort })
+    if (long  > 0 || prevLong  > 0) result.push({ label: '장기차입금', totalKrw: long,  prevKrw: prevLong  })
     return result
-  }, [loans, toKRW])
+  }, [loans, toKRW, selectedDate])
 
   // ── 입출금 항목 집계 ──────────────────────────────────────
   // [E1] itemSums 는 DailyReportPage 의 liveItemSums(itemHook.items 실시간 집계)가
@@ -354,6 +442,7 @@ export function useDailyReportSummary() {
     prevDaily, currDaily,
     investments, loans, items,
     investGroups, depositSubtotal, nonDepositSubtotal,
+    investLabelById, loanLabelById, equityNameById,
     loanGroups,
     equityGroups, equityUnavailTotal,
     loading, error,

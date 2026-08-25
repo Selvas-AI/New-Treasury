@@ -75,6 +75,12 @@ interface Props {
   onRemove:        (id: string) => Promise<void>
   onFetchThreads:  (itemId: string) => Promise<void>
   onAddThread:     (itemId: string, code: string, label: string, body: string) => Promise<void>
+  /**
+   * 연동 팝업이 운용자금·차입금·지분 레코드를 새로 만든 뒤 호출.
+   * ⚠ 이걸 호출하지 않으면 자금현황 표(useDailyReportSummary)가 stale 상태로 남아
+   *   방금 만든 자산이 행으로도, 입출금 귀속으로도 나타나지 않는다.
+   */
+  onSourceChanged?: () => void
 }
 
 function fmtAmt(n: number, isFx = false): string {
@@ -98,6 +104,7 @@ export default function ItemsSection({
   prefill, onPrefillConsumed,
   toKRW,
   onEnsureReport, onAdd, onUpdate, onRemove, onFetchThreads, onAddThread,
+  onSourceChanged,
 }: Props) {
   const { hasCategory } = useAuth()
 
@@ -140,6 +147,8 @@ export default function ItemsSection({
     })
     setDraft(null)
     setLinkedPopup(null)
+    // 원천 레코드(운용자금·차입금·지분)가 새로 생겼으므로 자금현황을 다시 읽는다
+    if (linkedId) onSourceChanged?.()
   }
 
   function openLinkedPopup() {

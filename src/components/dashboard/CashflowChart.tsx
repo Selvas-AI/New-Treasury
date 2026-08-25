@@ -7,7 +7,7 @@ import {
 import { fmtKRW, fmtDateShort, calcBondValue } from '../../lib/format'
 import { getLatestBonds } from '../../hooks/useInvestments'
 import { useFx } from '../../hooks/useFx'
-import { toKRWAmount } from '../../lib/treasuryCalc'
+import { toKRWAmount, wasOpenOn } from '../../lib/treasuryCalc'
 import type { DailyRecord, InvestmentRecord, LoanRecord } from '../../types'
 
 interface Props {
@@ -81,10 +81,7 @@ export default function CashflowChart({ dailyRecords, investments, loans }: Prop
     //    이미 닫힌 레거시 건" — 언제 닫혔는지 알 수 없으므로 "열려있다"로 잘못 간주하면 안 되고,
     //    이전과 동일하게 항상 닫힌 것으로 처리(과대 산정 방지, 기존 activeOnly 동작과 동일)
     //  - active=true 면 closed_date 여부와 무관하게 열려있음
-    const wasOpenOn = (active: boolean, closedDate: string | null | undefined, date: string) => {
-      if (closedDate) return closedDate > date
-      return active
-    }
+    // 판정은 lib/treasuryCalc 의 wasOpenOn 이 단일 진실원천 — 자금일보 자금현황도 같은 함수를 쓴다
 
     return inRange.map(d => {
       const operating =
@@ -97,7 +94,7 @@ export default function CashflowChart({ dailyRecords, investments, loans }: Prop
       // 여기서는 point-in-time(closed_date 기준)으로 직접 재구성한다 — 그래야 상환/만기처리
       // 이후에도 그 이전 날짜의 잔액이 소급 변경되지 않는다.
       const nonBondOpenAsOf = investsUpTo.filter(
-        i => i.product !== '국채' && wasOpenOn(i.active, i.closed_date, d.date),
+        i => i.product !== '국채' && wasOpenOn(i, d.date),
       )
       const latest = [...nonBondOpenAsOf, ...getLatestBonds(investsUpTo)]
       // 가용/불가용 분리 집계
@@ -107,7 +104,7 @@ export default function CashflowChart({ dailyRecords, investments, loans }: Prop
       // 차입금도 동일하게 point-in-time 재구성 — 상환(active=false) 후에도 상환 이전 날짜엔
       // 여전히 잔액에 포함되어야 함 (closed_date 기준, start_date 이후 & 아직 안 닫힌 건만)
       const loanOpenAsOf = loans.filter(
-        l => l.start_date <= d.date && wasOpenOn(l.active, l.closed_date, d.date),
+        l => l.start_date <= d.date && wasOpenOn(l, d.date),
       )
       const loan = loanOpenAsOf.reduce((s, l) => s + toKRWAmt(l.amount || 0, l.currency || 'KRW'), 0)
 

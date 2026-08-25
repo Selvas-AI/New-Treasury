@@ -3236,6 +3236,70 @@ DecisionTab은 이제 분석(손익현황·손익분기·분할실현계획)만 
 
 ---
 
+### 2026-08-25 세션27차 — 자금일보 자금현황: 운용자금·차입금 point-in-time 재구성 ⭐
+
+사용자 리포트: "운용자금 기업은행 중금채 30억 신규 등록했는데 자금일보에 반영이 안 된다."
+조사해 보니 원인이 **세 겹**이었고, 셋 다 §1-A 유형(조각은 정상, 흐름이 끊김)이었다.
+
+#### [CRITICAL] ① 운용자금·차입금 잔액에 기초/마감 구분이 없었다
+```
+증상: 운용자금을 신규 집행하거나 해지해도 자금현황 표의 Δ 가 0 이라 표에 아무 변화가 없다.
+      과거 일보를 다시 열면 그때 없던 자금까지 들어가 있다(소급 변경).
+원인: 훅이 investments/loans 를 active=true 로만 조회하고, 그 "현재 활성 잔액"을
+      기초·마감 **양쪽에 그대로** 넣고 있었다. 국채·지분만 날짜별 이력이 있어
+      point-in-time 이었고 예금성·MMF·RP·차입금은 아니었다.
+      → 운전자금(daily)은 보고대상일 기준인데 운용자금은 현재 시점 기준이라
+        같은 표 안에서 기준일이 섞여 있었다.
+해결: closeDate(=보고대상일) / baseDate(=그 직전영업일) 기준으로 각각 재구성.
+      lib/treasuryCalc 에 wasOpenOn·isOpenOn 을 SSOT 로 두고 CashflowChart 와 공유한다
+      (세션19차 Task 5·6 에서 대시보드에만 적용했던 규칙을 자금일보까지 확장).
+⚠ closed_date 없음 = 열려있음 으로 판단하지 말 것 — active 를 최종 폴백으로 쓴다
+  (세션19차 Task 6 과대산정 회귀). 테스트: src/lib/treasuryCalc.test.ts 9건.
+```
+
+#### [CRITICAL] ② 입출금액이 `product === '정기예금'` 행에만 하드코딩돼 있었다
+```
+증상: 중금채·MMF·RP 행은 입금액·출금액 칸이 구조적으로 항상 0.
+      반대로 정기예금 행에는 **지분(RCPS) 매입 9.99억까지** 붙어 있었다
+      (실측: 유일한 invest_execute 항목이 linked_type='equity' 였다).
+      차입금은 더 나빠서 단기·장기 두 행에 전액이 중복 표시됐다.
+해결: 항목의 linked_id 로 원천 레코드를 찾아 그 행에 귀속한다.
+      훅이 investLabelById / loanLabelById / equityNameById 를 내보내고
+      liveItemSums 가 byInvestLabel · byLoanLabel · byEquityFlow 를 만든다.
+      ⚠ 라벨 생성 규칙은 investGroups 의 label 과 **반드시 동일**해야 한다 —
+        어긋나면 금액이 어느 행에도 안 붙고 조용히 사라진다.
+      운용자금 소계(investIn/Out)에서 linked_type='equity' 는 제외 — 지분은 운용자금이 아니다.
+```
+
+#### [CRITICAL] ③ 훅이 investFromDb 를 거치지 않아 국채가 취득원금으로만 잡혔다
+```
+supabase.from('investments').select('*') 는 DB 행(snake_case)을 그대로 준다.
+그걸 InvestmentRecord 로 캐스팅만 해서 bondQty/bondPrice/bondName/priceDate 가 전부
+undefined 였다 → 국채가 시가평가 없이 amount(취득원금)로 잡히고, 행 이름도 채권명이 아니라
+은행명으로 나오고, 그 탓에 byBondLabel(@auto:bond:{채권명}) 매칭도 실패해
+평가손익 자동기재가 해당 행에 안 붙었다. (세션26차 autoRefreshPrices 와 동일 사고)
+해결: investFromDb() 경유. 국채 평가액이 대시보드와 같은 시가 기준으로 통일된다.
+```
+
+#### ④ 연쇄 — 연동 팝업이 만든 자산이 표에 안 나타나던 문제
+`ItemsSection` 의 연동 팝업이 운용자금·차입금·지분 레코드를 새로 만들어도
+`useDailyReportSummary` 는 stale 이라 행도 귀속도 없었다(§1-A 2번).
+`onSourceChanged` 콜백을 추가해 저장 직후 자금현황을 다시 읽는다.
+
+#### 부수 효과 (의도된 것)
+- 자금 총합계의 **마감 열이 보고대상일 기준**이 됐다 → 그 이후 신규 집행·해지가 있으면
+  통합상황판(현재 시점)과 차이가 난다. 표 하단 안내 문구에 이 기준일 차이를 명시했다.
+- 과거 일보를 다시 열면 그 시점 잔액으로 보인다(더 이상 소급 변경되지 않는다).
+- 검증식(`입금−출금−잔액증감=0`)은 **운전자금(daily)만** 쓰므로 이 변경의 영향을 받지 않는다.
+
+#### 운용자금 상품유형에 중금채 추가
+드롭다운에서만 빠져 있었다(`DEPOSIT_PRODUCTS`·`DEPOSIT_ORDER` 에는 계속 있어 집계는 정상).
+InvestPage 와 자금일보 투자 집행 연동 팝업 **두 진입 경로 모두**에 추가.
+
+검증: tsc -b 0 errors · eslint 0 errors · vitest --dir src 70/70(신규 9건) · vite build 성공.
+
+---
+
 ## 17. 개발 시 체크리스트
 
 새 세션에서 작업 시작 전:
