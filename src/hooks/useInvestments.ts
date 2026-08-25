@@ -90,7 +90,7 @@ export function useInvestments(activeOnly = false, companyOverride?: string): Us
   nonBonds: InvestmentRecord[]
   save: (record: Omit<InvestmentRecord, 'id'> & { id?: string }) => Promise<string | null>
   remove: (id: string) => Promise<string | null>
-  setActive: (id: string, active: boolean) => Promise<string | null>
+  setActive: (id: string, active: boolean, closedDate?: string) => Promise<string | null>
   updateAcquisitionCost: (ids: string[], cost: number) => Promise<string | null>
   updateAvailableById: (id: string, available: '가용' | '불가용') => Promise<string | null>
   updateAvailableByBondKey: (bondKey: string, available: '가용' | '불가용') => Promise<string | null>
@@ -160,12 +160,15 @@ export function useInvestments(activeOnly = false, companyOverride?: string): Us
     return null
   }
 
-  async function setActive(id: string, active: boolean): Promise<string | null> {
+  async function setActive(id: string, active: boolean, closedDate?: string): Promise<string | null> {
     const target = data.find(r => r.id === id)
-    // 만기처리(active=false) 시 closed_date 를 오늘로 고정 기록 — 재활성화 시 NULL로 복원.
+    // 만기처리(active=false) 시 closed_date 기록 — 재활성화 시 NULL로 복원.
+    // ⚠ 실제 해지일과 처리일이 다를 수 있다(어제 해지분을 오늘 입력). 자금일보 자금현황은
+    //   이 날짜로 기초·마감을 가르므로, 호출부가 실제 해지일을 넘길 수 있어야 한다.
+    //   미지정 시에만 오늘로 폴백.
     // loans.setActive와 동일한 이유: CashflowChart 가 과거 날짜 시점의 활성 여부를
     // 정확히 재구성하려면 "언제 닫혔는지"가 필요함.
-    const closed_date = active ? null : new Date().toISOString().slice(0, 10)
+    const closed_date = active ? null : (closedDate || new Date().toISOString().slice(0, 10))
     const { error: err } = await restUpdate('investments', { active, closed_date }, { id })
     if (err) return err.message
     if (target) {

@@ -11,6 +11,7 @@ import { fmtKRW, calcDday } from '../lib/format'
 import { NumInput } from '../components/common/NumInput'
 import NegoLogPanel from '../components/common/NegoLogPanel'
 import type { LoanRecord } from '../types'
+import CloseDateModal from '../components/common/CloseDateModal'
 
 const LOAN_TYPES    = ['일반대출', '한도대출', 'CP', '전자단기사채', '팩토링', '기타']
 const CURRENCY_LIST = ['KRW', 'USD', 'EUR', 'JPY', 'GBP', 'CNY']
@@ -141,10 +142,26 @@ export default function LoansPage() {
     resetForm()
   }
 
-  async function handleSetActive(id: string, active: boolean) {
-    if (!confirm(active ? '차입금을 복원하시겠습니까?' : '상환 완료 처리하시겠습니까?')) return
-    const err = await loans.setActive(id, active)
+  // 상환처리도 실제 상환일 기준 — 자금일보 자금현황의 출금·마감이 이 날짜로 갈린다
+  const [closeTarget, setCloseTarget] = useState<{ id: string; label: string; active: boolean } | null>(null)
+  const [closeDate,   setCloseDate]   = useState(new Date().toISOString().slice(0, 10))
+  const [closeBusy,   setCloseBusy]   = useState(false)
+
+  function handleSetActive(rec: LoanRecord, active: boolean) {
+    setCloseDate(new Date().toISOString().slice(0, 10))
+    setCloseTarget({
+      id: rec.id, active,
+      label: `${rec.lender} ${rec.type} ${(rec.amount ?? 0).toLocaleString()}원`,
+    })
+  }
+
+  async function confirmSetActive() {
+    if (!closeTarget) return
+    setCloseBusy(true)
+    const err = await loans.setActive(closeTarget.id, closeTarget.active, closeTarget.active ? undefined : closeDate)
+    setCloseBusy(false)
     if (err) toast.error(`처리 실패: ${err}`)
+    setCloseTarget(null)
   }
 
   async function handleDelete(id: string) {
@@ -334,9 +351,9 @@ export default function LoansPage() {
                             <button onClick={() => loadRecord(rec)}
                               className="flex-1 py-1.5 text-xs rounded-lg border border-blue-200 text-blue-600 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400">수정</button>
                             {tab === 'active'
-                              ? <button onClick={() => handleSetActive(rec.id, false)}
+                              ? <button onClick={() => handleSetActive(rec, false)}
                                   className="flex-1 py-1.5 text-xs rounded-lg border border-emerald-200 text-emerald-600 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-400">상환처리</button>
-                              : <button onClick={() => handleSetActive(rec.id, true)}
+                              : <button onClick={() => handleSetActive(rec, true)}
                                   className="flex-1 py-1.5 text-xs rounded-lg border border-amber-200 text-amber-600 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400">복원</button>
                             }
                             <button onClick={() => handleDelete(rec.id)}
@@ -428,9 +445,9 @@ export default function LoansPage() {
                                     <button onClick={() => loadRecord(rec)}
                                       className="text-xs text-blue-500 hover:text-blue-700">수정</button>
                                     {tab === 'active'
-                                      ? <button onClick={() => handleSetActive(rec.id, false)}
+                                      ? <button onClick={() => handleSetActive(rec, false)}
                                           className="text-xs text-emerald-500 hover:text-emerald-700">상환</button>
-                                      : <button onClick={() => handleSetActive(rec.id, true)}
+                                      : <button onClick={() => handleSetActive(rec, true)}
                                           className="text-xs text-amber-500 hover:text-amber-700">복원</button>
                                     }
                                     <button onClick={() => handleDelete(rec.id)}
@@ -488,6 +505,20 @@ export default function LoansPage() {
           )}
         </div>
       </div>
+
+      {closeTarget && (
+        <CloseDateModal
+          title={closeTarget.active ? '차입금 복원' : '상환 완료 처리'}
+          recordLabel={closeTarget.label}
+          dateless={closeTarget.active}
+          date={closeDate}
+          onDateChange={setCloseDate}
+          confirmLabel={closeTarget.active ? '복원' : '상환 처리'}
+          busy={closeBusy}
+          onConfirm={confirmSetActive}
+          onCancel={() => setCloseTarget(null)}
+        />
+      )}
     </div>
   )
 }

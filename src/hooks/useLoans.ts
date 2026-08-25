@@ -8,7 +8,7 @@ import type { LoanRecord, UseQueryResult } from '../types'
 export function useLoans(activeOnly = false, companyOverride?: string): UseQueryResult<LoanRecord> & {
   save: (record: Omit<LoanRecord, 'id'> & { id?: string }) => Promise<string | null>
   remove: (id: string) => Promise<string | null>
-  setActive: (id: string, active: boolean) => Promise<string | null>
+  setActive: (id: string, active: boolean, closedDate?: string) => Promise<string | null>
 } {
   const { user, currentCompany } = useAuth()
   const { logAction } = useAuditLog()
@@ -69,12 +69,13 @@ export function useLoans(activeOnly = false, companyOverride?: string): UseQuery
     return null
   }
 
-  async function setActive(id: string, active: boolean): Promise<string | null> {
+  async function setActive(id: string, active: boolean, closedDate?: string): Promise<string | null> {
     const target = data.find(r => r.id === id)
-    // 상환처리(active=false) 시 closed_date 를 오늘로 고정 기록 — 재활성화 시 NULL로 복원.
+    // 상환처리(active=false) 시 closed_date 기록 — 재활성화 시 NULL로 복원.
+    // ⚠ 실제 상환일과 처리일이 다를 수 있어 호출부가 날짜를 넘길 수 있다(미지정 시 오늘).
     // 이 값이 있어야 CashflowChart 가 과거 날짜 시점에 이 차입금이 아직 활성이었는지
     // 정확히 재구성할 수 있음(값이 없으면 상환 이후 모든 과거 잔액이 소급 차감되어 보임).
-    const closed_date = active ? null : new Date().toISOString().slice(0, 10)
+    const closed_date = active ? null : (closedDate || new Date().toISOString().slice(0, 10))
     const { error: err } = await restUpdate('loans', { active, closed_date }, { id })
     if (err) return err.message
     if (target) {

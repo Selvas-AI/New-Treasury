@@ -43,6 +43,10 @@ function fmt(n: number): string {
   if (n === 0) return '—'
   return Math.round(n).toLocaleString('ko-KR')
 }
+/** 안내 문구용 — 0 을 '—' 가 아니라 '0' 으로 표시한다 */
+function fmtNum(n: number): string {
+  return Math.round(n).toLocaleString('ko-KR')
+}
 function fmtFx(n: number, code: FxCode): string {
   if (n === 0) return '—'
   return n.toLocaleString('ko-KR', {
@@ -344,6 +348,9 @@ export default function ReportSummaryTable({
   const totalInvKRW  = depositSubtotal + nonDepositSubtotal
   const totalLoanKRW = loanGroups.reduce((s, g) => s + g.totalKrw, 0)
   const prevLoanKRW  = loanGroups.reduce((s, g) => s + g.prevKrw,  0)
+  // 레코드에서 도출한 운용자금 개시·해지 합계 (국채 평가손익은 별도)
+  const investFlowIn  = investGroups.reduce((s, g) => s + (g.isBondGroup ? 0 : (g.flowInKrw  ?? 0)), 0)
+  const investFlowOut = investGroups.reduce((s, g) => s + (g.isBondGroup ? 0 : (g.flowOutKrw ?? 0)), 0)
 
   // 자금 총합계 = 운전자금 + 운용자금 (차입금·지분 제외)
   // prevOpKRW: fx_krw 기준 → 대시보드와 동일 공식
@@ -474,19 +481,18 @@ export default function ReportSummaryTable({
                 <>
                   <SubSectionHeader label="① 예금성" />
                   {depositGroups.map((g, i) => {
-                    // 운용자금 잔액 관점: 신규집행=입금↑, 회수/해지=출금↓
-                    // 행 귀속은 linked_id 기준(byInvestLabel) — product 하드코딩 금지
-                    const flow = itemSums.byInvestLabel[g.label]
+                    // 운용자금 잔액 관점: 개시(신규예치)=입금↑, 해지=출금↓
+                    // 금액은 레코드의 개시일·해지일에서 도출 → 기초+입금−출금=마감 항상 성립
                     return (
                       <InvestRow key={`dep-${i}`} group={g}
-                        inKrw={flow?.inKrw ?? 0} outKrw={flow?.outKrw ?? 0}
+                        inKrw={g.flowInKrw ?? 0} outKrw={g.flowOutKrw ?? 0}
                       />
                     )
                   })}
                   <SubtotalRow label="예금성 소계" indent note="(원화 환산)"
                     prevKrw={depositPrevSubtotal}
-                    inKrw={depositGroups.reduce((a, g) => a + (itemSums.byInvestLabel[g.label]?.inKrw  ?? 0), 0)}
-                    outKrw={depositGroups.reduce((a, g) => a + (itemSums.byInvestLabel[g.label]?.outKrw ?? 0), 0)}
+                    inKrw={depositGroups.reduce((a, g) => a + (g.flowInKrw  ?? 0), 0)}
+                    outKrw={depositGroups.reduce((a, g) => a + (g.flowOutKrw ?? 0), 0)}
                     currKrw={depositSubtotal}
                   />
                 </>
@@ -497,13 +503,12 @@ export default function ReportSummaryTable({
                 <>
                   <SubSectionHeader label="② 비예금성" />
                   {nonDepositGroups.map((g, i) => {
-                    // 국채 = 평가손익 자동기재(byBondLabel), 그 외(MMF·RP·기타) = 집행/회수(byInvestLabel)
+                    // 국채 = 평가손익 자동기재(byBondLabel), 그 외(MMF·RP·기타) = 개시/해지 도출
                     const bondEval = g.isBondGroup ? itemSums.byBondLabel[g.label] : undefined
-                    const flow     = g.isBondGroup ? undefined : itemSums.byInvestLabel[g.label]
                     return (
                       <InvestRow key={`ndep-${i}`} group={g}
-                        inKrw={bondEval?.inKrw ?? flow?.inKrw ?? 0}
-                        outKrw={bondEval?.outKrw ?? flow?.outKrw ?? 0}
+                        inKrw={bondEval?.inKrw ?? g.flowInKrw ?? 0}
+                        outKrw={bondEval?.outKrw ?? g.flowOutKrw ?? 0}
                         isAutoEval={g.isBondGroup && (bondEval?.inKrw ?? 0) + (bondEval?.outKrw ?? 0) > 0}
                       />
                     )
@@ -511,9 +516,9 @@ export default function ReportSummaryTable({
                   <SubtotalRow label="비예금성 소계" indent note="(원화 환산)"
                     prevKrw={nonDepositPrevSubtotal}
                     inKrw={bondEvalIn + nonDepositGroups.reduce((a, g) =>
-                      a + (g.isBondGroup ? 0 : (itemSums.byInvestLabel[g.label]?.inKrw  ?? 0)), 0)}
+                      a + (g.isBondGroup ? 0 : (g.flowInKrw  ?? 0)), 0)}
                     outKrw={bondEvalOut + nonDepositGroups.reduce((a, g) =>
-                      a + (g.isBondGroup ? 0 : (itemSums.byInvestLabel[g.label]?.outKrw ?? 0)), 0)}
+                      a + (g.isBondGroup ? 0 : (g.flowOutKrw ?? 0)), 0)}
                     currKrw={nonDepositSubtotal}
                   />
                 </>
@@ -521,9 +526,25 @@ export default function ReportSummaryTable({
 
               <SubtotalRow label="운용자금 소계" note="(원화 환산 합계)"
                 prevKrw={depositPrevSubtotal + nonDepositPrevSubtotal}
-                inKrw={itemSums.investIn} outKrw={itemSums.investOut}
+                inKrw={investFlowIn + bondEvalIn} outKrw={investFlowOut + bondEvalOut}
                 currKrw={totalInvKRW}
               />
+              {/* 레코드에서 도출한 개시·해지 금액과 자금일보 연동 항목 합계가 다르면 안내 —
+                  "운용자금은 늘었는데 자금일보에 출금 소명이 없다"를 드러낸다 */}
+              {Math.abs(investFlowIn - itemSums.investIn) >= 1 && (
+                <tr className="text-[10px]">
+                  <td colSpan={7} className="px-4 py-1.5 pl-9 text-amber-600 dark:text-amber-400">
+                    ⓘ 운용자금 개시액 {fmtNum(investFlowIn)}원 중 자금일보 투자집행 항목으로 소명된 금액은 {fmtNum(itemSums.investIn)}원입니다.
+                  </td>
+                </tr>
+              )}
+              {Math.abs(investFlowOut - itemSums.investOut) >= 1 && (
+                <tr className="text-[10px]">
+                  <td colSpan={7} className="px-4 py-1.5 pl-9 text-amber-600 dark:text-amber-400">
+                    ⓘ 운용자금 해지액 {fmtNum(investFlowOut)}원 중 자금일보 투자회수 항목으로 소명된 금액은 {fmtNum(itemSums.investOut)}원입니다.
+                  </td>
+                </tr>
+              )}
             </>
           )}
 
@@ -592,10 +613,10 @@ export default function ReportSummaryTable({
             <>
               <SectionHeader label="차입금" sub="(총합계 미포함)" />
               {loanGroups.map(g => {
-                // 실행/상환도 linked_id 기준 귀속 — 과거엔 단기·장기 두 행에 전액이 중복 표시됐다
-                const flow   = itemSums.byLoanLabel[g.label]
-                const inKrw  = flow?.inKrw  ?? 0
-                const outKrw = flow?.outKrw ?? 0
+                // 신규 실행/상환도 레코드의 개시일·상환일에서 도출
+                // (과거엔 단기·장기 두 행에 자금일보 항목 전액이 중복 표시됐다)
+                const inKrw  = g.flowInKrw
+                const outKrw = g.flowOutKrw
                 return (
                   <tr key={g.label} className="hover:bg-gray-50/50 dark:hover:bg-slate-700/20 text-xs">
                     <td className="px-4 py-2 pl-7 text-gray-600 dark:text-slate-300">{g.label}</td>
@@ -613,7 +634,9 @@ export default function ReportSummaryTable({
                 )
               })}
               <SubtotalRow label="차입금 소계" note="(원화 환산 합계)"
-                prevKrw={prevLoanKRW} inKrw={itemSums.loanIn} outKrw={itemSums.loanOut}
+                prevKrw={prevLoanKRW}
+                inKrw={loanGroups.reduce((s, g) => s + g.flowInKrw,  0)}
+                outKrw={loanGroups.reduce((s, g) => s + g.flowOutKrw, 0)}
                 currKrw={totalLoanKRW}
               />
             </>

@@ -12,6 +12,7 @@ import { fmtKRW, calcDday, fmtReturn, returnBadgeClass, calcReturn } from '../li
 import { NumInput } from '../components/common/NumInput'
 import NegoLogPanel from '../components/common/NegoLogPanel'
 import AvailabilityModal, { type AvailItem } from '../components/common/AvailabilityModal'
+import CloseDateModal from '../components/common/CloseDateModal'
 import type { InvestmentRecord } from '../types'
 
 const PRODUCT_OPTIONS = ['정기예금', '중금채', 'RP', 'MMF', '발행어음', 'CMA', '채권', '기타']
@@ -157,10 +158,26 @@ export default function InvestPage() {
     resetForm()
   }
 
-  async function handleSetActive(id: string, active: boolean) {
-    if (!confirm(active ? '복원하시겠습니까?' : '만기 처리하시겠습니까?')) return
-    const err = await invest.setActive(id, active)
+  // 만기처리는 실제 해지일을 받아야 한다 — 그 날짜로 자금일보 자금현황의 출금·마감이 갈린다
+  const [closeTarget, setCloseTarget] = useState<{ id: string; label: string; active: boolean } | null>(null)
+  const [closeDate,   setCloseDate]   = useState(new Date().toISOString().slice(0, 10))
+  const [closeBusy,   setCloseBusy]   = useState(false)
+
+  function handleSetActive(rec: InvestmentRecord, active: boolean) {
+    setCloseDate(new Date().toISOString().slice(0, 10))
+    setCloseTarget({
+      id: rec.id, active,
+      label: `${rec.bank} ${rec.product} ${(rec.amount ?? 0).toLocaleString()}${rec.currency && rec.currency !== 'KRW' ? ` ${rec.currency}` : '원'}`,
+    })
+  }
+
+  async function confirmSetActive() {
+    if (!closeTarget) return
+    setCloseBusy(true)
+    const err = await invest.setActive(closeTarget.id, closeTarget.active, closeTarget.active ? undefined : closeDate)
+    setCloseBusy(false)
     if (err) toast.error(`처리 실패: ${err}`)
+    setCloseTarget(null)
   }
 
   async function handleDelete(id: string) {
@@ -409,8 +426,8 @@ export default function InvestPage() {
                           <>
                             <button onClick={() => loadRecord(rec)} className="flex-1 text-xs text-blue-600 dark:text-blue-400 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100">수정</button>
                             {tab === 'active'
-                              ? <button onClick={() => handleSetActive(rec.id, false)} className="flex-1 text-xs text-amber-600 dark:text-amber-400 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100">만기처리</button>
-                              : <button onClick={() => handleSetActive(rec.id, true)} className="flex-1 text-xs text-emerald-600 dark:text-emerald-400 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100">복원</button>
+                              ? <button onClick={() => handleSetActive(rec, false)} className="flex-1 text-xs text-amber-600 dark:text-amber-400 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100">만기처리</button>
+                              : <button onClick={() => handleSetActive(rec, true)} className="flex-1 text-xs text-emerald-600 dark:text-emerald-400 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100">복원</button>
                             }
                             <button onClick={() => handleDelete(rec.id)} className="text-xs text-red-400 hover:text-red-600 px-3 py-1.5 rounded-lg bg-red-50 dark:bg-red-900/20">삭제</button>
                           </>
@@ -484,7 +501,7 @@ export default function InvestPage() {
                                 {isEditable && (
                                   <>
                                     <button onClick={() => loadRecord(rec)} className="text-xs text-blue-500 hover:text-blue-700">수정</button>
-                                    {tab === 'active' ? <button onClick={() => handleSetActive(rec.id, false)} className="text-xs text-amber-500 hover:text-amber-700">만기</button> : <button onClick={() => handleSetActive(rec.id, true)} className="text-xs text-emerald-500 hover:text-emerald-700">복원</button>}
+                                    {tab === 'active' ? <button onClick={() => handleSetActive(rec, false)} className="text-xs text-amber-500 hover:text-amber-700">만기</button> : <button onClick={() => handleSetActive(rec, true)} className="text-xs text-emerald-500 hover:text-emerald-700">복원</button>}
                                     <button onClick={() => handleDelete(rec.id)} className="text-xs text-red-400 hover:text-red-600">삭제</button>
                                   </>
                                 )}
@@ -539,6 +556,20 @@ export default function InvestPage() {
         items={availInvestItems}
         onSave={handleAvailInvestSave}
       />
+
+      {closeTarget && (
+        <CloseDateModal
+          title={closeTarget.active ? '운용자금 복원' : '만기 처리'}
+          recordLabel={closeTarget.label}
+          dateless={closeTarget.active}
+          date={closeDate}
+          onDateChange={setCloseDate}
+          confirmLabel={closeTarget.active ? '복원' : '만기 처리'}
+          busy={closeBusy}
+          onConfirm={confirmSetActive}
+          onCancel={() => setCloseTarget(null)}
+        />
+      )}
     </div>
   )
 }

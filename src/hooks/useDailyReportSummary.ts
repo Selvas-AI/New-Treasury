@@ -46,6 +46,13 @@ export interface InvestGroup {
   totalRaw?:     number           // 외화 원본 금액 (FX 예금 표시용)
   prevKrw?:      number           // 전일잔액 KRW (국채 전용)
   prevRaw?:      number           // 전일잔액 외화 (FX 예금 전용)
+  /**
+   * 보고대상일에 이 그룹에서 개시된 금액(입금) / 종료·해지된 금액(출금).
+   * 레코드의 개시일·해지일에서 직접 도출하므로 `기초 + 입금 − 출금 = 마감` 이
+   * 구조적으로 항상 성립한다(자금일보 연동 항목 유무와 무관).
+   */
+  flowInKrw?:    number
+  flowOutKrw?:   number
   category:      'deposit' | 'non-deposit'
   isBondGroup?:  boolean
   bankLabel?:    string
@@ -55,9 +62,11 @@ export interface InvestGroup {
 }
 
 export interface LoanGroup {
-  label:    string
-  totalKrw: number
-  prevKrw:  number   // 기초(전일) 잔액 — point-in-time 재구성
+  label:      string
+  totalKrw:   number
+  prevKrw:    number   // 기초(전일) 잔액 — point-in-time 재구성
+  flowInKrw:  number   // 보고대상일 신규 실행
+  flowOutKrw: number   // 보고대상일 상환·종료
 }
 
 export interface EquityGroup {
@@ -192,9 +201,10 @@ export function useDailyReportSummary() {
 
     // key: `${product}|${currency}` → { 마감/기초 각각의 krw·raw 합계 }
     const depositMap = new Map<string, {
-      krw: number; raw: number; prevKrw: number; prevRaw: number; currency: string; product: string
+      krw: number; raw: number; prevKrw: number; prevRaw: number
+      inKrw: number; outKrw: number; currency: string; product: string
     }>()
-    const nonDepositMap = new Map<string, { krw: number; prevKrw: number }>()
+    const nonDepositMap = new Map<string, { krw: number; prevKrw: number; inKrw: number; outKrw: number }>()
     const bondByTicker  = new Map<string, InvestmentRecord[]>()
 
     for (const inv of investments) {
@@ -219,19 +229,27 @@ export function useDailyReportSummary() {
         const krw = toKRW(raw, ccy)
         const key = `${inv.product}|${ccy}`
         if (!depositMap.has(key)) {
-          depositMap.set(key, { krw: 0, raw: 0, prevKrw: 0, prevRaw: 0, currency: ccy, product: inv.product })
+          depositMap.set(key, {
+            krw: 0, raw: 0, prevKrw: 0, prevRaw: 0, inKrw: 0, outKrw: 0,
+            currency: ccy, product: inv.product,
+          })
         }
         const e = depositMap.get(key)!
         if (openCurr) { e.krw     += krw; e.raw     += raw }
         if (openPrev) { e.prevKrw += krw; e.prevRaw += raw }
+        // 개시(기초엔 없고 마감에 있음)=입금 / 해지(기초엔 있고 마감에 없음)=출금
+        if (openCurr && !openPrev) e.inKrw  += krw
+        if (!openCurr && openPrev) e.outKrw += krw
 
       } else {
         const val = toKRW(inv.amount ?? 0, ccy)
         const key = ['MMF', 'RP'].includes(inv.product) ? inv.product : '기타'
-        if (!nonDepositMap.has(key)) nonDepositMap.set(key, { krw: 0, prevKrw: 0 })
+        if (!nonDepositMap.has(key)) nonDepositMap.set(key, { krw: 0, prevKrw: 0, inKrw: 0, outKrw: 0 })
         const e = nonDepositMap.get(key)!
         if (openCurr) e.krw     += val
         if (openPrev) e.prevKrw += val
+        if (openCurr && !openPrev) e.inKrw  += val
+        if (!openCurr && openPrev) e.outKrw += val
       }
     }
 
@@ -255,6 +273,8 @@ export function useDailyReportSummary() {
           totalRaw: isFx ? v.raw : undefined,
           prevKrw:  v.prevKrw,
           prevRaw:  isFx ? v.prevRaw : undefined,
+          flowInKrw:  v.inKrw,
+          flowOutKrw: v.outKrw,
           category: 'deposit',
         })
       }
@@ -272,6 +292,8 @@ export function useDailyReportSummary() {
           totalRaw: isFx ? v.raw : undefined,
           prevKrw:  v.prevKrw,
           prevRaw:  isFx ? v.prevRaw : undefined,
+          flowInKrw:  v.inKrw,
+          flowOutKrw: v.outKrw,
           category: 'deposit',
         })
       }
@@ -318,7 +340,9 @@ export function useDailyReportSummary() {
       if (!v || (v.krw === 0 && v.prevKrw === 0)) continue
       result.push({
         product: p, label: p, currency: 'KRW',
-        totalKrw: v.krw, prevKrw: v.prevKrw, category: 'non-deposit',
+        totalKrw: v.krw, prevKrw: v.prevKrw,
+        flowInKrw: v.inKrw, flowOutKrw: v.outKrw,
+        category: 'non-deposit',
       })
     }
 
@@ -378,6 +402,7 @@ export function useDailyReportSummary() {
     const cutoffStr = cutoff.toISOString().slice(0, 10)
 
     let short = 0, long = 0, prevShort = 0, prevLong = 0
+    let inShort = 0, outShort = 0, inLong = 0, outLong = 0
     for (const l of loans) {
       const openCurr = isOpenOn({ ...l, start: l.start_date }, closeDate)
       const openPrev = isOpenOn({ ...l, start: l.start_date }, baseDate)
@@ -386,10 +411,17 @@ export function useDailyReportSummary() {
       const isShort = l.maturity <= cutoffStr
       if (openCurr) { if (isShort) short     += krw; else long     += krw }
       if (openPrev) { if (isShort) prevShort += krw; else prevLong += krw }
+      // 신규 실행 = 입금 / 상환·종료 = 출금
+      if (openCurr && !openPrev) { if (isShort) inShort  += krw; else inLong  += krw }
+      if (!openCurr && openPrev) { if (isShort) outShort += krw; else outLong += krw }
     }
     const result: LoanGroup[] = []
-    if (short > 0 || prevShort > 0) result.push({ label: '단기차입금', totalKrw: short, prevKrw: prevShort })
-    if (long  > 0 || prevLong  > 0) result.push({ label: '장기차입금', totalKrw: long,  prevKrw: prevLong  })
+    if (short > 0 || prevShort > 0) {
+      result.push({ label: '단기차입금', totalKrw: short, prevKrw: prevShort, flowInKrw: inShort, flowOutKrw: outShort })
+    }
+    if (long > 0 || prevLong > 0) {
+      result.push({ label: '장기차입금', totalKrw: long, prevKrw: prevLong, flowInKrw: inLong, flowOutKrw: outLong })
+    }
     return result
   }, [loans, toKRW, selectedDate])
 
