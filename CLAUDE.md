@@ -3416,6 +3416,56 @@ access_codes 로그인의 실제 위험:
 
 ---
 
+### 2026-08-26 세션27차 (후속) — 최초 계정 설정 RPC 이전 + 로그인 탭 레이아웃
+
+#### `register()` 사전조회를 SECURITY DEFINER RPC 로 이전
+```
+'최초 계정 설정'은 signUp 전에 "등록된 이메일인가"를 확인하려고 **로그인 전(anon)** 상태로
+treasury_users 를 직접 읽고 있었다. 이 경로 하나 때문에 treasury_users 정책을
+authenticated 전용으로 조일 수 없었다(= RLS 전환의 마지막 걸림돌).
+→ docs/db/auth_registerable_rpc.sql — is_registerable_email(text) 신설.
+  불리언 + 사유('not_registered'|'inactive')만 반환하고 프로필 행은 내보내지 않는다.
+  security definer + set search_path = public (하이재킹 방지 관례).
+  로그인 전에 호출되므로 execute 권한은 anon 에도 부여한다.
+⚠ 가산적(additive) 스크립트라 먼저 적용해도 기존 동작을 바꾸지 않는다.
+```
+
+#### ⚠ 로컬 테스트로 격리되지 않는 변경이 있다 (작업 순서 원칙)
+```
+로컬 개발 서버와 운영 사이트가 **같은 Supabase 인스턴스**를 쓴다(.env.local 프로젝트 1개).
+  · 클라이언트 코드 변경 → 푸시 전까지 운영 무영향 (로컬 검증 가능)
+  · RPC/테이블 추가      → 가산적이면 무해 (아무도 안 부름)
+  · **정책(RLS) 변경**   → 실행 즉시 운영 반영. 로컬에서 먼저 시험 불가.
+그래서 정책 전환은 반드시 [클라이언트 배포 완료] → [파일럿 1테이블] → [전체] 순서로 한다.
+옛 코드가 운영에 남은 채 정책을 조이면 그 경로가 그대로 깨진다.
+```
+
+#### docs/db/rls_authenticated_only.sql (작성만, **미실행**)
+allow_all_* 정책의 대상 역할을 anon → authenticated 로 전환.
+파일럿(policy_params 1개) → 전체 → 검증 → 롤백까지 단계별 주석.
+⚠ 선행 조건: rls_enable_safe.sql · auth_registerable_rpc.sql 적용 + 접근코드 제거분 배포 완료.
+
+#### [UI] 로그인 탭이 3개가 되며 빈 칸이 생기던 문제
+```
+탭 그리드가 grid-cols-2 하드코딩이라 4탭일 땐 2×2 로 맞았는데, 접근 코드 탭을 빼자
+3탭이 되어 네 번째 칸이 그대로 비었다.
+→ gridTemplateColumns: repeat(TABS.length, 1fr) 로 탭 수에 따라 균등 분할.
+  선택 표시도 흐름 안 막대(선택 탭만 높이가 밀림) → absolute 하단 밑줄로 변경.
+금지: 탭 컨테이너에 컬럼 수를 상수로 박지 말 것 — 탭을 추가·삭제하면 레이아웃이 깨진다.
+```
+
+#### 남은 f/up — 법인 단위 격리 (미착수)
+authenticated 전환은 "로그인한 사람만"까지다. 로그인한 사용자는 **DB 레벨에선 자기 법인이
+아닌 데이터도 읽을 수 있고**, 지금은 화면에서 hasCompany() 로만 가린다(클라이언트 통제).
+정책에 treasury_users.companies 대조를 넣는 작업이 다음 과제.
+참고: fx_trade_history 는 allow_all 로 열려 있는데 자식 fx_trade_fills 는 authenticated
+전용이다 — 같은 워크플로우인데 부모만 열린 상태라 함께 정리할 것.
+
+검증: tsc -b 0 errors · eslint 0 errors · vitest --dir src 70/70 · vite build 성공.
+로컬 개발 서버에서 로그인·최초설정·메뉴 노출 사용자 확인 완료.
+
+---
+
 ## 17. 개발 시 체크리스트
 
 새 세션에서 작업 시작 전:

@@ -114,27 +114,39 @@ export default function LoginPage() {
           <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">통합 자금 모니터링 시스템</p>
         </div>
 
-        {/* 탭 — 2×2 그리드 */}
-        <div className="grid grid-cols-2 gap-px bg-gray-100 dark:bg-slate-800 border-b border-gray-100 dark:border-gray-800">
-          {TABS.map(({ mode: m, icon, label }) => (
-            <button
-              key={m}
-              type="button"
-              onClick={() => switchMode(m)}
-              className={
-                'flex flex-col items-center gap-1 py-3 text-[11px] font-medium transition-colors ' +
-                (mode === m
-                  ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400'
-                  : 'bg-white dark:bg-slate-900 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300')
-              }
-            >
-              <span className="text-base leading-none">{icon}</span>
-              <span>{label}</span>
-              {mode === m && (
-                <span className="block w-5 h-0.5 rounded-full bg-blue-500 mt-0.5" />
-              )}
-            </button>
-          ))}
+        {/* 탭 — 탭 수만큼 균등 분할 (grid-cols-2 고정이면 3탭에서 빈 칸이 생긴다) */}
+        <div
+          className="grid border-b border-gray-100 dark:border-gray-800"
+          style={{ gridTemplateColumns: `repeat(${TABS.length}, minmax(0, 1fr))` }}
+        >
+          {TABS.map(({ mode: m, icon, label }) => {
+            const active = mode === m
+            return (
+              <button
+                key={m}
+                type="button"
+                onClick={() => switchMode(m)}
+                aria-current={active ? 'page' : undefined}
+                className={
+                  'relative flex flex-col items-center justify-center gap-1.5 px-1 py-3.5 ' +
+                  'text-[11px] font-medium whitespace-nowrap transition-colors ' +
+                  (active
+                    ? 'text-blue-600 dark:text-blue-400'
+                    : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-50/70 dark:hover:bg-slate-800/40')
+                }
+              >
+                <span className="text-base leading-none">{icon}</span>
+                <span>{label}</span>
+                {/* 선택 표시는 탭 하단 전체 폭 밑줄 — 레이아웃을 밀지 않도록 absolute */}
+                <span
+                  className={
+                    'absolute inset-x-0 bottom-0 h-0.5 rounded-full transition-colors ' +
+                    (active ? 'bg-blue-500' : 'bg-transparent')
+                  }
+                />
+              </button>
+            )
+          })}
         </div>
 
         {/* 폼 */}
@@ -142,16 +154,16 @@ export default function LoginPage() {
 
           {/* 이메일 (로그인 / 최초설정 / 비밀번호찾기) */}
           <div>
-              <label className="block text-xs font-medium text-gray-500 dark:text-slate-300 mb-1.5">이메일</label>
-              <input
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                placeholder="name@company.com"
-                autoComplete="email"
-                autoFocus
-                className={inputCls}
-              />
+            <label className="block text-xs font-medium text-gray-500 dark:text-slate-300 mb-1.5">이메일</label>
+            <input
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="name@company.com"
+              autoComplete="email"
+              autoFocus
+              className={inputCls}
+            />
           </div>
 
           {/* 비밀번호 (로그인 / 최초설정) */}

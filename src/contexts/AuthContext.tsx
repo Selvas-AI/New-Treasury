@@ -11,7 +11,7 @@
  *   함께 사라졌다. 개발/디버깅도 실제 계정으로 로그인할 것.
  */
 import { useState, useEffect, useMemo, useCallback, useRef, type ReactNode } from 'react'
-import { supabase, restUpdate, withTimeout, resetSupabaseClient } from '../lib/supabase'
+import { supabase, restUpdate, restRpc, withTimeout, resetSupabaseClient } from '../lib/supabase'
 import { AuthContext, MENU_DEFAULTS, ACTION_DEFAULTS } from './auth'
 import type { TreasuryUser, Company, UserRole, SectionKey } from '../types'
 
@@ -266,10 +266,19 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
   // ── 최초 계정 설정 (신규 사용자 비밀번호 등록) ──────────
   const register = useCallback(async (email: string, password: string): Promise<string | null> => {
     const lc = email.trim().toLowerCase()
-    const { data: profile } = await supabase
-      .from('treasury_users').select('id, is_active').eq('email', lc).single()
-    if (!profile)           return '등록되지 않은 이메일입니다. 관리자에게 계정 생성을 요청하세요.'
-    if (!profile.is_active) return '비활성화된 계정입니다. 관리자에게 문의하세요.'
+    // ⚠ 로그인 전(anon) 경로다. treasury_users 를 직접 읽으면 그 테이블 정책을
+    //   authenticated 전용으로 조일 수 없다 → 판정을 SECURITY DEFINER RPC 안으로 옮겼다.
+    //   함수는 불리언과 사유만 돌려주고 프로필 행은 밖으로 내보내지 않는다.
+    //   (docs/db/auth_registerable_rpc.sql)
+    const { data: chk, error: chkErr } = await restRpc<{ registerable: boolean; reason: string | null }>(
+      'is_registerable_email', { p_email: lc },
+    )
+    if (chkErr) return chkErr.message
+    const verdict = chk?.[0]
+    if (!verdict)                          return '계정 확인에 실패했습니다. 잠시 후 다시 시도하세요.'
+    if (verdict.reason === 'not_registered') return '등록되지 않은 이메일입니다. 관리자에게 계정 생성을 요청하세요.'
+    if (verdict.reason === 'inactive')       return '비활성화된 계정입니다. 관리자에게 문의하세요.'
+    if (!verdict.registerable)               return '계정 설정을 진행할 수 없습니다. 관리자에게 문의하세요.'
     const { error } = await supabase.auth.signUp({ email: lc, password })
     if (error) {
       if (error.message.includes('already registered')) return '이미 등록된 이메일입니다. 로그인 탭을 이용하세요.'
