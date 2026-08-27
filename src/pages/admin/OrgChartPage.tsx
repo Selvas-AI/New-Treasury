@@ -73,17 +73,26 @@ function ApprovalConfigPanel({ company }: { company: Company }) {
   const [busy, setBusy] = useState(false)
   const [editTarget, setEditTarget] = useState<number | null>(null)
   const [nameByCode, setNameByCode] = useState<Record<string, string>>({})
+  // 결재선에 넣어도 계정의 can_approve 가 false 면 승인 버튼이 아예 안 나온다.
+  // 두 값이 별개 필드라 관리자가 그 사실을 알 방법이 없었다(2026-08-27 실사고).
+  const [canApproveByCode, setCanApproveByCode] = useState<Record<string, boolean>>({})
 
-  // 결재자 코드 → 이름 매핑 (테이블 '이름' 컬럼 표시용)
+  // 결재자 코드 → 이름/결재권한 매핑 (테이블 표시용)
   useEffect(() => {
     supabase
       .from('treasury_users')
-      .select('user_code, name')
+      .select('user_code, name, can_approve, role')
       .then(({ data }) => {
         if (!data) return
         const map: Record<string, string> = {}
-        for (const u of data as { user_code: string; name: string }[]) map[u.user_code] = u.name
+        const ap: Record<string, boolean> = {}
+        for (const u of data as { user_code: string; name: string; can_approve: boolean; role: string }[]) {
+          map[u.user_code] = u.name
+          // master 는 canApprove 게이트를 무조건 통과한다(DailyReportPage 와 동일 규칙)
+          ap[u.user_code] = u.role === 'master' || u.can_approve !== false
+        }
         setNameByCode(map)
+        setCanApproveByCode(ap)
       })
   }, [])
 
@@ -121,6 +130,13 @@ function ApprovalConfigPanel({ company }: { company: Company }) {
       {sorted.length === 0 && !ac.loading ? (
         <p className="px-5 py-6 text-sm text-gray-400 dark:text-gray-600">설정된 결재선이 없습니다. 아래에서 추가하세요.</p>
       ) : (
+        <>
+        {sorted.some(c => canApproveByCode[c.approver_code] === false) && (
+          <p className="mx-5 mt-3 text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700 rounded-lg px-3 py-2">
+            ⚠ 결재선에 등록됐지만 <b>결재 권한(can_approve)이 없는 결재자</b>가 있습니다 — 해당 단계에서 승인·반려 버튼이
+            표시되지 않아 결재가 진행되지 않습니다. 사용자 관리에서 결재 권한을 부여하세요.
+          </p>
+        )}
         <table className="w-full text-xs">
           <thead>
             <tr className="bg-gray-50 dark:bg-slate-700/50 border-b border-gray-100 dark:border-slate-700">
@@ -135,7 +151,15 @@ function ApprovalConfigPanel({ company }: { company: Company }) {
             {sorted.map(cfg => (
               <tr key={cfg.step} className="hover:bg-gray-50 dark:hover:bg-slate-700/30">
                 <td className="px-4 py-3 font-semibold text-blue-600 dark:text-blue-400">{cfg.step}단계</td>
-                <td className="px-4 py-3 text-gray-700 dark:text-gray-200">{nameByCode[cfg.approver_code] ?? '—'}</td>
+                <td className="px-4 py-3 text-gray-700 dark:text-gray-200">
+                  {nameByCode[cfg.approver_code] ?? '—'}
+                  {canApproveByCode[cfg.approver_code] === false && (
+                    <span
+                      title="이 계정은 결재 권한(can_approve)이 꺼져 있어 자금일보에 승인·반려 버튼이 표시되지 않습니다. 사용자 관리에서 결재 권한을 부여하세요."
+                      className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-700 whitespace-nowrap"
+                    >⚠ 결재 권한 없음</span>
+                  )}
+                </td>
                 <td className="px-4 py-3 text-gray-700 dark:text-gray-200">{cfg.role_label}</td>
                 <td className="px-4 py-3 font-mono text-gray-500 dark:text-slate-300">{cfg.approver_code}</td>
                 <td className="px-4 py-3 text-right space-x-2">
@@ -152,6 +176,7 @@ function ApprovalConfigPanel({ company }: { company: Company }) {
             ))}
           </tbody>
         </table>
+        </>
       )}
 
       {/* 추가/수정 폼 */}

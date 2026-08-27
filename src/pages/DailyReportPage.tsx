@@ -864,6 +864,21 @@ export default function DailyReportPage() {
     (myApproveStep !== undefined && myApproveStep === nextStep && (user?.can_approve !== false))
   )
 
+  // 결재 중인데 승인/반려 버튼이 안 보이는 이유를 화면에 밝힌다.
+  // 버튼은 canApprove 가 false 면 아예 렌더되지 않아, 안내가 없으면 결재자가
+  // "권한이 없는 건지 내 차례가 아닌 건지" 알 방법이 없다(2026-08-27 리포트).
+  const approveBlockedReason: string | null = (() => {
+    if (status !== 'submitted' || canApprove) return null
+    if (myApproveStep === undefined) return '이 법인 결재선에 등록되지 않은 계정입니다 — 조직도/결재선 관리에서 확인하세요.'
+    if (user?.can_approve === false) return '계정에 결재 권한(can_approve)이 없습니다 — 사용자 관리에서 부여해야 합니다.'
+    if (nextStep === undefined) return '모든 결재 단계가 승인된 상태입니다.'
+    if (myApproveStep > nextStep) {
+      const waiting = ac.config.find(c => c.step === nextStep)
+      return `${nextStep}단계(${waiting?.role_label ?? '-'} · ${waiting?.approver_code ?? '-'}) 승인 후에 ${myApproveStep}단계 차례가 됩니다 — 순차 결재입니다.`
+    }
+    return `${myApproveStep}단계는 이미 승인 처리되었습니다.`
+  })()
+
   // ── 모달 상태 ────────────────────────────────────────────────
   const [approveModal, setApproveModal] = useState<{ comment: string } | null>(null)
   const [rejectModal,  setRejectModal]  = useState<{ comment: string } | null>(null)
@@ -1058,6 +1073,12 @@ export default function DailyReportPage() {
         <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full ${badge.cls}`}>
           {badge.label}
         </span>
+
+        {approveBlockedReason && (
+          <span className="text-[11px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700 rounded-lg px-2 py-1">
+            ⏳ {approveBlockedReason}
+          </span>
+        )}
 
         {/* 액션 버튼 */}
         <div className="flex gap-2">
