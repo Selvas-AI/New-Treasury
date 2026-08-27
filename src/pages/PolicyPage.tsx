@@ -289,7 +289,7 @@ function FxStatusCard({
 
       <div className="flex items-center justify-between">
         <span className="text-xs text-gray-400">
-          가용 자금 합계: {fmtKRW(totalWithFx)}
+          가용 자금 합계(밴드 분모): {fmtKRW(totalWithFx)}
           {fxKrw === 0 && <span className="ml-1 text-orange-400">(외화 잔고 없음)</span>}
         </span>
         {onNavigate && (

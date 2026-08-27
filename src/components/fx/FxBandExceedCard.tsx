@@ -67,6 +67,10 @@ export default function FxBandExceedCard({ data, marketRates, canPropose, onProp
             현재 {data.ratio.toFixed(1)}% · 밴드 {data.min ?? '—'}~{data.max}% ·
             보유 {fmtKRW(data.holdingsKRW)} / 상한 {fmtKRW(data.ceilingKRW)}
           </p>
+          {/* 분모를 명시한다 — 적지 않으면 사용자가 비중을 역산해 보고 값이 어긋났다고 오해한다. */}
+          <p className="mt-0.5 text-[11px] text-gray-400 dark:text-slate-500 tabular-nums">
+            분모 = 가용 자금 합계 {fmtKRW(data.denominatorKRW)} (통합상황판과 동일 · 불가용 제외)
+          </p>
         </div>
       </div>
 

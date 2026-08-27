@@ -61,8 +61,8 @@ export interface PolicyRealData {
   totalFundEstimate: number   // 운전자금+운용자금+국채 (정책 파라미터 없을 때 추정)
 
   // ── FX 정책 비교용 SSOT ──
-  // fxRatio는 전 통화 외화자산(가용·잠금 포함) / 전사 자금 바구니로 계산한다.
-  // totalFundAvail은 대시보드 가용자금 호환 필드이며 정책밴드 분모로 쓰지 않는다.
+  // fxRatio는 전 통화 외화자산(FIFO 잠금 포함) / 가용 자금 합계로 계산한다.
+  // fxPolicyDenominator === totalFundAvail (2026-08-27~) — 대시보드 가용자금 합계와 동일.
   fxTotalHoldings: number
   totalFundAvail: number
   fxRatio: number
@@ -167,10 +167,15 @@ function computePolicyData(raw: RawCompanyData, loading: boolean, toKRW: ToKRWFn
     return [code, { nativeAmount, krwAmount: toKRWAmt(nativeAmount, code) }]
   })) as Record<FxCode, { nativeAmount: number; krwAmount: number }>
   const fxPortfolioHoldings = Object.values(fxByCurrency).reduce((sum, row) => sum + row.krwAmount, 0)
-  // 총 자금 대비 외화 비율: 환전 가능 여부와 무관하게 회사가 보유한 자산을 분모/분자에 모두 포함한다.
-  const fxPolicyDenominator = operatingCashWithFx + investAvail + investUnavail + bondAvail + equityAvail
-  const fxTotalHoldings = fxPortfolioHoldings
+  // 총 자금 대비 외화 비율의 분모 = 가용 자금 합계 (2026-08-27 변경).
+  // 불가용 운용자금(전환사채 등)은 현금성 자산이 아니라 정책밴드 분모에서 제외한다.
+  // 국채·지분도 원래 가용분만 넣고 있었으므로 이 편이 일관되고, 대시보드 '가용자금 합계'와도
+  // 같은 값이 된다(과거엔 운용만 불가용을 포함해 두 화면 비중이 25.9% vs 26.4%로 갈렸다).
+  // ⚠ 분자(fxPortfolioHoldings)는 available 필터가 없다 — 현재 불가용 외화 보유가 0이라
+  //    모집단이 일치하지만, 불가용 외화가 생기면 분자에서도 뺄지 재검토할 것.
   const totalFundAvail  = operatingCashWithFx + investAvail + bondAvail + equityAvail
+  const fxPolicyDenominator = totalFundAvail
+  const fxTotalHoldings = fxPortfolioHoldings
   const fxRatio = fxPolicyDenominator > 0 ? (fxPortfolioHoldings / fxPolicyDenominator) * 100 : 0
 
   return {

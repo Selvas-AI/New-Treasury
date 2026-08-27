@@ -229,13 +229,11 @@ export default function FxPolicyTab({ company }: { company: Company }) {
   // ── 가용 자금 합계 — usePolicyDashboard(SSOT) 값을 그대로 사용 (자체 재계산 금지)
   const latestDaily     = policyData.latestDaily
   const operatingCash   = policyData.operatingCashWithFx
-  // "운용" 은 가용+불가용 합계다 — 분모(totalFund)에도 불가용이 포함되므로
-  // 표시를 가용분만 보여주면 합계와 어긋난다(과거 실제 불일치였던 지점).
-  const investAllCash   = policyData.investAvail + policyData.investUnavail
+  // 분모(totalFund)가 가용분만 쓰므로 표시도 가용 운용자금만 보여준다 — 어긋나면 안 된다.
+  const investAllCash   = policyData.investAvail
   const bondAvailCash   = policyData.bondAvail
   const equityAvailCash = policyData.equityAvail
-  // 정책밴드 분모는 환전 가능액이 아니라 회사의 전체 자금 바구니다.
-  // 정기예금/불가용 외화도 외화위험에는 노출되므로 분자와 분모에 함께 포함한다.
+  // 정책밴드 분모 = 가용 자금 합계. 불가용 운용자금(전환사채 등)은 현금성 자산이 아니라 제외한다.
   const totalFund = policyData.fxPolicyDenominator
 
   // ── 이중 안전장치 (로컬 슬라이더 값으로 실시간 계산 — Supabase 저장 전에도 즉각 반영)
@@ -897,11 +895,11 @@ export default function FxPolicyTab({ company }: { company: Company }) {
 
           {/* 총자금 표시 (읽기 전용) */}
           <div className="bg-gray-50 dark:bg-slate-700/50 rounded-xl p-3 mb-3">
-            <p className="text-xs text-gray-400">가용 자금 합계 (자동계산)</p>
+            <p className="text-xs text-gray-400">가용 자금 합계 (정책밴드 분모 · 자동계산)</p>
             <p className="text-base font-bold text-gray-800 dark:text-slate-100 tabular-nums">{fmtKRW(totalFund)}</p>
             <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
               <p className="text-xs text-gray-400">운전 <span className="text-gray-600 dark:text-slate-300">{fmtKRW(operatingCash)}</span></p>
-              <p className="text-xs text-gray-400">+ 운용 <span className="text-gray-600 dark:text-slate-300">{fmtKRW(investAllCash)}</span></p>
+              <p className="text-xs text-gray-400">+ 운용(가용) <span className="text-gray-600 dark:text-slate-300">{fmtKRW(investAllCash)}</span></p>
               <p className="text-xs text-gray-400">+ 국채(가용) <span className="text-gray-600 dark:text-slate-300">{fmtKRW(bondAvailCash)}</span></p>
               {equityAvailCash > 0 && (
                 <p className="text-xs text-gray-400">+ 지분(가용) <span className="text-gray-600 dark:text-slate-300">{fmtKRW(equityAvailCash)}</span></p>
