@@ -864,6 +864,15 @@ export default function DailyReportPage() {
     (myApproveStep !== undefined && myApproveStep === nextStep && (user?.can_approve !== false))
   )
 
+  // 상신 시 자동 승인할 단계 — 1단계 결재자가 상신자 본인이고 승인 권한이 있을 때만.
+  // 2단계 이후는 대상이 아니다(다른 사람의 검토를 건너뛰게 된다).
+  const firstStepCfg = sortedSteps.length ? ac.config.find(c => c.step === sortedSteps[0]) : undefined
+  const autoApproveStep: number | null =
+    firstStepCfg
+    && firstStepCfg.approver_code === user?.code
+    && (user?.role === 'master' || user?.can_approve !== false)
+      ? firstStepCfg.step : null
+
   // 결재 중인데 승인/반려 버튼이 안 보이는 이유를 화면에 밝힌다.
   // 버튼은 canApprove 가 false 면 아예 렌더되지 않아, 안내가 없으면 결재자가
   // "권한이 없는 건지 내 차례가 아닌 건지" 알 방법이 없다(2026-08-27 리포트).
@@ -966,7 +975,19 @@ export default function DailyReportPage() {
     setActionBusy(true)
     // report 없으면 먼저 생성
     if (!dr.report?.id) await dr.saveReport(resolvedCompany, selectedDate, {})
-    await dr.submitReport(user.code, user.label ?? user.code)
+    const submitted = await dr.submitReport(user.code, user.label ?? user.code)
+    // 상신자 == 1단계 결재자면 그 단계를 자동 승인한다 — 같은 사람이 상신 직후
+    // 자기 단계를 한 번 더 눌러야 하는 무의미한 단계를 없앤다.
+    // ⚠ 결재선에 있다는 것만으로는 부족하고 승인 권한(can_approve)도 있어야 한다
+    //   — 수동 승인(canApprove)과 같은 기준을 쓴다. 권한이 없으면 자동 승인도 하지
+    //   않고 '결재 중'으로 남으며, 그 이유는 approveBlockedReason 이 표시한다.
+    if (submitted && autoApproveStep !== null) {
+      const isFinal = lastStep === undefined ? true : autoApproveStep === lastStep
+      await dr.approveReport(
+        autoApproveStep, user.code, user.label ?? user.code,
+        '상신자 = 1단계 결재자 — 자동 승인', isFinal,
+      )
+    }
     setActionBusy(false)
   }
 
@@ -1095,14 +1116,17 @@ export default function DailyReportPage() {
             <button
               disabled={!validation.isValid || actionBusy}
               onClick={() => void handleSubmit()}
-              title={validation.isValid ? '검증 완료 — 결재 상신' : '입출금 합계 검증 후 활성화'}
+              title={!validation.isValid ? '입출금 합계 검증 후 활성화'
+                : autoApproveStep !== null
+                  ? `검증 완료 — 결재 상신 (본인이 ${autoApproveStep}단계 결재자이므로 상신과 동시에 ${autoApproveStep}단계가 승인 처리됩니다)`
+                  : '검증 완료 — 결재 상신'}
               className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-colors ${
                 validation.isValid
                   ? 'bg-blue-600 hover:bg-blue-700 text-white'
                   : 'bg-blue-600 text-white opacity-40 cursor-not-allowed'
               }`}
             >
-              {actionBusy ? '처리 중…' : '상신 →'}
+              {actionBusy ? '처리 중…' : autoApproveStep !== null ? `상신 + ${autoApproveStep}단계 승인 →` : '상신 →'}
             </button>
           )}
           {canApprove && (
