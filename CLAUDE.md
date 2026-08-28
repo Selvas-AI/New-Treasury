@@ -100,6 +100,16 @@
 | 작업 권한(조회/입력·수정/삭제)이 있는 화면 | 위 + `NavItem.section` 에 `SectionKey` 지정 + `ACTION_DEFAULTS`(auth.ts) |
 | 역할별 기본 노출 여부 | `MENU_DEFAULTS`(auth.ts) — **넣지 않으면 아무도 못 본다** |
 
+> **메뉴 노출은 두 축이 AND 로 결합된다** (2026-08-28):
+> `treasury_users.menus`(이 사람이 볼 수 있는가) **AND** `companies.menus`(이 법인에서 쓰는 메뉴인가).
+> 후자는 권한이 아니라 **표시 필터**로, 법인 자금 사정상 안 쓰는 메뉴를 숨겨 노이즈를 줄인다
+> (`null` = 전체 표시 = 기존 동작). 판정은 `AuthContext.hasMenu()` 한 곳에 있어 사이드바와
+> 라우트 가드(`App.tsx`)가 함께 적용된다.
+> ⚠ 관리 섹션(`admin` slug)은 법인 필터 대상이 아니다 — 여기 걸리면 회사 관리에 못 들어가
+> 설정을 되돌릴 수 없다. `ASSIGNABLE_SLUGS` 안의 슬러그에만 적용한다.
+> ⚠ master 에게도 적용된다(숨긴 사람이 곧 master다). 숨겨진 개수는 사이드바 하단에
+> master 에게만 안내되며 회사 관리로 바로 연결된다.
+
 ⛔ **금지**
 - `Sidebar.tsx` 나 `UsersPage.tsx` **안에 메뉴 목록을 다시 정의하지 말 것.**
   (과거 `NAV_GROUPS`/`MENU_SLUGS` 이중 정의가 위 사고의 원인이다)
@@ -1490,6 +1500,11 @@ baf8ef9 fix: 투자 집행 연동 저장 실패 수정 + 자산 구분(운용/�
    토큰이 유실되는 것 방지.)
 ```
 
+- **`docs/db/company_menus.sql`** ⭐ — `companies.menus` jsonb (2026-08-28, 법인별 메뉴 구성).
+  **실행 필요**. 미실행 시 회사 관리의 '메뉴 구성' 저장만 실패하고(안내 메시지 표시), 앱은
+  기존과 동일하게 전체 메뉴를 표시한다(`select('*')` 폴백 — 컬럼을 명시하면 400 으로
+  법인 목록 전체가 폴백으로 떨어지므로 명시하지 말 것).
+
 ### 미구현 기능
 - `useDashboardLayout.ts` — 생성됐으나 현재 미사용 (DnD 롤백)
 - Zustand 전역 상태 — 설치만 됨
@@ -1786,7 +1801,7 @@ useEffect(() => {
 | `policy_params` | 정책 파라미터 Key-Value (company+param_key unique) |
 | `policy_bank_limits` | **거래 금융기관 마스터** + 한도 설정 (company+bank_name unique) |
 | `cashflow_plan` | 12주 롤링 포캐스트 (company+week_start unique) |
-| `companies` | **법인 마스터** (name unique, short_name/active/sort_order) — 동적 회사 관리. `docs/db/companies.sql` |
+| `companies` | **법인 마스터** (name unique, short_name/active/sort_order + `menus` jsonb — 법인별 표시 메뉴, null=전체). `docs/db/companies.sql` / `docs/db/company_menus.sql` |
 | `user_table_views` | NotionTable 컬럼 토글·정렬 설정 (sb_id+table_id unique) |
 | `daily_reports` | 자금일보 헤더 (company+date unique, status: draft/submitted/approved) |
 | `daily_report_items` | 입출금 라인 아이템 (direction: in/out, category, amount, linked_type/id) |

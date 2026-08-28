@@ -32,7 +32,7 @@ const ACTIONS: { key: keyof SectionPermission; label: string }[] = [
 export default function MenuPermissionTree({
   selectedMenus, roleDefaultMenus, menuEnabled, onMenuChange,
   actions, roleDefaultActions, actionEnabled, onActionChange,
-  categorySlot,
+  categorySlot, menusOnly = false,
 }: {
   selectedMenus: string[]
   roleDefaultMenus: string[]
@@ -45,6 +45,11 @@ export default function MenuPermissionTree({
   onActionChange: (next: Partial<Record<SectionKey, SectionPermission>>) => void
   /** 자금일보 작성 행 아래에 끼워 넣을 카테고리 권한 UI */
   categorySlot?: React.ReactNode
+  /**
+   * 메뉴 체크만 그린다 (작업 권한 열 숨김) — 법인별 메뉴 구성(회사 관리)용.
+   * 법인 메뉴는 "이 법인에서 쓰는 화면인가"라 작업 권한 축이 없다.
+   */
+  menusOnly?: boolean
 }) {
   const [openCat, setOpenCat] = useState(false)
 
@@ -116,8 +121,8 @@ export default function MenuPermissionTree({
     <div className="rounded-lg border border-gray-200 dark:border-slate-600 divide-y divide-gray-100 dark:divide-slate-700">
       {/* 열 머리 */}
       <div className="flex items-center gap-2 bg-gray-50 px-3 py-1.5 text-[10px] font-medium text-gray-400 dark:bg-slate-800 dark:text-slate-500">
-        <span>메뉴 접근</span>
-        <span className="ml-auto">작업 권한 (조회 · 입력·수정 · 삭제)</span>
+        <span>{menusOnly ? '표시할 메뉴' : '메뉴 접근'}</span>
+        {!menusOnly && <span className="ml-auto">작업 권한 (조회 · 입력·수정 · 삭제)</span>}
       </div>
 
       {rows.map(({ group, entries }) => {
@@ -188,17 +193,17 @@ export default function MenuPermissionTree({
                         </span>
                       )}
                       {/* 항목이 하나뿐이면 작업 권한을 같은 줄에 붙인다 */}
-                      {single && single.section && (
+                      {!menusOnly && single && single.section && (
                         <span className="ml-auto"><ActionCells k={single.section} menuOn={on} /></span>
                       )}
-                      {single && !single.section && (
+                      {!menusOnly && single && !single.section && (
                         <span className="ml-auto text-[10px] text-gray-300 dark:text-slate-600">조회 전용</span>
                       )}
                     </div>
 
                     {/* 항목이 여럿이거나 extraSections 가 있으면 하위 행으로 작업 권한을 분리 */}
                     <div className="space-y-0.5 pl-6">
-                      {shared && items.map(i => (
+                      {!menusOnly && shared && items.map(i => (
                         <div key={i.to} className="flex flex-wrap items-center gap-x-2 py-0.5 text-[11px] text-gray-500 dark:text-slate-400">
                           <span>{i.icon} {i.label}</span>
                           {i.section
@@ -206,7 +211,7 @@ export default function MenuPermissionTree({
                             : <span className="ml-auto text-[10px] text-gray-300 dark:text-slate-600">조회 전용</span>}
                         </div>
                       ))}
-                      {items.flatMap(i => i.extraSections ?? []).map(ex => (
+                      {!menusOnly && items.flatMap(i => i.extraSections ?? []).map(ex => (
                         <div key={ex.key} className="flex flex-wrap items-center gap-x-2 py-0.5 text-[11px] text-gray-500 dark:text-slate-400">
                           <span className="text-gray-400">└ {ex.label}</span>
                           <span className="ml-auto"><ActionCells k={ex.key} menuOn={on} /></span>

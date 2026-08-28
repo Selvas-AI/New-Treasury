@@ -7,7 +7,8 @@ import type { FxCode } from '../types'
 // ⚠ 메뉴 정의는 src/lib/navTree.ts 가 SSOT — 사용자 관리의 권한 트리와 같은 상수를 읽는다.
 //   여기에 메뉴를 다시 정의하지 말 것(과거 UsersPage 와 어긋나 audit-log 를 아무도
 //   부여할 수 없는 상태가 됐다 — 세션26차 13일차).
-import { NAV_SECTIONS as NAV_GROUPS, ADMIN_SECTION } from '../lib/navTree'
+import { NAV_SECTIONS as NAV_GROUPS, ADMIN_SECTION, ASSIGNABLE_SLUGS } from '../lib/navTree'
+import { useCompanies } from '../hooks/useCompanies'
 
 const FX_CODES: FxCode[] = ['USD', 'EUR', 'JPY', 'GBP', 'CNY']
 
@@ -18,7 +19,12 @@ interface Props {
 }
 
 export default function Sidebar({ collapsed, onCollapse, onNavClick }: Props) {
-  const { user, hasMenu } = useAuth()
+  const { user, hasMenu, currentCompany } = useAuth()
+  const { menusOf } = useCompanies()
+  // 법인 메뉴 구성으로 가려진 개수 (사용자 권한으로 가려진 것은 세지 않는다 — 별개 축이다)
+  const companyMenus = menusOf(currentCompany)
+  const hiddenByCompany = companyMenus
+    ? ASSIGNABLE_SLUGS.filter(sl => !companyMenus.includes(sl)).length : 0
   const { openCount } = useIssueCount()
   const fx = useFx()
   const location = useLocation()
@@ -223,6 +229,16 @@ export default function Sidebar({ collapsed, onCollapse, onNavClick }: Props) {
             </div>
           )
         })()}
+
+        {/* 법인별 메뉴 구성으로 숨겨진 항목이 있으면 master 에게만 알린다 —
+            "메뉴가 사라졌다"는 오해를 막고 되돌릴 경로를 바로 준다.
+            일반 사용자에게는 노이즈 제거가 목적이므로 표시하지 않는다. */}
+        {!collapsed && user?.role === 'master' && hiddenByCompany > 0 && (
+          <NavLink to="/admin/companies" onClick={onNavClick}
+            className="mt-3 block rounded-md border border-slate-700 px-2 py-1.5 text-[10px] leading-snug text-gray-500 hover:text-gray-300 hover:border-slate-600">
+            {currentCompany} 메뉴 구성으로 {hiddenByCompany}개 숨김 — 회사 관리에서 변경 →
+          </NavLink>
+        )}
       </nav>
 
       {/* ── 하단: 실시간 환율 ── */}

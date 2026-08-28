@@ -14,6 +14,8 @@ import { useState, useEffect, useMemo, useCallback, useRef, type ReactNode } fro
 import { supabase, restUpdate, restRpc, withTimeout, resetSupabaseClient } from '../lib/supabase'
 import { AuthContext, MENU_DEFAULTS, ACTION_DEFAULTS } from './auth'
 import type { TreasuryUser, Company, UserRole, SectionKey } from '../types'
+import { useCompanies } from '../hooks/useCompanies'
+import { ASSIGNABLE_SLUGS } from '../lib/navTree'
 
 const SB_AUTH_KEY = `sb-${import.meta.env.VITE_SUPABASE_URL?.match(/\/\/([^.]+)/)?.[1]}-auth-token`
 // 프로필 캐시 — 네트워크 없이 즉시 복원, 새로고침 시 로그아웃 방지
@@ -82,6 +84,7 @@ async function loadProfile(email: string, authId: string): Promise<TreasuryUser 
 export default function AuthProvider({ children }: { children: ReactNode }) {
   const [user,            setUser]            = useState<TreasuryUser | null>(null)
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null)
+  const { menusOf } = useCompanies()
   const [loading,         setLoading]         = useState(true)
   const [recoveryMode,    setRecoveryMode]    = useState(false)
   // Ref: onAuthStateChange 클로저 안에서 최신값 읽기 위해 ref 사용
@@ -317,6 +320,11 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut()
   }, [])
 
+  // 현재 법인의 표시 메뉴 (null = 전체). useCompanies 는 모듈 캐시 + 리스너 구조라
+  // 캐시가 나중에 채워져도 여기서 재렌더가 일어난다 — 비훅 헬퍼를 쓰면 첫 로드에
+  // 필터가 적용되지 않는다.
+  const companyMenus = menusOf(currentCompany)
+
   // ── 권한 헬퍼 ──────────────────────────────────────────
   const canEdit    = useCallback(() => !!user && user.role !== 'viewer' && user.role !== 'ceo', [user])
   const canDelete  = useCallback(() => !!user && (user.role === 'master' || user.can_delete), [user])
@@ -324,10 +332,17 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
 
   const hasMenu = useCallback((slug: string): boolean => {
     if (!user) return false
+    // ① 법인별 메뉴 구성 (companies.menus) — 권한이 아니라 표시 필터다.
+    //    법인 자금 사정상 쓰지 않는 메뉴를 숨겨 노이즈를 줄이는 용도라 master 에게도 적용한다
+    //    (숨긴 사람이 곧 master이고, 회사 관리에서 언제든 되돌릴 수 있다).
+    //    ⚠ 관리 섹션(admin)은 법인과 무관하므로 대상에서 제외한다 — 여기 걸리면
+    //      회사 관리 자체에 못 들어가 설정을 되돌릴 수 없게 된다.
+    if (companyMenus && ASSIGNABLE_SLUGS.includes(slug) && !companyMenus.includes(slug)) return false
+    // ② 사용자 권한
     if (user.role === 'master') return true
     const allowed = user.menus ?? MENU_DEFAULTS[user.role] ?? MENU_DEFAULTS['editor'] ?? []
     return allowed.includes('*') || allowed.includes(slug)
-  }, [user])
+  }, [user, companyMenus])
 
   const hasCompany = useCallback((c: Company): boolean => {
     if (!user) return false

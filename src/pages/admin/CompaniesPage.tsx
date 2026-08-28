@@ -12,9 +12,91 @@ import { Navigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { restInsert, restUpdate, restDelete } from '../../lib/supabase'
 import { useCompanies, invalidateCompanies, type CompanyRecord } from '../../hooks/useCompanies'
+import MenuPermissionTree from '../../components/admin/MenuPermissionTree'
+import { ASSIGNABLE_SLUGS } from '../../lib/navTree'
 
 const inputCls =
   'w-full border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-700 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-400'
+
+/**
+ * 법인별 메뉴 구성 (2026-08-28)
+ *
+ * ⚠ 권한이 아니라 **표시 필터**다. 사용자 권한(treasury_users.menus)과 AND 로 결합된다.
+ *   법인 자금 사정상 쓰지 않는 메뉴가 사이드바에 다 보여 정작 필요한 정보가 묻히던
+ *   문제를 해결하기 위한 것이다(2026-08-28 요청).
+ *
+ * ⚠ 관리 섹션은 대상이 아니다 — 법인과 무관하고, 여기서 끄면 이 화면 자체에
+ *   못 들어와 되돌릴 수 없다(navTree 의 masterOnly 섹션은 트리에서 체크 불가).
+ */
+function MenuConfigPanel({ rec, onClose }: { rec: CompanyRecord; onClose: () => void }) {
+  const saved = Array.isArray(rec.menus) ? rec.menus : null
+  const [enabled, setEnabled] = useState(saved !== null)
+  const [menus, setMenus] = useState<string[]>(saved ?? [...ASSIGNABLE_SLUGS])
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const [ok, setOk] = useState(false)
+
+  async function save() {
+    setBusy(true); setErr(null); setOk(false)
+    try {
+      // enabled=false → null 저장 = 전체 표시(기존 동작)
+      const next = enabled ? menus.filter(m => ASSIGNABLE_SLUGS.includes(m)) : null
+      const { error } = await restUpdate('companies', { menus: next }, { id: rec.id })
+      if (error) {
+        setErr(error.message.includes('menus')
+          ? "companies.menus 컬럼이 없습니다 — docs/db/company_menus.sql 을 먼저 실행하세요."
+          : error.message)
+        return
+      }
+      await invalidateCompanies()
+      setOk(true)
+      setTimeout(() => setOk(false), 2500)
+    } finally { setBusy(false) }
+  }
+
+  const hiddenCount = enabled ? ASSIGNABLE_SLUGS.filter(sl => !menus.includes(sl)).length : 0
+
+  return (
+    <div className="mt-2 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50/40 dark:bg-indigo-900/10 p-3 space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-semibold text-gray-700 dark:text-slate-200">{rec.name} 메뉴 구성</span>
+        <label className="flex items-center gap-1.5 text-xs text-gray-600 dark:text-slate-300 cursor-pointer">
+          <input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)}
+            className="h-3.5 w-3.5 accent-indigo-600" />
+          이 법인만 별도 구성
+        </label>
+        {!enabled && <span className="text-[11px] text-gray-400">해제 시 전체 메뉴가 표시됩니다(기본값).</span>}
+        {enabled && hiddenCount > 0 && (
+          <span className="text-[11px] text-amber-600 dark:text-amber-400">{hiddenCount}개 메뉴 숨김</span>
+        )}
+        <button onClick={onClose} className="ml-auto text-xs text-gray-400 hover:text-gray-600">닫기</button>
+      </div>
+
+      <div className={enabled ? '' : 'opacity-50 pointer-events-none'}>
+        <MenuPermissionTree
+          menusOnly
+          selectedMenus={menus}
+          roleDefaultMenus={ASSIGNABLE_SLUGS}
+          menuEnabled={enabled}
+          onMenuChange={setMenus}
+          actions={{}} roleDefaultActions={{}} actionEnabled={false} onActionChange={() => {}}
+        />
+      </div>
+
+      <div className="flex items-center gap-3">
+        <button onClick={() => void save()} disabled={busy}
+          className="bg-indigo-600 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-indigo-700 disabled:opacity-50">
+          {busy ? '저장 중…' : '메뉴 구성 저장'}
+        </button>
+        {err && <p className="text-xs text-red-500">{err}</p>}
+        {ok && <p className="text-xs text-emerald-600 dark:text-emerald-400">✓ 저장되었습니다. 해당 법인 선택 시 즉시 반영됩니다.</p>}
+        <span className="ml-auto text-[11px] text-gray-400">
+          사용자 권한과 함께 적용됩니다 — 둘 다 허용해야 보입니다.
+        </span>
+      </div>
+    </div>
+  )
+}
 
 export default function CompaniesPage() {
   const { user } = useAuth()
@@ -24,6 +106,8 @@ export default function CompaniesPage() {
   const [saving, setSaving] = useState(false)
   const [success, setSuccess] = useState(false)
   const [busyId, setBusyId] = useState<number | null>(null)
+  // 법인별 메뉴 구성 편집 대상 (id) — null 이면 닫힘
+  const [menuTarget, setMenuTarget] = useState<number | null>(null)
 
   if (user?.role !== 'master') return <Navigate to="/dashboard" replace />
 
@@ -107,7 +191,8 @@ export default function CompaniesPage() {
         <div className="space-y-2">
           {companies.map(rec => (
             <div key={rec.id}
-              className={`flex items-center justify-between px-3 py-2.5 rounded-lg border ${rec.active ? 'border-gray-200 dark:border-slate-600' : 'border-gray-100 dark:border-slate-700 opacity-50'}`}>
+              className={`px-3 py-2.5 rounded-lg border ${rec.active ? 'border-gray-200 dark:border-slate-600' : 'border-gray-100 dark:border-slate-700 opacity-50'}`}>
+            <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <span className={`w-2 h-2 rounded-full shrink-0 ${rec.active ? 'bg-emerald-400' : 'bg-gray-300'}`} />
                 <span className="text-sm font-medium text-gray-800 dark:text-gray-100">{rec.name}</span>
@@ -118,8 +203,20 @@ export default function CompaniesPage() {
                 )}
                 <span className="text-xs text-gray-400 dark:text-gray-500">순서 {rec.sort_order}</span>
                 {!rec.active && <span className="text-[10px] text-gray-400">비활성</span>}
+                {Array.isArray(rec.menus) && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300"
+                    title="이 법인은 별도 메뉴 구성이 적용됩니다">
+                    메뉴 {rec.menus.length}/{ASSIGNABLE_SLUGS.length}
+                  </span>
+                )}
               </div>
               <div className="flex gap-3">
+                <button
+                  onClick={() => setMenuTarget(menuTarget === rec.id ? null : rec.id)}
+                  className="text-xs text-indigo-500 hover:text-indigo-700 dark:text-indigo-400 transition-colors"
+                >
+                  메뉴 구성
+                </button>
                 <button
                   onClick={() => void toggleActive(rec)}
                   disabled={busyId === rec.id}
@@ -135,6 +232,10 @@ export default function CompaniesPage() {
                   삭제
                 </button>
               </div>
+            </div>
+            {menuTarget === rec.id && (
+              <MenuConfigPanel rec={rec} onClose={() => setMenuTarget(null)} />
+            )}
             </div>
           ))}
         </div>
@@ -181,6 +282,9 @@ export default function CompaniesPage() {
         <p>② 추가된 법인은 마스터·관리자에게 즉시 보이며, 편집자·뷰어는 사용자 관리에서 접근 허용 법인으로 지정해야 보입니다.</p>
         <p>③ 신규 법인은 데이터가 비어 있는 상태로 시작되며, 운전자금·운용자금·자금일보 등 모든 기능을 동일하게 사용할 수 있습니다.</p>
         <p>④ 사용을 중단할 법인은 삭제보다 <strong>비활성화</strong>를 권장합니다 (기존 데이터 보존).</p>
+        <p>⑤ <strong>메뉴 구성</strong>은 권한이 아니라 표시 필터입니다 — 법인에서 쓰지 않는 메뉴를 숨겨 노이즈를 줄입니다.
+           사용자 권한과 <strong>둘 다 허용</strong>해야 사이드바에 보입니다. 관리 메뉴는 법인과 무관해 대상이 아닙니다.
+           사용하려면 <code className="bg-gray-100 dark:bg-slate-700 px-1 rounded">docs/db/company_menus.sql</code> 실행이 필요합니다.</p>
       </div>
     </div>
   )
