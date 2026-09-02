@@ -13,6 +13,7 @@
 import { useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
+import { consumeSessionExpiredNotice } from '../lib/supabase'
 
 type Mode = 'login' | 'register' | 'reset'
 
@@ -29,7 +30,9 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [confirm,  setConfirm]  = useState('')
   const [error,    setError]    = useState('')
-  const [info,     setInfo]     = useState('')
+  // 세션 만료로 자동 로그아웃된 경우 사유를 알려준다 (마운트 1회 소비)
+  const [info,     setInfo]     = useState(() =>
+    consumeSessionExpiredNotice() ? '세션이 만료되어 로그아웃되었습니다. 다시 로그인해 주세요.' : '')
   const [busy,     setBusy]     = useState(false)
 
   if (loading) return (

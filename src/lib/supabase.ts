@@ -123,21 +123,115 @@ export function resetSupabaseClient(): void {
 
 const REST_URL = `${supabaseUrl}/rest/v1`
 
-/** 현재 세션 토큰(없으면 anon key) + apikey 헤더 */
-function restHeaders(): Record<string, string> {
-  let token = supabaseKey
+// ─────────────────────────────────────────────────────────────
+// ⛔ [CRITICAL] 세션 토큰 확보 — anon 키 폴백 금지 (2026-09-02)
+//
+// 2026-08-26 RLS 를 authenticated 전용으로 전환한 뒤, 세션이 없는 상태에서
+// anon 키로 요청을 보내면 **조용히** 실패한다:
+//   · INSERT/UPSERT → 'new row violates row-level security policy for table "daily"'
+//     (2026-09-02 실사용자 리포트 — 운전자금 입력 화면에 이 영어 원문이 그대로 노출됐다)
+//   · SELECT        → 200 [] — 오류 없이 **전부 0원**으로 보인다. 더 위험하다.
+// 게다가 AuthContext 는 프로필 캐시로 화면을 로그인 상태로 유지하므로,
+// 사용자는 "로그인돼 있는데 저장만 안 되는" 상태에 빠지고 원인을 알 수 없다.
+//
+// 대응 ① 만료 임박이면 먼저 갱신을 시도한다
+//      ② 그래도 토큰이 없으면 **요청을 보내지 않고** 세션 만료로 명확히 알린다
+//      ③ 로그인 전 호출(is_registerable_email)만 allowAnon 으로 예외 허용
+// 금지: Authorization 기본값을 supabaseKey(anon) 로 되돌리지 말 것.
+// ─────────────────────────────────────────────────────────────
+export const SESSION_EXPIRED_MESSAGE =
+  '세션이 만료되었습니다. 다시 로그인한 뒤 저장해 주세요.'
+const RLS_DENIED_MESSAGE =
+  '세션이 만료되었거나 이 데이터에 대한 권한이 없습니다. 다시 로그인한 뒤 시도해 주세요.'
+
+const TOKEN_SKEW_SEC = 60            // 만료 60초 전이면 미리 갱신
+const GETSESSION_TIMEOUT_MS = 8_000  // auth 요청엔 타임아웃이 없다 → 여기서 상한
+
+function readStoredToken(): { token: string; expiresAt: number } | null {
   try {
     const authKey = Object.keys(localStorage).find(k => k.startsWith('sb-') && k.endsWith('-auth-token'))
-    if (authKey) {
-      const parsed = JSON.parse(localStorage.getItem(authKey) ?? '{}') as { access_token?: string }
-      if (parsed.access_token) token = parsed.access_token
-    }
-  } catch { /* anon 키 사용 */ }
-  return {
-    apikey: supabaseKey,
-    Authorization: `Bearer ${token}`,
-    'Content-Type': 'application/json',
+    if (!authKey) return null
+    const parsed = JSON.parse(localStorage.getItem(authKey) ?? '{}') as { access_token?: string; expires_at?: number }
+    if (!parsed.access_token) return null
+    return { token: parsed.access_token, expiresAt: parsed.expires_at ?? 0 }
+  } catch { return null }
+}
+
+/** 유효한 access_token. 만료(임박)면 SDK 갱신(refresh_token) 시도. 끝내 없으면 null. */
+async function getAccessToken(): Promise<string | null> {
+  const stored = readStoredToken()
+  const now = Math.floor(Date.now() / 1000)
+  if (stored && stored.expiresAt > now + TOKEN_SKEW_SEC) return stored.token
+  try {
+    const res = await Promise.race([
+      supabase.auth.getSession(),
+      new Promise<null>(r => window.setTimeout(() => r(null), GETSESSION_TIMEOUT_MS)),
+    ])
+    const token = res?.data?.session?.access_token
+    if (token) return token
+  } catch { /* 아래에서 만료 처리 */ }
+  return null
+}
+
+// ── 세션 만료 통지 — AuthContext 가 구독해 로그인 화면으로 정리한다 ──
+type SessionExpiredHandler = () => void
+const sessionExpiredHandlers = new Set<SessionExpiredHandler>()
+let lastNotifiedAt = 0
+
+export function onSessionExpired(fn: SessionExpiredHandler): () => void {
+  sessionExpiredHandlers.add(fn)
+  return () => { sessionExpiredHandlers.delete(fn) }
+}
+
+function notifySessionExpired(): void {
+  const now = Date.now()
+  if (now - lastNotifiedAt < 3_000) return   // 동시 다발 요청 → 1회만
+  lastNotifiedAt = now
+  sessionExpiredHandlers.forEach(fn => { try { fn() } catch { /* 무시 */ } })
+}
+
+/** 인증 헤더. 세션이 없으면 null (allowAnon=true 인 로그인 전 호출만 예외) */
+async function authHeaders(allowAnon = false): Promise<Record<string, string> | null> {
+  const token = await getAccessToken()
+  if (!token) {
+    if (!allowAnon) { notifySessionExpired(); return null }
+    return { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json' }
   }
+  return { apikey: supabaseKey, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+}
+
+// 로그인 화면에서 "세션이 만료돼 로그아웃됐다"를 안내하기 위한 1회성 플래그
+export const SESSION_EXPIRED_NOTICE_KEY = 'treasury_session_expired'
+export function consumeSessionExpiredNotice(): boolean {
+  try {
+    if (sessionStorage.getItem(SESSION_EXPIRED_NOTICE_KEY) !== '1') return false
+    sessionStorage.removeItem(SESSION_EXPIRED_NOTICE_KEY)
+    return true
+  } catch { return false }
+}
+
+function sessionError(): { message: string; status: number } {
+  return { message: SESSION_EXPIRED_MESSAGE, status: 401 }
+}
+
+/**
+ * PostgREST 원문 오류 → 사용자 문구.
+ * RLS/JWT 계열은 원문이 영어라 그대로 노출하면 사용자가 조치할 수 없다.
+ * ⚠ 로그아웃 통지는 **실제로 토큰이 없을 때만** 한다 — 세션은 유효한데 정책이 거부한
+ *   경우(향후 법인 단위 격리)까지 로그아웃시키면 과거 '튕기듯 로그아웃'이 재발한다.
+ */
+function describeRestError(status: number, message: string): string {
+  const m = message.toLowerCase()
+  const authIssue = status === 401
+    || m.includes('row-level security')
+    || m.includes('jwt expired')
+    || m.includes('invalid claim')
+  if (!authIssue) return status === 403 ? `권한이 없습니다. (${message})` : message
+
+  const stored = readStoredToken()
+  const tokenMissing = !stored || stored.expiresAt <= Math.floor(Date.now() / 1000)
+  if (tokenMissing) { notifySessionExpired(); return SESSION_EXPIRED_MESSAGE }
+  return RLS_DENIED_MESSAGE
 }
 
 export interface RestResult<T = unknown> {
@@ -167,10 +261,12 @@ async function restSend<T>(
     returning ? 'return=representation' : 'return=minimal',
     upsert ? 'resolution=merge-duplicates' : '',
   ].filter(Boolean).join(',')
+  const headers = await authHeaders()
+  if (!headers) return { data: null, error: sessionError() }
   try {
     const resp = await fetchWithTimeout(url, {
       method,
-      headers: { ...restHeaders(), Prefer: prefer },
+      headers: { ...headers, Prefer: prefer },
       body: body != null ? JSON.stringify(body) : undefined,
     })
     if (!resp.ok) {
@@ -179,7 +275,7 @@ async function restSend<T>(
         const j = await resp.json() as { message?: string; hint?: string }
         if (j.message) message = j.message + (j.hint ? ` (${j.hint})` : '')
       } catch { /* 본문 없음 */ }
-      return { data: null, error: { message, status: resp.status } }
+      return { data: null, error: { message: describeRestError(resp.status, message), status: resp.status } }
     }
     let data: T[] | null = null
     if (returning) { try { data = await resp.json() as T[] } catch { data = null } }
@@ -198,15 +294,17 @@ export async function restGet<T = unknown>(
   match: Record<string, string | number | boolean>,
 ): Promise<RestResult<T>> {
   const url = `${REST_URL}/${table}?${eqQuery(match)}`
+  const headers = await authHeaders()
+  if (!headers) return { data: null, error: sessionError() }
   try {
     const resp = await fetchWithTimeout(url, {
       method: 'GET',
-      headers: { ...restHeaders(), Accept: 'application/json' },
+      headers: { ...headers, Accept: 'application/json' },
     })
     if (!resp.ok) {
       let message = `${resp.status} ${resp.statusText}`
       try { const j = await resp.json() as { message?: string }; if (j.message) message = j.message } catch { /* */ }
-      return { data: null, error: { message, status: resp.status } }
+      return { data: null, error: { message: describeRestError(resp.status, message), status: resp.status } }
     }
     const data = await resp.json() as T[]
     return { data, error: null }
@@ -247,15 +345,17 @@ export async function restSelect<T = unknown>(
   if (opts.order) parts.push(`order=${encodeURIComponent(opts.order)}`)
   if (opts.limit != null) parts.push(`limit=${opts.limit}`)
   const url = `${REST_URL}/${table}?${parts.join('&')}`
+  const headers = await authHeaders()
+  if (!headers) return { data: null, error: sessionError() }
   try {
     const resp = await fetchWithTimeout(url, {
       method: 'GET',
-      headers: { ...restHeaders(), Accept: 'application/json' },
+      headers: { ...headers, Accept: 'application/json' },
     })
     if (!resp.ok) {
       let message = `${resp.status} ${resp.statusText}`
       try { const j = await resp.json() as { message?: string }; if (j.message) message = j.message } catch { /* */ }
-      return { data: null, error: { message, status: resp.status } }
+      return { data: null, error: { message: describeRestError(resp.status, message), status: resp.status } }
     }
     const data = await resp.json() as T[]
     return { data, error: null }
@@ -272,16 +372,23 @@ export function restInsert<T = unknown>(table: string, rows: unknown, returning 
   return restSend<T>('POST', table, { body: rows, returning })
 }
 
-/** PostgREST RPC — 인증된 사용자의 UI 확정 동작에서만 호출한다. */
-export async function restRpc<T = unknown>(fn: string, args: Record<string, unknown>): Promise<RestResult<T>> {
+/**
+ * PostgREST RPC — 인증된 사용자의 UI 확정 동작에서만 호출한다.
+ * allowAnon: 로그인 **전** 호출만 true (예: is_registerable_email — SECURITY DEFINER).
+ */
+export async function restRpc<T = unknown>(
+  fn: string, args: Record<string, unknown>, allowAnon = false,
+): Promise<RestResult<T>> {
+  const headers = await authHeaders(allowAnon)
+  if (!headers) return { data: null, error: sessionError() }
   try {
     const resp = await fetchWithTimeout(`${REST_URL}/rpc/${fn}`, {
-      method: 'POST', headers: { ...restHeaders(), Prefer: 'return=representation' }, body: JSON.stringify(args),
+      method: 'POST', headers: { ...headers, Prefer: 'return=representation' }, body: JSON.stringify(args),
     })
     if (!resp.ok) {
       let message = `${resp.status} ${resp.statusText}`
       try { const j=await resp.json() as {message?:string}; if(j.message) message=j.message } catch { /* */ }
-      return { data: null, error: { message, status: resp.status } }
+      return { data: null, error: { message: describeRestError(resp.status, message), status: resp.status } }
     }
     return { data: await resp.json() as T[], error: null }
   } catch (e) {
@@ -316,16 +423,18 @@ export async function restUpdateIn<T = unknown>(
   if (ids.length === 0) return { data: [], error: null }
   const list = ids.map(v => encodeURIComponent(String(v))).join(',')
   const url = `${REST_URL}/${table}?${encodeURIComponent(column)}=in.(${list})`
+  const headers = await authHeaders()
+  if (!headers) return { data: null, error: sessionError() }
   try {
     const resp = await fetchWithTimeout(url, {
       method: 'PATCH',
-      headers: { ...restHeaders(), Prefer: 'return=minimal' },
+      headers: { ...headers, Prefer: 'return=minimal' },
       body: JSON.stringify(values),
     })
     if (!resp.ok) {
       let message = `${resp.status} ${resp.statusText}`
       try { const j = await resp.json() as { message?: string }; if (j.message) message = j.message } catch { /* */ }
-      return { data: null, error: { message, status: resp.status } }
+      return { data: null, error: { message: describeRestError(resp.status, message), status: resp.status } }
     }
     return { data: null, error: null }
   } catch (e) {

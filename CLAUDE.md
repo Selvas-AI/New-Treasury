@@ -3481,6 +3481,45 @@ authenticated 전환은 "로그인한 사람만"까지다. 로그인한 사용�
 
 ---
 
+### 2026-09-02 세션28차 — RLS 전환 후 "저장만 안 되는" 상태 원천 차단 ⭐
+
+실사용자 리포트(운전자금 입력 화면 캡처): 저장 시 빨간 영문 원문
+`new row violates row-level security policy for table "daily"`.
+
+#### [CRITICAL] anon 키 폴백이 RLS 전환으로 지뢰가 됐다
+```
+증상: 화면은 정상 로그인 상태인데 운전자금 저장만 실패. 오류는 영어 Postgres 원문.
+원인: restHeaders() 가 localStorage 에서 access_token 을 못 찾으면 **말없이 anon 키로**
+      Authorization 을 채웠다. 2026-08-26 RLS 를 authenticated 전용으로 전환하기
+      전에는 anon 도 쓰기가 허용돼 이 폴백이 정상 동작처럼 보였다. 전환 후:
+        · INSERT/UPSERT → 42501 RLS 위반 (사용자가 본 그 메시지)
+        · SELECT        → **200 [] — 오류 없이 전부 0원**. 더 위험하다.
+      게다가 AuthContext 는 세션이 없어도 treasury_profile_cache 로 화면을 로그인
+      상태로 유지한다(과거 '튕기듯 로그아웃' 대응). 두 설계가 겹쳐
+      "로그인돼 있는데 저장만 안 되는" 상태가 만들어졌다.
+실측(anon 키 REST, 읽기 전용): daily/companies/treasury_users/policy_params 전부
+      200 [] → anon 차단은 실제로 적용돼 있음을 확인.
+해결(src/lib/supabase.ts — 헤더 조립 지점 한 곳):
+  ① anon 폴백 제거. getAccessToken() 이 만료 60초 전이면 getSession() 으로 먼저 갱신
+     (auth 요청엔 타임아웃이 없으므로 8s 상한 — 데드락 이력 §10).
+  ② 토큰이 없으면 **요청을 보내지 않고** { status:401, 세션 만료 안내 } 를 반환.
+     → 조회가 조용히 0원이 되는 경로도 함께 막힌다.
+  ③ describeRestError() — RLS/JWT 원문을 한국어 안내로 변환.
+  ④ onSessionExpired() 통지 → AuthContext 가 getSession() 으로 한 번 더 확인한 뒤
+     **정말 세션이 없을 때만** 로그아웃 → 로그인 화면에 사유 안내.
+     ⚠ 네트워크 순단으로 로그아웃하지 않는다(과거 '튕기듯 로그아웃' 재발 방지).
+  ⑤ restRpc(fn, args, allowAnon) — 로그인 **전** 호출인 is_registerable_email 만 예외.
+금지: Authorization 기본값을 supabaseKey(anon) 로 되돌리지 말 것.
+      RLS 오류 원문을 사용자 화면에 그대로 노출하지 말 것(조치 방법을 알 수 없다).
+서버 확인: docs/db/rls_diagnose.sql (읽기 전용) — daily 에 authenticated INSERT 정책이
+      1건 이상인지 확인한다. 0건이면 원인이 서버 쪽이므로 rls_authenticated_only.sql 의
+      [롤백] 후 재적용할 것.
+```
+
+검증: tsc -b 0 errors · eslint 0 errors · vitest --dir src 70/70 · vite build 성공.
+
+---
+
 ## 17. 개발 시 체크리스트
 
 새 세션에서 작업 시작 전:

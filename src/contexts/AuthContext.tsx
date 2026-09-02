@@ -11,7 +11,10 @@
  *   함께 사라졌다. 개발/디버깅도 실제 계정으로 로그인할 것.
  */
 import { useState, useEffect, useMemo, useCallback, useRef, type ReactNode } from 'react'
-import { supabase, restUpdate, restRpc, withTimeout, resetSupabaseClient } from '../lib/supabase'
+import {
+  supabase, restUpdate, restRpc, withTimeout, resetSupabaseClient,
+  onSessionExpired, SESSION_EXPIRED_NOTICE_KEY,
+} from '../lib/supabase'
 import { AuthContext, MENU_DEFAULTS, ACTION_DEFAULTS } from './auth'
 import type { TreasuryUser, Company, UserRole, SectionKey } from '../types'
 import { useCompanies } from '../hooks/useCompanies'
@@ -211,6 +214,24 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
     return () => { mounted = false; window.clearTimeout(hardTimeout); subscription.unsubscribe() }
   }, [])
 
+  // ── 세션 만료 감지 (2026-09-02) ───────────────────────────
+  // REST 헬퍼가 유효한 토큰을 못 찾으면 여기로 통지된다.
+  // 프로필 캐시 덕분에 화면은 로그인 상태로 남지만 DB 요청은 authenticated 가 아니라
+  // 저장은 RLS 로 거부되고(운전자금 입력 오류) 조회는 빈 값이 된다 → 로그인 화면으로 정리한다.
+  // ⚠ 네트워크 순단 오탐으로 '튕기듯 로그아웃'이 재발하지 않도록, 세션이 정말 없을 때만 정리한다.
+  useEffect(() => onSessionExpired(() => {
+    void (async () => {
+      try {
+        const { data } = await withTimeout(supabase.auth.getSession(), 6000, '세션 확인')
+        if (data.session) return          // 세션 유효 → 일시적 문제, 상태 유지
+      } catch { return }                  // 확인 실패 → 유지
+      clearProfileCache()
+      try { sessionStorage.setItem(SESSION_EXPIRED_NOTICE_KEY, '1') } catch { /* 무시 */ }
+      setUser(null)
+      setSelectedCompany(null)
+    })()
+  }), [])
+
   const currentCompany = useMemo<Company | null>(() => {
     if (!user) return null
     if (selectedCompany && hasCompanyCheck(user, selectedCompany)) return selectedCompany
@@ -274,7 +295,7 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
     //   함수는 불리언과 사유만 돌려주고 프로필 행은 밖으로 내보내지 않는다.
     //   (docs/db/auth_registerable_rpc.sql)
     const { data: chk, error: chkErr } = await restRpc<{ registerable: boolean; reason: string | null }>(
-      'is_registerable_email', { p_email: lc },
+      'is_registerable_email', { p_email: lc }, true,   // 로그인 전 호출 → anon 허용
     )
     if (chkErr) return chkErr.message
     const verdict = chk?.[0]
