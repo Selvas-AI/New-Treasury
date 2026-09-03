@@ -26,6 +26,15 @@ export function fmtNumber(n: number, digits = 0): string {
   return n.toLocaleString('ko-KR', { maximumFractionDigits: digits })
 }
 
+/**
+ * 환율 표시 — 항상 소수 2자리.
+ * 장부환율·처분환율을 소수 2자리까지 관리하므로 표시도 2자리로 고정한다
+ * (toFixed(1) 은 1465.35 를 1465.3 으로 잘라 실제 장부값과 달라 보인다 — 2026-09-03 사용자 요청).
+ */
+export function fmtRate(n: number): string {
+  return n.toLocaleString('ko-KR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
 /** 입력 필드 천단위 콤마 포맷 (정수) — 0이면 빈 문자열 */
 export function fmtInt(val: string | number | null | undefined): string {
   if (val === null || val === undefined || val === '' || val === 0 || val === '0') return ''

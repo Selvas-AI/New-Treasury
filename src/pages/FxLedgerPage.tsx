@@ -8,7 +8,7 @@ import { useFxTradeHistory } from '../hooks/useFxTradeHistory'
 import { usePolicyParams } from '../hooks/usePolicyParams'
 import { useInvestments } from '../hooks/useInvestments'
 import { useFxTransfers } from '../hooks/useFxTransfers'
-import { fmtKRW } from '../lib/format'
+import { fmtKRW, fmtRate } from '../lib/format'
 import { summarizeRealizedPnl } from '../lib/fxTxnType'
 import type { FxCode, FxTradeFill, FxLotConsumption } from '../types'
 import { FxLedgerTab } from '../components/fx/FxLedgerTab'
@@ -134,8 +134,8 @@ export default function FxLedgerPage() {
       <Stat label="현재 환전 가능" value={ledger.availableAmount.toLocaleString()} />
       <Stat label="만기 전 잠금" value={ledger.lockedAmount.toLocaleString()} />
       <Stat label="예상 만기이자" value={ledger.expectedInterestFx.toLocaleString(undefined, { maximumFractionDigits: 2 })} />
-      <Stat label="FIFO 잔존 장부환율" value={ledger.bookRate ? `${ledger.bookRate.toFixed(1)}원` : '—'} />
-      <Stat label="현재 시장환율" value={marketRate ? `${marketRate.toFixed(1)}원` : '조회 전'} />
+      <Stat label="FIFO 잔존 장부환율" value={ledger.bookRate ? `${fmtRate(ledger.bookRate)}원` : '—'} />
+      <Stat label="현재 시장환율" value={marketRate ? `${fmtRate(marketRate)}원` : '조회 전'} />
       <Stat label="미실현 평가손익" value={ledger.bookRate && marketRate ? fmtKRW(ledger.totalAmount * (marketRate - ledger.bookRate)) : '—'} />
     </div>
 

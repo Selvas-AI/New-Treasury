@@ -1,6 +1,6 @@
 import { Fragment, useMemo, useState } from 'react'
 import { useAuth } from '../../hooks/useAuth'
-import { fmtKRW, fmtNumber } from '../../lib/format'
+import { fmtKRW, fmtNumber, fmtRate } from '../../lib/format'
 import { ACCOUNT_TYPE_LABEL, type FxAccountType, type FxLot } from '../../lib/fxLots'
 import { outflowTxnLabel } from '../../lib/fxTxnType'
 import { useFxLedgerReconciliation, type PendingReconcileItem } from '../../hooks/useFxLedgerReconciliation'
@@ -360,7 +360,7 @@ export function FxLedgerTab({
                             ) : <span className="text-gray-300 dark:text-slate-600">—</span>}
                           </td>
                           <td className="text-right tabular-nums font-semibold">{lot.remainingAmount.toLocaleString()}</td>
-                          <td className="text-right tabular-nums">{lot.acqRate.toLocaleString()}</td>
+                          <td className="text-right tabular-nums">{fmtRate(lot.acqRate)}</td>
                           <td className="text-right whitespace-nowrap">
                             {canEdit() && <button onClick={() => setEditingLot(lot)} className="text-blue-600 hover:underline">수정</button>}
                             {canDelete() && <button onClick={() => setPendingDeleteLot(lot)} className="ml-2 text-red-600 hover:underline">삭제</button>}
@@ -370,7 +370,7 @@ export function FxLedgerTab({
                           <tr>
                             <td colSpan={9} className="bg-gray-50 dark:bg-slate-900/60 pl-10 pr-4 py-3">
                               <p className="mb-1.5 text-[11px] font-semibold text-gray-600 dark:text-slate-300">
-                                처분 내역 — {lot.acquiredDate} 유입분 (장부환율 {lot.acqRate.toLocaleString()})
+                                처분 내역 — {lot.acquiredDate} 유입분 (장부환율 {fmtRate(lot.acqRate)})
                               </p>
                               <table className="w-full text-[11px] tabular-nums">
                                 <thead>
@@ -397,7 +397,7 @@ export function FxLedgerTab({
                                         )}
                                       </td>
                                       <td className="text-right text-orange-600 dark:text-orange-400">-{c.amount.toLocaleString()}</td>
-                                      <td className="text-right">{c.disposal_rate.toLocaleString()}</td>
+                                      <td className="text-right">{fmtRate(c.disposal_rate)}</td>
                                       <td className={`text-right ${c.realized_pnl >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>
                                         {c.realized_pnl >= 0 ? '▲' : '▼'} {fmtKRW(Math.abs(c.realized_pnl))}
                                       </td>
