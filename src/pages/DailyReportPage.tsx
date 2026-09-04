@@ -851,7 +851,12 @@ export default function DailyReportPage() {
   const badge  = STATUS_LABEL[status] ?? STATUS_LABEL.draft
   const isReadOnly = status === 'approved'
   const canSubmit  = status === 'draft' || status === 'rejected'
-  const myApproveStep = ac.config.find(c => c.approver_code === user?.code)?.step
+  // 결재자 코드 비교 — 공백·대소문자 차이로 매칭이 조용히 실패하지 않게 정규화한다.
+  // (결재선은 손으로 입력하므로 'K001 ' / 'k001' 같은 값이 실제로 들어온다)
+  const sameCode = (a?: string | null, b?: string | null): boolean =>
+    !!a && !!b && a.trim().toLowerCase() === b.trim().toLowerCase()
+
+  const myApproveStep = ac.config.find(c => sameCode(c.approver_code, user?.code))?.step
   // 다단계 순차 결재: 정렬된 결재선 단계 + 이미 승인된 단계 → 다음 기대 단계
   const sortedSteps   = [...ac.config].map(c => c.step).sort((a, b) => a - b)
   const approvedSteps = new Set(dr.approvals.filter(a => a.action === 'approve').map(a => a.step))
@@ -864,14 +869,24 @@ export default function DailyReportPage() {
     (myApproveStep !== undefined && myApproveStep === nextStep && (user?.can_approve !== false))
   )
 
-  // 상신 시 자동 승인할 단계 — 1단계 결재자가 상신자 본인이고 승인 권한이 있을 때만.
-  // 2단계 이후는 대상이 아니다(다른 사람의 검토를 건너뛰게 된다).
-  const firstStepCfg = sortedSteps.length ? ac.config.find(c => c.step === sortedSteps[0]) : undefined
-  const autoApproveStep: number | null =
-    firstStepCfg
-    && firstStepCfg.approver_code === user?.code
-    && (user?.role === 'master' || user?.can_approve !== false)
-      ? firstStepCfg.step : null
+  // 상신 시 자동 승인할 단계 — 1단계부터 시작해 **상신자 본인이 결재자인 연속 구간**.
+  // 같은 사람이 상신 직후 자기 단계를 한 번 더 눌러야 하는 무의미한 절차를 없앤다.
+  // ⚠ 다른 사람이 결재자인 단계를 만나면 즉시 멈춘다 — 남의 검토를 건너뛰지 않는다.
+  //   결재선에 있다는 것만으로는 부족하고 승인 권한(can_approve)도 있어야 한다
+  //   (수동 승인 canApprove 와 같은 기준). 권한이 없으면 '결재 중'으로 남고
+  //   그 이유는 approveBlockedReason 이 표시한다.
+  const autoApproveSteps: number[] = (() => {
+    if (!user) return []
+    if (!(user.role === 'master' || user.can_approve !== false)) return []
+    const out: number[] = []
+    for (const st of sortedSteps) {
+      const cfg = ac.config.find(c => c.step === st)
+      if (!cfg || !sameCode(cfg.approver_code, user.code)) break
+      out.push(st)
+    }
+    return out
+  })()
+  const autoApproveLabel = autoApproveSteps.length ? `${autoApproveSteps.join('·')}단계` : null
 
   // 결재 중인데 승인/반려 버튼이 안 보이는 이유를 화면에 밝힌다.
   // 버튼은 canApprove 가 false 면 아예 렌더되지 않아, 안내가 없으면 결재자가
@@ -973,20 +988,26 @@ export default function DailyReportPage() {
   async function handleSubmit() {
     if (!validation.isValid || !user) return
     setActionBusy(true)
-    // report 없으면 먼저 생성
-    if (!dr.report?.id) await dr.saveReport(resolvedCompany, selectedDate, {})
-    const submitted = await dr.submitReport(user.code, user.label ?? user.code)
-    // 상신자 == 1단계 결재자면 그 단계를 자동 승인한다 — 같은 사람이 상신 직후
+    // report 없으면 먼저 생성 — 생성된 id 를 그대로 넘긴다.
+    // (훅 콜백의 클로저는 방금 만든 report 를 아직 모른다 → 넘기지 않으면 최초 상신이 실패)
+    let reportId = dr.report?.id
+    if (!reportId) reportId = (await dr.saveReport(resolvedCompany, selectedDate, {}))?.id
+    if (!reportId) { setActionBusy(false); return }
+    const submitted = await dr.submitReport(user.code, user.label ?? user.code, reportId)
+    // 상신자 == 결재자면 그 단계(들)를 자동 승인한다 — 같은 사람이 상신 직후
     // 자기 단계를 한 번 더 눌러야 하는 무의미한 단계를 없앤다.
     // ⚠ 결재선에 있다는 것만으로는 부족하고 승인 권한(can_approve)도 있어야 한다
     //   — 수동 승인(canApprove)과 같은 기준을 쓴다. 권한이 없으면 자동 승인도 하지
     //   않고 '결재 중'으로 남으며, 그 이유는 approveBlockedReason 이 표시한다.
-    if (submitted && autoApproveStep !== null) {
-      const isFinal = lastStep === undefined ? true : autoApproveStep === lastStep
-      await dr.approveReport(
-        autoApproveStep, user.code, user.label ?? user.code,
-        '상신자 = 1단계 결재자 — 자동 승인', isFinal,
-      )
+    if (submitted && autoApproveSteps.length) {
+      for (const st of autoApproveSteps) {
+        const isFinal = lastStep === undefined ? true : st === lastStep
+        const ok = await dr.approveReport(
+          st, user.code, user.label ?? user.code,
+          '상신자 = 결재자 본인 — 상신과 동시에 자동 승인', isFinal, reportId,
+        )
+        if (!ok) break   // 실패하면 뒤 단계까지 승인된 것처럼 남기지 않는다
+      }
     }
     setActionBusy(false)
   }
@@ -1117,8 +1138,8 @@ export default function DailyReportPage() {
               disabled={!validation.isValid || actionBusy}
               onClick={() => void handleSubmit()}
               title={!validation.isValid ? '입출금 합계 검증 후 활성화'
-                : autoApproveStep !== null
-                  ? `검증 완료 — 결재 상신 (본인이 ${autoApproveStep}단계 결재자이므로 상신과 동시에 ${autoApproveStep}단계가 승인 처리됩니다)`
+                : autoApproveLabel
+                  ? `검증 완료 — 결재 상신 (본인이 ${autoApproveLabel} 결재자이므로 상신과 동시에 ${autoApproveLabel}가 승인 처리됩니다)`
                   : '검증 완료 — 결재 상신'}
               className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-colors ${
                 validation.isValid
@@ -1126,7 +1147,7 @@ export default function DailyReportPage() {
                   : 'bg-blue-600 text-white opacity-40 cursor-not-allowed'
               }`}
             >
-              {actionBusy ? '처리 중…' : autoApproveStep !== null ? `상신 + ${autoApproveStep}단계 승인 →` : '상신 →'}
+              {actionBusy ? '처리 중…' : autoApproveLabel ? `상신 + ${autoApproveLabel} 승인 →` : '상신 →'}
             </button>
           )}
           {canApprove && (
@@ -1740,7 +1761,7 @@ export default function DailyReportPage() {
           <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6" onClick={e => e.stopPropagation()}>
             <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100 mb-1">결재 승인</h3>
             <p className="text-xs text-gray-500 dark:text-slate-300 mb-4">
-              {resolvedCompany} · {reportDate} 자금일보를 승인합니다.
+              {resolvedCompany} · {selectedDate} 자금일보(보고대상일 {reportDate})를 승인합니다.
             </p>
             <label className="block text-xs text-gray-500 dark:text-slate-300 mb-1">의견 (선택)</label>
             <textarea
@@ -1770,7 +1791,7 @@ export default function DailyReportPage() {
           <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6" onClick={e => e.stopPropagation()}>
             <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100 mb-1">결재 반려</h3>
             <p className="text-xs text-gray-500 dark:text-slate-300 mb-4">
-              {resolvedCompany} · {reportDate} 자금일보를 반려합니다.
+              {resolvedCompany} · {selectedDate} 자금일보(보고대상일 {reportDate})를 반려합니다.
             </p>
             <label className="block text-xs text-gray-500 dark:text-slate-300 mb-1">반려 사유 <span className="text-red-500">*</span></label>
             <textarea

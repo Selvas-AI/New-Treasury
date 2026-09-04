@@ -132,26 +132,31 @@ export function useDailyReport() {
   const submitReport = useCallback(async (
     actorCode: string,
     actorLabel: string,
+    reportIdOverride?: string,
   ): Promise<boolean> => {
-    if (!report?.id) return false
+    // ⚠ 같은 핸들러에서 saveReport() 로 방금 만든 일보는 이 콜백의 클로저(report)에
+    //   아직 반영되지 않는다 → 호출부가 생성된 id 를 직접 넘길 수 있게 한다.
+    //   (없으면 최초 상신이 조용히 false 로 실패했다)
+    const rid = reportIdOverride ?? report?.id
+    if (!rid) return false
     setError(null)
     try {
       const now = new Date().toISOString()
       const { error: err } = await restUpdate('daily_reports', {
         status: 'submitted', submitted_by: actorCode, submitted_at: now, updated_at: now,
-      }, { id: report.id })
+      }, { id: rid })
       if (err) throw new Error(err.message)
 
       // 결재 로그 추가
       const logId = generateUUID()
       await restInsert('daily_report_approvals', {
-        id: logId, report_id: report.id, step: 0, action: 'submit',
+        id: logId, report_id: rid, step: 0, action: 'submit',
         actor_code: actorCode, actor_label: actorLabel, created_at: now,
       })
 
       setReport(prev => prev ? { ...prev, status: 'submitted', submitted_by: actorCode, submitted_at: now } : prev)
       setApprovals(prev => [...prev, {
-        id: logId, report_id: report.id, step: 0,
+        id: logId, report_id: rid, step: 0,
         action: 'submit', actor_code: actorCode, actor_label: actorLabel,
         comment: null, created_at: now,
       }])
@@ -171,32 +176,34 @@ export function useDailyReport() {
     actorLabel: string,
     comment?: string,
     isFinal: boolean = true,
+    reportIdOverride?: string,
   ): Promise<boolean> => {
-    if (!report?.id) return false
+    const rid = reportIdOverride ?? report?.id
+    if (!rid) return false
     setError(null)
     try {
       const now = new Date().toISOString()
       if (isFinal) {
         const { error: err } = await restUpdate('daily_reports', {
           status: 'approved', approved_by: actorCode, approved_at: now, updated_at: now,
-        }, { id: report.id })
+        }, { id: rid })
         if (err) throw new Error(err.message)
       }
 
       const logId = generateUUID()
       await restInsert('daily_report_approvals', {
-        id: logId, report_id: report.id, step, action: 'approve',
+        id: logId, report_id: rid, step, action: 'approve',
         actor_code: actorCode, actor_label: actorLabel, comment: comment ?? null, created_at: now,
       })
 
       // C안: 최종 승인 시에만 daily 테이블 confirmed = true (daily.report_id 연결 레코드)
-      if (isFinal) await restUpdate('daily', { confirmed: true }, { report_id: report.id })
+      if (isFinal) await restUpdate('daily', { confirmed: true }, { report_id: rid })
 
       if (isFinal) {
         setReport(prev => prev ? { ...prev, status: 'approved', approved_by: actorCode, approved_at: now } : prev)
       }
       setApprovals(prev => [...prev, {
-        id: logId, report_id: report.id, step,
+        id: logId, report_id: rid, step,
         action: 'approve', actor_code: actorCode, actor_label: actorLabel,
         comment: comment ?? null, created_at: now,
       }])
