@@ -28,7 +28,8 @@ async function getPdfLib(): Promise<PdfLib> {
 }
 
 // ── 자금일보 대사 항목 ────────────────────────────────────────
-interface DailyField { key: string; label: string; value: number }
+// currency 가 있으면 **환산 전 원통화** 금액이다(표시·대조 모두 그 단위로).
+interface DailyField { key: string; label: string; value: number; currency?: string; hint?: string }
 
 function buildFields(daily: DailyRecord | null, toKRW: (n: number, c: string) => number): DailyField[] {
   if (!daily) return []
@@ -37,11 +38,32 @@ function buildFields(daily: DailyRecord | null, toKRW: (n: number, c: string) =>
     toKRW(daily.fx_jpy ?? 0, 'JPY') + toKRW(daily.fx_gbp ?? 0, 'GBP') +
     toKRW(daily.fx_cny ?? 0, 'CNY')
   const total = (daily.krw_demand ?? 0) + (daily.krw_govt ?? 0) + (daily.krw_mmda ?? 0) + fxKrw
+
+  // 외화는 통화별 '환산 전' 카드로 대사한다 — 은행 잔액증명·자금시재현황 PDF 에는
+  // 원화 환산액이 아니라 USD/EUR 원통화 금액이 찍히므로, 환산액으로는 영원히 매칭되지
+  // 않는다(2026-09-08 사용자 리포트). 잔액이 0 인 통화는 카드를 만들지 않는다.
+  const fxNative: DailyField[] = ([
+    { code: 'USD', amt: daily.fx_usd ?? 0 },
+    { code: 'EUR', amt: daily.fx_eur ?? 0 },
+    { code: 'JPY', amt: daily.fx_jpy ?? 0 },
+    { code: 'GBP', amt: daily.fx_gbp ?? 0 },
+    { code: 'CNY', amt: daily.fx_cny ?? 0 },
+  ] as const)
+    .filter(x => x.amt > 0)
+    .map(x => ({
+      key: `fx_${x.code.toLowerCase()}`,
+      label: `${x.code} 잔액 (환산 전)`,
+      value: x.amt,
+      currency: x.code,
+    }))
+
   return [
     { key: 'krw_demand', label: '보통예금/일반예금', value: Math.round(daily.krw_demand ?? 0) },
     { key: 'krw_govt',   label: '국책과제자금',      value: Math.round(daily.krw_govt   ?? 0) },
     { key: 'krw_mmda',   label: 'MMDA/증권예수금',   value: Math.round(daily.krw_mmda   ?? 0) },
-    { key: 'fx_krw',     label: '외화 환산 합계',     value: Math.round(fxKrw) },
+    ...fxNative,
+    { key: 'fx_krw',     label: '외화 환산 합계',     value: Math.round(fxKrw),
+      hint: fxNative.length ? 'PDF 에는 환산 전 원통화로 표기됩니다 — 위 통화별 카드로 대사하세요.' : undefined },
     { key: 'total_krw',  label: '현금 합계 (전체)',   value: Math.round(total) },
   ]
 }
@@ -58,6 +80,11 @@ function parseAmounts(text: string): number[] {
 }
 
 const fmtKRW = (n: number) => Math.round(n).toLocaleString('ko-KR') + '원'
+/** 카드 금액 표시 — currency 가 있으면 원통화(소수 2자리), 없으면 원화 */
+const fmtAmt = (n: number, currency?: string) =>
+  currency
+    ? `${n.toLocaleString('ko-KR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`
+    : fmtKRW(n)
 
 type MatchStatus = 'exact' | 'near' | 'mismatch'
 function matchOf(target: number, candidate: number): MatchStatus {
@@ -335,7 +362,7 @@ export default function CmsVerificationModal({
                         <span className="text-green-600 dark:text-green-400 text-xs font-bold">✅</span>
                         <span className="text-xs font-medium text-gray-600 dark:text-slate-100 truncate">{f.label}</span>
                       </div>
-                      <div className="text-sm font-bold tabular-nums text-gray-800 dark:text-gray-100">{fmtKRW(f.value)}</div>
+                      <div className="text-sm font-bold tabular-nums text-gray-800 dark:text-gray-100">{fmtAmt(f.value, f.currency)}</div>
                       <div className="text-[10px] text-gray-400 truncate">
                         {vs.source && `📎 ${vs.source}`}{vs.source && vs.memo && ' · '}{vs.memo && `📝 ${vs.memo}`}
                       </div>
@@ -362,7 +389,8 @@ export default function CmsVerificationModal({
                         : <span className="text-[10px] font-bold text-gray-500 dark:text-slate-300 px-1.5 py-0.5 rounded bg-gray-100 dark:bg-slate-700">○ 미대사</span>}
                   </div>
 
-                  <div className="text-base font-bold tabular-nums text-gray-800 dark:text-gray-100">{fmtKRW(f.value)}</div>
+                  <div className="text-base font-bold tabular-nums text-gray-800 dark:text-gray-100">{fmtAmt(f.value, f.currency)}</div>
+                  {f.hint && <div className="text-[10px] text-gray-400 mt-0.5">{f.hint}</div>}
 
                   {/* 자동 대조 결과 — 출처 PDF·페이지 표기 */}
                   {!zero && auto && (
@@ -370,7 +398,7 @@ export default function CmsVerificationModal({
                       auto.status === 'exact' ? 'text-green-600 dark:text-green-400'
                       : auto.status === 'near' ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400'}`}>
                       {auto.status === 'exact' ? <>🟢 {auto.hit!.fileName} p.{auto.hit!.page} 에서 일치 · 클릭해 이동</>
-                      : auto.status === 'near' ? <>🟡 {auto.hit!.fileName} p.{auto.hit!.page} 근사값 {fmtKRW(auto.hit!.amount)} (차이 {fmtKRW(Math.abs(auto.hit!.amount - f.value))})</>
+                      : auto.status === 'near' ? <>🟡 {auto.hit!.fileName} p.{auto.hit!.page} 근사값 {fmtAmt(auto.hit!.amount, f.currency)} (차이 {fmtAmt(Math.abs(auto.hit!.amount - f.value), f.currency)})</>
                       : <>⚪ 모든 PDF에서 동일 금액 미발견 — 합산 항목일 수 있음</>}
                     </div>
                   )}
