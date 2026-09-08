@@ -1,0 +1,541 @@
+<title>자금흐름 브릿지</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=Noto+Serif+KR:wght@500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<style>
+  :root {
+    --ground:      #f6f7f9;
+    --surface:     #ffffff;
+    --surface-alt: #eef1f5;
+    --line:        #d8dee7;
+    --line-soft:   #e7ebf1;
+    --ink:         #10151f;
+    --ink-mid:     #46505f;
+    --ink-soft:    #6b7686;
+    --accent:      #1d4ed8;
+    --inflow:      #056d51;
+    --outflow:     #b02a37;
+    --fxfx:        #8a5a00;
+    --shadow:      0 1px 2px rgba(16,21,31,.05), 0 8px 24px -16px rgba(16,21,31,.25);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:      #0d1117;
+      --surface:     #151b24;
+      --surface-alt: #1c2430;
+      --line:        #2b3542;
+      --line-soft:   #222b37;
+      --ink:         #e9edf3;
+      --ink-mid:     #b3bdcc;
+      --ink-soft:    #8791a1;
+      --accent:      #7ba2f5;
+      --inflow:      #4fc2a2;
+      --outflow:     #f08a94;
+      --fxfx:        #dfa844;
+      --shadow:      0 1px 2px rgba(0,0,0,.4), 0 8px 24px -16px rgba(0,0,0,.7);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:      #0d1117;
+    --surface:     #151b24;
+    --surface-alt: #1c2430;
+    --line:        #2b3542;
+    --line-soft:   #222b37;
+    --ink:         #e9edf3;
+    --ink-mid:     #b3bdcc;
+    --ink-soft:    #8791a1;
+    --accent:      #7ba2f5;
+    --inflow:      #4fc2a2;
+    --outflow:     #f08a94;
+    --fxfx:        #dfa844;
+    --shadow:      0 1px 2px rgba(0,0,0,.4), 0 8px 24px -16px rgba(0,0,0,.7);
+  }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: "IBM Plex Sans KR", -apple-system, "Malgun Gothic", sans-serif;
+    font-size: 15.5px;
+    line-height: 1.72;
+    margin: 0;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1060px; margin: 0 auto; padding: 0 24px 96px; }
+
+  header.masthead {
+    padding: 72px 0 32px;
+    border-bottom: 2px solid var(--ink);
+  }
+  .eyebrow {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11.5px; font-weight: 500;
+    letter-spacing: .16em; text-transform: uppercase;
+    color: var(--ink-soft);
+  }
+  h1 {
+    font-family: "Noto Serif KR", serif;
+    font-weight: 700;
+    font-size: clamp(30px, 4.4vw, 46px);
+    line-height: 1.24; letter-spacing: -.01em;
+    margin: 14px 0 16px; text-wrap: balance;
+  }
+  .standfirst { font-size: 17px; color: var(--ink-mid); max-width: 60ch; margin: 0; }
+  .meta {
+    display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 26px;
+    font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--ink-soft);
+  }
+
+  section { padding-top: 52px; }
+  h2 {
+    font-family: "Noto Serif KR", serif;
+    font-size: 25px; font-weight: 700; line-height: 1.35;
+    margin: 0 0 6px; text-wrap: balance;
+    display: flex; align-items: baseline; gap: 12px;
+  }
+  h2 .num {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 13px; font-weight: 600; color: var(--accent); flex: none;
+  }
+  h3 { font-size: 16.5px; font-weight: 600; margin: 32px 0 8px; color: var(--ink); }
+  .lede { color: var(--ink-mid); max-width: 68ch; margin: 0 0 22px; }
+  p { max-width: 68ch; }
+  ul, ol { max-width: 68ch; padding-left: 20px; }
+  li { margin: 5px 0; }
+  strong { font-weight: 600; }
+  code {
+    font-family: "IBM Plex Mono", monospace; font-size: .88em;
+    background: var(--surface-alt); padding: 1px 5px; border-radius: 3px;
+  }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 6px; padding: 22px 24px; box-shadow: var(--shadow);
+  }
+  .grid { display: grid; gap: 14px; }
+  .g2 { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+  .g3 { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+
+  .qcard {
+    background: var(--surface); border: 1px solid var(--line);
+    border-left: 3px solid var(--accent); border-radius: 4px; padding: 16px 18px;
+  }
+  .qcard .q { font-weight: 600; margin: 0 0 4px; }
+  .qcard .a { font-size: 13.5px; color: var(--ink-soft); margin: 0; }
+
+  .equation {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 6px;
+    padding: 24px; overflow-x: auto;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 13.5px; line-height: 2.1; font-variant-numeric: tabular-nums;
+  }
+  .equation .lhs { font-weight: 600; }
+  .equation .op { color: var(--ink-soft); display: inline-block; width: 1.4em; }
+  .t-in { color: var(--inflow); font-weight: 500; }
+  .t-out { color: var(--outflow); font-weight: 500; }
+  .t-fx { color: var(--fxfx); font-weight: 500; }
+  .t-mut { color: var(--ink-soft); }
+
+  .tablebox { overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
+  th {
+    background: var(--surface-alt); font-size: 11.5px; font-weight: 600;
+    letter-spacing: .07em; text-transform: uppercase; color: var(--ink-soft); white-space: nowrap;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  td.num { font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  .pill {
+    display: inline-block; font-size: 11.5px; font-weight: 600;
+    padding: 2px 8px; border-radius: 999px; white-space: nowrap; border: 1px solid currentColor;
+  }
+  .pill.ok { color: var(--inflow); }
+  .pill.warn { color: var(--fxfx); }
+  .pill.no { color: var(--outflow); }
+
+  .note {
+    border-left: 3px solid var(--fxfx); background: var(--surface);
+    border-radius: 0 4px 4px 0; padding: 14px 18px; margin: 20px 0;
+  }
+  .note .h { font-weight: 600; font-size: 14px; margin: 0 0 4px; color: var(--fxfx); }
+  .note p { margin: 0; font-size: 14px; color: var(--ink-mid); }
+
+  .view { display: grid; grid-template-columns: 118px 1fr; gap: 20px; padding: 18px 0; border-bottom: 1px solid var(--line-soft); }
+  .view:last-child { border-bottom: none; }
+  .view .tag {
+    font-family: "IBM Plex Mono", monospace; font-size: 11.5px; font-weight: 600;
+    letter-spacing: .06em; color: var(--accent); padding-top: 3px;
+  }
+  .view h4 { margin: 0 0 4px; font-size: 15.5px; font-weight: 600; }
+  .view p { margin: 0; font-size: 14px; color: var(--ink-mid); max-width: 62ch; }
+
+  .phase { display: grid; grid-template-columns: 92px 1fr; gap: 22px; padding: 22px 0; border-top: 1px solid var(--line); }
+  .phase .stage { font-family: "IBM Plex Mono", monospace; font-size: 12.5px; font-weight: 600; color: var(--ink); }
+  .phase .stage span { display: block; font-weight: 400; color: var(--ink-soft); font-size: 11.5px; margin-top: 3px; }
+  .phase h4 { margin: 0 0 6px; font-size: 16px; font-weight: 600; }
+  .phase p { max-width: 66ch; }
+
+  svg text { font-family: "IBM Plex Sans KR", sans-serif; }
+  figure { margin: 22px 0 8px; }
+  figcaption { font-size: 12.5px; color: var(--ink-soft); margin-top: 10px; max-width: 68ch; }
+
+  footer.end { margin-top: 72px; padding-top: 22px; border-top: 2px solid var(--ink); font-size: 13px; color: var(--ink-soft); }
+  a { color: var(--accent); text-underline-offset: 2px; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+
+<div class="wrap">
+
+<header class="masthead">
+  <div class="eyebrow">Selvas Treasury · 기능 기획안</div>
+  <h1>자금은 어디로 흘러 지금이 되었나</h1>
+  <p class="standfirst">
+    가용자금의 기초와 기말 사이를 <strong>설명 가능한 항목으로 완전히 분해</strong>하고,
+    그중 환율이 만든 몫을 따로 떼어 추적하는 분석 기능.
+  </p>
+  <div class="meta">
+    <span>작성 2026-09-08</span>
+    <span>대상 재무팀 · 경영진</span>
+    <span>상태 기획 — 구현 미착수</span>
+  </div>
+</header>
+
+<section>
+  <h2><span class="num">01</span>무엇을 답하는 기능인가</h2>
+  <p class="lede">
+    지금 시스템은 <strong>잔액을 보여준다</strong>. 이 기능은 <strong>그 잔액이 그렇게 된 이유를 보여준다</strong>.
+    아래 네 질문에 화면에서 바로 답하는 것이 목표다.
+  </p>
+  <div class="grid g2">
+    <div class="qcard">
+      <p class="q">이 기간에 가용자금이 왜 이만큼 줄었나</p>
+      <p class="a">기초에서 기말까지를 영업·투자·재무·평가·환율 다섯 갈래로 쪼개 보여준다.</p>
+    </div>
+    <div class="qcard">
+      <p class="q">순유출의 주범은 무엇인가</p>
+      <p class="a">19개 입출금 항목을 금액 순으로 세우고, 상위 항목은 개별 거래까지 파고든다.</p>
+    </div>
+    <div class="qcard">
+      <p class="q">외화 환산액이 변한 건 돈이 움직여서인가 환율이 움직여서인가</p>
+      <p class="a">거래효과와 환율효과를 분리하고, 환율효과는 다시 실현·미실현으로 나눈다.</p>
+    </div>
+    <div class="qcard">
+      <p class="q">이 숫자를 믿어도 되나</p>
+      <p class="a">항목으로 설명된 비율을 함께 표시한다. 설명되지 않는 차액은 숨기지 않는다.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">02</span>분석의 뼈대 — 브릿지 등식</h2>
+  <p class="lede">
+    모든 화면은 이 하나의 등식 위에 세운다. 좌변은 <strong>잔액에서 관측된 사실</strong>이고,
+    우변은 <strong>그것을 설명하는 항목들</strong>이다. 양변이 맞지 않으면 그 차이를 마지막 줄에 그대로 드러낸다.
+  </p>
+
+  <div class="equation">
+    <span class="lhs">기말 가용자금 − 기초 가용자금</span><br>
+    <span class="op">=</span> <span class="t-in">영업활동</span> <span class="t-mut">매출채권·미수금·국책자금 회수 − 미지급금·외상매입금·선급금·이자·전자어음</span><br>
+    <span class="op">+</span> <span class="t-out">투자활동</span> <span class="t-mut">투자금 회수 − 투자 집행 (가용 ↔ 불가용 이동 포함)</span><br>
+    <span class="op">+</span> <span class="t-out">재무활동</span> <span class="t-mut">차입금 실행 − 차입금 상환</span><br>
+    <span class="op">+</span> <span class="t-fx">평가효과</span> <span class="t-mut">지분·국채 시가 변동 — 현금 이동 없음</span><br>
+    <span class="op">+</span> <span class="t-fx">환율효과</span> <span class="t-mut">외화 원화환산액 변동 — 현금 이동 없음</span><br>
+    <span class="op">+</span> <span class="t-mut">미설명 차액 ← 일보 미작성·입력 누락이 여기로 모인다</span>
+  </div>
+
+  <h3>환율효과는 다시 세 겹으로 쪼갠다</h3>
+  <p>
+    “USD 환산액이 3억 늘었다”만으로는 아무 판단도 할 수 없다. 달러를 더 보유하게 된 것인지,
+    환율이 오른 것인지, 팔아서 이익을 실현한 것인지가 전부 다른 이야기이기 때문이다.
+  </p>
+  <div class="equation">
+    <span class="lhs">Δ(원화환산액)</span><br>
+    <span class="op">=</span> <span class="t-in">거래효과</span> <span class="t-mut">Δ외화잔액 × 기초환율 — 실제로 외화가 늘거나 줄어서</span><br>
+    <span class="op">+</span> <span class="t-fx">환율효과</span> <span class="t-mut">기초 외화잔액 × Δ환율 — 가만히 있었는데 환율이 움직여서</span><br>
+    <span class="op">+</span> <span class="t-mut">교차항  Δ외화잔액 × Δ환율 — 기중 증감분에 붙은 환율 변동</span>
+  </div>
+  <p style="margin-top:18px">
+    여기에 외화 원장(FIFO)이 이미 갖고 있는 정보를 얹으면 한 단계 더 들어간다.
+    <strong>실현 환차손익</strong>은 매각·지급으로 로트가 소진될 때 확정된 금액이고,
+    <strong>미실현</strong>은 잔존 로트의 장부환율과 현재 환율의 차이다.
+    둘은 성격이 완전히 달라 한 줄에 섞으면 안 된다.
+  </p>
+
+  <figure>
+    <svg viewBox="0 0 900 240" role="img" aria-label="기초 가용자금에서 항목별 증감을 거쳐 기말 가용자금에 이르는 브릿지 도해" style="width:100%;height:auto">
+      <g font-size="11">
+        <line x1="40" y1="200" x2="880" y2="200" stroke="var(--line)" stroke-width="1"></line>
+
+        <rect x="48" y="70" width="86" height="130" fill="var(--accent)" opacity=".85" rx="2"></rect>
+        <text x="91" y="218" text-anchor="middle" fill="var(--ink-mid)">기초</text>
+
+        <line x1="134" y1="70" x2="158" y2="70" stroke="var(--line)" stroke-dasharray="3 3"></line>
+        <rect x="158" y="40" width="86" height="30" fill="var(--inflow)" opacity=".85" rx="2"></rect>
+        <text x="201" y="218" text-anchor="middle" fill="var(--ink-mid)">영업</text>
+
+        <line x1="244" y1="40" x2="268" y2="40" stroke="var(--line)" stroke-dasharray="3 3"></line>
+        <rect x="268" y="40" width="86" height="62" fill="var(--outflow)" opacity=".85" rx="2"></rect>
+        <text x="311" y="218" text-anchor="middle" fill="var(--ink-mid)">투자</text>
+
+        <line x1="354" y1="102" x2="378" y2="102" stroke="var(--line)" stroke-dasharray="3 3"></line>
+        <rect x="378" y="102" width="86" height="28" fill="var(--outflow)" opacity=".85" rx="2"></rect>
+        <text x="421" y="218" text-anchor="middle" fill="var(--ink-mid)">재무</text>
+
+        <line x1="464" y1="130" x2="488" y2="130" stroke="var(--line)" stroke-dasharray="3 3"></line>
+        <rect x="488" y="118" width="86" height="12" fill="var(--fxfx)" opacity=".65" rx="2"></rect>
+        <text x="531" y="218" text-anchor="middle" fill="var(--ink-mid)">평가</text>
+
+        <line x1="574" y1="118" x2="598" y2="118" stroke="var(--line)" stroke-dasharray="3 3"></line>
+        <rect x="598" y="100" width="86" height="18" fill="var(--fxfx)" opacity=".95" rx="2"></rect>
+        <text x="641" y="218" text-anchor="middle" fill="var(--fxfx)" font-weight="600">환율</text>
+
+        <line x1="684" y1="100" x2="708" y2="100" stroke="var(--line)" stroke-dasharray="3 3"></line>
+        <rect x="708" y="92" width="86" height="8" fill="var(--ink-soft)" opacity=".5" rx="2"></rect>
+        <text x="751" y="218" text-anchor="middle" fill="var(--ink-soft)">미설명</text>
+
+        <line x1="794" y1="92" x2="818" y2="92" stroke="var(--line)" stroke-dasharray="3 3"></line>
+        <rect x="818" y="92" width="62" height="108" fill="var(--accent)" opacity=".85" rx="2"></rect>
+        <text x="849" y="218" text-anchor="middle" fill="var(--ink-mid)">기말</text>
+      </g>
+    </svg>
+    <figcaption>
+      브릿지 뷰의 형태. 막대를 클릭하면 그 항목을 구성한 개별 거래 목록으로 내려간다.
+      회색 ‘미설명’ 막대는 데이터가 완전하면 0이 되고, 크면 클수록 입력 누락을 가리킨다.
+    </figcaption>
+  </figure>
+</section>
+
+<section>
+  <h2><span class="num">03</span>데이터 실태 — 무엇이 있고 무엇이 없나</h2>
+  <p class="lede">
+    이 기획이 성립하는 이유는 <strong>이미 쌓인 데이터로 대부분 계산된다</strong>는 점이다.
+    다만 환율 이력 하나가 비어 있고, 그것이 환율효과 분석의 전제다.
+  </p>
+  <div class="tablebox">
+    <table>
+      <thead>
+        <tr><th>데이터</th><th>보유 현황</th><th>이 기능에서의 역할</th><th style="text-align:right">상태</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>daily</code> 일별 잔액</td>
+          <td class="num">358행</td>
+          <td>원화 3계정 + 통화별 외화 잔액. 브릿지의 <strong>좌변</strong>.</td>
+          <td style="text-align:right"><span class="pill ok">보유</span></td>
+        </tr>
+        <tr>
+          <td><code>daily_report_items</code> 입출금</td>
+          <td class="num">594행</td>
+          <td>19개 카테고리 × 금액 × 통화 × 연동 대상. 브릿지의 <strong>우변</strong>.</td>
+          <td style="text-align:right"><span class="pill ok">보유</span></td>
+        </tr>
+        <tr>
+          <td><code>investments</code> · <code>loans</code></td>
+          <td class="num">102행 +</td>
+          <td><code>start_date</code>·<code>closed_date</code>로 시점별 잔액 재구성. 투자·재무 활동.</td>
+          <td style="text-align:right"><span class="pill ok">보유</span></td>
+        </tr>
+        <tr>
+          <td><code>equities</code> 날짜별 시세</td>
+          <td class="num">694행</td>
+          <td>지분·국채 평가효과. 현금 이동 없는 증감의 정본.</td>
+          <td style="text-align:right"><span class="pill ok">보유</span></td>
+        </tr>
+        <tr>
+          <td><code>fx_lots</code> · <code>fx_lot_consumptions</code></td>
+          <td>운영 중</td>
+          <td>실현 환차손익, 장부환율. 환율효과의 <strong>실현분</strong>.</td>
+          <td style="text-align:right"><span class="pill ok">보유</span></td>
+        </tr>
+        <tr>
+          <td><code>daily_reports.fx_rates</code></td>
+          <td>컬럼만 존재</td>
+          <td>당일 적용 환율 스냅샷 — 설계는 돼 있으나 <strong>한 번도 저장된 적이 없다</strong>.</td>
+          <td style="text-align:right"><span class="pill no">비어 있음</span></td>
+        </tr>
+        <tr>
+          <td><code>fx_rate_history</code> 일별 환율</td>
+          <td>마이그레이션 미적용</td>
+          <td>환율효과 계산의 필수 입력. ECOS로 <strong>과거 수년치 백필 가능</strong>.</td>
+          <td style="text-align:right"><span class="pill warn">조치 필요</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p style="font-size:13px;color:var(--ink-soft);margin-top:10px">행 수는 2026-08-26 실측치이며 이후 증가했다.</p>
+
+  <div class="note">
+    <p class="h">환율 이력이 없으면 환율효과는 계산되지 않는다</p>
+    <p>
+      <code>daily</code>에는 통화별 잔액과 원화환산 <em>합계</em>만 있어, 합계를 통화별로 되돌릴 수 없다(미지수 5개, 식 1개).
+      해결책은 한국은행 ECOS 백필이다 — GAS에 <code>?type=fxhistory</code> 경로가 이미 구현돼 있어
+      USD·EUR·JPY·GBP는 바로 채울 수 있다. <strong>CNY만 ECOS 통화 코드가 등록돼 있지 않아 추가가 필요하다.</strong>
+    </p>
+  </div>
+
+  <h3>설명률 — 이 분석의 신뢰도 지표</h3>
+  <p>
+    자금일보를 쓰지 않은 날은 잔액만 있고 항목이 없다. 그런 날의 증감은 어떤 항목으로도 설명되지 않는다.
+    이를 감추면 분석 전체가 거짓이 되므로, 모든 화면 상단에 다음을 항상 표시한다.
+  </p>
+  <div class="equation">
+    <span class="lhs">설명률</span> <span class="op">=</span> 항목으로 설명된 증감액 ÷ 총 증감액 <span class="t-mut">(절대값 기준)</span><br>
+    <span class="t-mut">예) 설명률 92% · 미설명 4.1억 · 일보 미작성 3영업일</span>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">04</span>화면 구성</h2>
+  <p class="lede">
+    신규 메뉴 <strong>자금흐름 분석</strong>(<code>/flow-analysis</code>) 하나에 다섯 개 뷰를 탭으로 둔다.
+    상단에는 모든 뷰가 공유하는 조회 조건(기간·법인·확정성)과 설명률 배지를 고정한다.
+  </p>
+
+  <div class="card" style="padding:6px 24px">
+    <div class="view">
+      <div class="tag">VIEW 1</div>
+      <div>
+        <h4>브릿지 — 기초에서 기말까지</h4>
+        <p>워터폴 한 장으로 기간 전체를 설명한다. 막대 클릭 → 구성 거래 목록 → 원천 화면(운용자금·차입금·자금일보)으로 딥링크.</p>
+      </div>
+    </div>
+    <div class="view">
+      <div class="tag">VIEW 2</div>
+      <div>
+        <h4>순유출 분해 — 무엇이 돈을 끌고 갔나</h4>
+        <p>카테고리별 유입·유출을 금액 순으로 정렬하고 전기 대비 증감을 병기한다. 상위 다섯 요인은 문장으로 요약해 상단에 고정한다.</p>
+      </div>
+    </div>
+    <div class="view">
+      <div class="tag">VIEW 3</div>
+      <div>
+        <h4>환율효과 추적</h4>
+        <p>통화별 환산액 추이 위에 거래효과·환율효과·교차항을 누적으로 쌓는다. 하단에 실현·미실현 환차손익과 FIFO 장부환율 대비 현재 환율.</p>
+      </div>
+    </div>
+    <div class="view">
+      <div class="tag">VIEW 4</div>
+      <div>
+        <h4>자금 이동 지도</h4>
+        <p>운전 ↔ 운용 ↔ 지분 ↔ 차입 사이의 이동을 흐름도로 그린다. 외부 유입·유출과 내부 대체를 구분해 “줄어든 게 아니라 옮겨간 것”을 한눈에 보이게 한다.</p>
+      </div>
+    </div>
+    <div class="view">
+      <div class="tag">VIEW 5</div>
+      <div>
+        <h4>원장 드릴다운</h4>
+        <p>위 네 뷰의 어떤 지점에서든 도달하는 거래 단위 표. 기존 NotionTable(컬럼 토글·정렬·뷰 저장)을 그대로 쓴다.</p>
+      </div>
+    </div>
+  </div>
+
+  <h3>분석 축 — 무엇으로 자르고 볼 것인가</h3>
+  <div class="grid g3" style="margin-top:14px">
+    <div class="card"><strong>기간</strong><br><span class="t-mut">임의 구간 · 주/월/분기 롤업 · 전기 대비</span></div>
+    <div class="card"><strong>법인</strong><br><span class="t-mut">단일 · 3사 합산 · 법인 간 비교</span></div>
+    <div class="card"><strong>성격</strong><br><span class="t-mut">영업 · 투자 · 재무 · 평가 · 환율</span></div>
+    <div class="card"><strong>계정</strong><br><span class="t-mut">보통예금 · 국책자금 · MMDA · 통화별</span></div>
+    <div class="card"><strong>상대처</strong><br><span class="t-mut">금융기관(정규화 합산) · 개별 운용·차입 건</span></div>
+    <div class="card"><strong>확정성</strong><br><span class="t-mut">승인 확정분만 · 임시 입력 포함</span></div>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">05</span>단계별 실행안</h2>
+  <p class="lede">
+    1단계는 <strong>신규 테이블 없이</strong> 지금 있는 데이터만으로 만든다. 환율 백필이 필요한 부분은 2단계로 분리해,
+    선행 작업이 늦어져도 1단계가 멈추지 않게 한다.
+  </p>
+
+  <div class="phase">
+    <div class="stage">PHASE 1<span>약 3일</span></div>
+    <div>
+      <h4>브릿지 + 순유출 분해</h4>
+      <p style="margin:0 0 10px">
+        <code>src/lib/flowBridge.ts</code>에 분해 로직을 SSOT로 두고 VIEW 1·2·5를 만든다.
+        잔액·가용 판정은 기존 <code>treasuryCalc</code>(<code>opCashKRW</code>·<code>wasOpenOn</code>)를 그대로 재사용해
+        대시보드와 같은 숫자가 나오도록 한다.
+      </p>
+      <p style="margin:0"><strong>선행</strong> 없음 · <strong>산출</strong> 메뉴 신설 · 설명률 지표 · 거래 단위 드릴다운</p>
+    </div>
+  </div>
+
+  <div class="phase">
+    <div class="stage">PHASE 2<span>약 2일</span></div>
+    <div>
+      <h4>환율효과 추적</h4>
+      <p style="margin:0 0 10px">
+        VIEW 3. 거래효과·환율효과·교차항 분해와 실현·미실현 구분을 붙인다.
+      </p>
+      <p style="margin:0">
+        <strong>선행</strong> <code>fx_rate_history</code> 적용 → ECOS 백필(연 단위 분할 호출) → CNY 통화 코드 추가 ·
+        <strong>산출</strong> 통화별 추이 · 환율 기여도
+      </p>
+    </div>
+  </div>
+
+  <div class="phase">
+    <div class="stage">PHASE 3<span>약 2일</span></div>
+    <div>
+      <h4>이동 지도 · 내보내기 · 저장된 뷰</h4>
+      <p style="margin:0 0 10px">
+        VIEW 4와 운영 편의 기능. 자주 보는 조회 조건을 저장하고, 분석 결과를 엑셀로 내려 보고서에 붙일 수 있게 한다.
+      </p>
+      <p style="margin:0"><strong>선행</strong> Phase 1 · <strong>산출</strong> 흐름도 · 엑셀 내보내기 · 뷰 북마크</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">06</span>설계 원칙</h2>
+  <div class="grid g2">
+    <div class="card">
+      <h4 style="margin:0 0 6px">계산은 한 곳에서만</h4>
+      <p style="margin:0;font-size:14px;color:var(--ink-mid)">
+        같은 지표를 두 화면이 각자 계산하면 반드시 값이 갈라진다(외화비중 6.2% 대 27.9% 사고).
+        분해 로직은 <code>flowBridge.ts</code> 하나에 두고, 대시보드가 쓰는 기존 함수를 재사용한다.
+      </p>
+    </div>
+    <div class="card">
+      <h4 style="margin:0 0 6px">맞지 않는 차액을 숨기지 않는다</h4>
+      <p style="margin:0;font-size:14px;color:var(--ink-mid)">
+        미설명 차액을 0으로 보정하거나 다른 항목에 흡수시키지 않는다. 그 숫자 자체가
+        어느 날 일보가 비었는지를 알려주는 가장 유용한 정보다.
+      </p>
+    </div>
+    <div class="card">
+      <h4 style="margin:0 0 6px">과거는 그 시점의 사실대로</h4>
+      <p style="margin:0;font-size:14px;color:var(--ink-mid)">
+        오늘의 환율·오늘의 활성 목록을 과거 날짜에 적용하지 않는다.
+        상환된 차입금이 과거 잔액에서 소급 삭제되던 버그와 같은 유형을 반복하지 않는다.
+      </p>
+    </div>
+    <div class="card">
+      <h4 style="margin:0 0 6px">분석은 읽기 전용</h4>
+      <p style="margin:0;font-size:14px;color:var(--ink-mid)">
+        이 메뉴는 어떤 데이터도 쓰지 않는다. 이상을 발견하면 원천 화면으로 딥링크만 걸고,
+        수정은 그 화면의 권한 체계 안에서 이뤄지게 한다.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">07</span>결정이 필요한 것</h2>
+  <ol>
+    <li><strong>분석 대상 범위</strong> — 가용운전 + 가용운용만인가, 지분·국채까지 포함한 총자산 기준도 함께 볼 것인가.</li>
+    <li><strong>확정성 기준</strong> — 기본값을 승인 확정분(<code>confirmed</code>)만으로 할 것인가, 임시 입력까지 포함할 것인가.</li>
+    <li><strong>공개 범위</strong> — 법인 간 비교가 가능한 화면이므로 역할 기본 노출로 둘지, 명시 부여(opt-in)로 둘지.</li>
+    <li><strong>CNY 처리</strong> — ECOS 코드를 추가해 백필할지, 잔액이 미미하면 환율효과 분석에서 제외할지.</li>
+  </ol>
+  <p style="margin-top:20px">
+    1·2번이 정해지면 Phase 1은 바로 착수할 수 있다. 3·4번은 Phase 2 전까지 정하면 된다.
+  </p>
+</section>
+
+<footer class="end">
+  Selvas Treasury · 자금흐름 분석 기획안 · 2026-09-08 · 구현 미착수
+</footer>
+
+</div>

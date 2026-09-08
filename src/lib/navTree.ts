@@ -59,6 +59,8 @@ export const NAV_GROUPS: NavGroup[] = [
     section: 'DASHBOARD',
     items: [
       { to: '/dashboard', label: '통합 상황판', icon: '⊞', slug: 'dashboard' },
+      // 읽기 전용 분석 화면 — 작업 권한(section) 대상이 아니다.
+      { to: '/flow-analysis', label: '자금흐름 분석', icon: '🧮', slug: 'flow-analysis' },
       { to: '/policy',    label: '자금정책',    icon: '📋', slug: 'policy',    section: 'policy' },
     ],
   },

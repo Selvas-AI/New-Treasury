@@ -8,9 +8,9 @@ export const MENU_DEFAULTS: Record<string, string[]> = {
   // 격상됐다 — 사용자 확인(2026-08-19).
   // master는 hasMenu()에서 항상 허용되고, 그 외 계정은 treasury_users.menus에 명시돼야 한다.
   master:  ['*'],
-  admin:   ['dashboard','daily','input','invest','loans','equity','history','fx','fx-ledger','policy'],
-  editor:  ['dashboard','daily','input','invest','loans','equity','history','fx','fx-ledger'],
-  viewer:  ['dashboard','policy','invest','loans','equity','history','fx','fx-ledger'],
+  admin:   ['dashboard','flow-analysis','daily','input','invest','loans','equity','history','fx','fx-ledger','policy'],
+  editor:  ['dashboard','flow-analysis','daily','input','invest','loans','equity','history','fx','fx-ledger'],
+  viewer:  ['dashboard','flow-analysis','policy','invest','loans','equity','history','fx','fx-ledger'],
 }
 
 // 역할별 섹션 기본 작업 권한 (action_permissions=null 일 때 fallback)

@@ -7,6 +7,7 @@ import Layout from './components/Layout'
 import LoginPage from './pages/LoginPage'
 import ResetPasswordPage from './pages/ResetPasswordPage'
 import DashboardPage from './pages/DashboardPage'
+import FlowAnalysisPage from './pages/FlowAnalysisPage'
 import InputPage from './pages/InputPage'
 import InvestPage from './pages/InvestPage'
 import LoansPage from './pages/LoansPage'
@@ -77,6 +78,8 @@ export default function App() {
             {/* 통합 상황판 */}
             <Route path="/dashboard"           element={<DashboardPage />} />
             <Route path="/dashboard/:company"  element={<DashboardPage />} />
+            <Route path="/flow-analysis"          element={<FlowAnalysisPage />} />
+            <Route path="/flow-analysis/:company" element={<FlowAnalysisPage />} />
 
             {/* 자금일보 */}
             <Route path="/daily-report"                       element={<DailyReportPage />} />
