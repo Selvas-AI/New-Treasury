@@ -701,16 +701,23 @@ function debugSupabaseKey() {
   if (!raw) { Logger.log('SUPABASE_KEY 속성이 없습니다 — 스크립트 속성에 추가하세요.'); return; }
   var key = raw.trim();
 
-  Logger.log('길이=%s (정상 anon 키는 208자) / 앞12자=%s / 뒤6자=%s',
-    raw.length, key.slice(0, 12), key.slice(-6));
-  Logger.log('앞뒤 공백·줄바꿈: %s', (raw !== key) ? '있음 ← 401 원인일 수 있음' : '없음');
+  Logger.log('길이=' + raw.length + ' (정상 anon 키는 208자) / 앞12자=' + key.slice(0, 12)
+    + ' / 뒤6자=' + key.slice(-6));
+  Logger.log('앞뒤 공백·줄바꿈: ' + ((raw !== key) ? '있음 ← 401 원인일 수 있음' : '없음'));
+
+  // 가장 흔한 실수 — 대시보드에 축약 표시된 'eyJhbGci...' 를 그대로 붙여넣는 경우.
+  // 화면 텍스트를 드래그 복사하면 말줄임표까지 들어와 10~20자짜리 값이 저장된다.
+  if (key.length < 100) {
+    Logger.log('⚠ 키가 잘렸습니다 — 화면에 축약 표시된 문자열을 복사한 것으로 보입니다.');
+    Logger.log('  Supabase 대시보드에서 반드시 **복사 버튼**으로 전체 값을 가져오세요(208자).');
+  }
 
   var parts = key.split('.');
   if (parts.length === 3) {
     try {
       var json = Utilities.newBlob(Utilities.base64DecodeWebSafe(parts[1])).getDataAsString();
       var pl = JSON.parse(json);
-      Logger.log('JWT role=%s / ref=%s / 만료=%s', pl.role, pl.ref, new Date(pl.exp * 1000));
+      Logger.log('JWT role=' + pl.role + ' / ref=' + pl.ref + ' / 만료=' + new Date(pl.exp * 1000));
       Logger.log('  → role 은 anon, ref 는 qobfmihxcclbzfaohnor 여야 합니다.');
     } catch (e) { Logger.log('JWT payload 파싱 실패: ' + e); }
   } else {
@@ -736,7 +743,7 @@ function debugSupabaseKey() {
       opt.payload = JSON.stringify({ p_date: kstToday });
     }
     var r = UrlFetchApp.fetch(SB_URL + c.path, opt);
-    Logger.log('%s → HTTP %s / %s', c.label, r.getResponseCode(), r.getContentText().slice(0, 200));
+    Logger.log(c.label + ' → HTTP ' + r.getResponseCode() + ' / ' + r.getContentText().slice(0, 200));
   }
   Logger.log('판정: 둘 다 401 → 키 문제 / 앞은 200 [] 이고 RPC 가 404 → SQL 미실행 / RPC 200 + 목록 → 정상');
 }
