@@ -731,25 +731,33 @@ function checkAndSendDailyAlert() {
       return;
     }
 
-    const url = SB_URL + '/rest/v1/daily?select=company&date=eq.' + today;
+    // ⚠ 2026-08-26 RLS 전환 이후 daily 테이블은 anon 으로 직접 조회할 수 없다.
+    //   (오류가 아니라 200 [] 가 돌아와 '전 법인 미입력'으로 오판 → 오탐 메일)
+    //   그래서 SECURITY DEFINER 함수로 그날 입력된 법인명만 받아온다.
+    //   선행: docs/db/gas_daily_input_status_rpc.sql 실행 + 스크립트 속성 SUPABASE_KEY 를
+    //        **현재 유효한 anon 키**로 갱신(옛 키는 401 Invalid API key).
+    const url  = SB_URL + '/rest/v1/rpc/daily_input_companies';
     const resp = UrlFetchApp.fetch(url, {
-      method: 'get',
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify({ p_date: today }),
       headers: {
         'apikey':        sbKey,
         'Authorization': 'Bearer ' + sbKey,
-        'Content-Type':  'application/json',
       },
       muteHttpExceptions: true,
       timeout: 10000,
     });
 
     if (resp.getResponseCode() !== 200) {
-      Logger.log('Supabase 조회 실패: HTTP ' + resp.getResponseCode());
+      // 실패 시 절대 발송하지 않는다 — 조회 실패를 '미입력'으로 오해하면 전 법인 오탐.
+      Logger.log('Supabase 조회 실패: HTTP ' + resp.getResponseCode()
+        + ' / ' + resp.getContentText().slice(0, 200));
       return;
     }
 
-    const rows          = JSON.parse(resp.getContentText()) || [];
-    const inputCompanies = new Set(rows.map(r => r.company));
+    const rows           = JSON.parse(resp.getContentText()) || [];
+    const inputCompanies = new Set(rows.map(function (r) { return r.company; }));
 
     Logger.log('오늘 입력 완료 법인: ' + JSON.stringify([...inputCompanies]));
 
