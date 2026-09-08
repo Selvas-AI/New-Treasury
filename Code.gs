@@ -694,6 +694,53 @@ const KR_HOLIDAYS = new Set([
   '2027-12-25',
 ]);
 
+// ── 진단 함수 — GAS 에디터에서 직접 실행해 401 원인을 가린다 ─────────
+// 키 자체는 로그에 남기지 않는다(길이·앞 12자·JWT payload 만).
+function debugSupabaseKey() {
+  var raw = PropertiesService.getScriptProperties().getProperty('SUPABASE_KEY');
+  if (!raw) { Logger.log('SUPABASE_KEY 속성이 없습니다 — 스크립트 속성에 추가하세요.'); return; }
+  var key = raw.trim();
+
+  Logger.log('길이=%s (정상 anon 키는 208자) / 앞12자=%s / 뒤6자=%s',
+    raw.length, key.slice(0, 12), key.slice(-6));
+  Logger.log('앞뒤 공백·줄바꿈: %s', (raw !== key) ? '있음 ← 401 원인일 수 있음' : '없음');
+
+  var parts = key.split('.');
+  if (parts.length === 3) {
+    try {
+      var json = Utilities.newBlob(Utilities.base64DecodeWebSafe(parts[1])).getDataAsString();
+      var pl = JSON.parse(json);
+      Logger.log('JWT role=%s / ref=%s / 만료=%s', pl.role, pl.ref, new Date(pl.exp * 1000));
+      Logger.log('  → role 은 anon, ref 는 qobfmihxcclbzfaohnor 여야 합니다.');
+    } catch (e) { Logger.log('JWT payload 파싱 실패: ' + e); }
+  } else {
+    Logger.log('JWT 형식이 아닙니다 — sb_publishable_… / sb_secret_… 같은 신형 키는');
+    Logger.log('  이 프로젝트에서 401 이 납니다. Legacy API keys 의 anon public(eyJ… 로 시작)을 쓰세요.');
+  }
+
+  var kstToday = Utilities.formatDate(new Date(new Date().getTime() + 9 * 3600 * 1000), 'UTC', 'yyyy-MM-dd');
+  var calls = [
+    { label: '테이블 직접 조회(RLS로 막히는 게 정상)', path: '/rest/v1/daily?select=company&limit=1', method: 'get' },
+    { label: 'RPC daily_input_companies(정상 경로)',   path: '/rest/v1/rpc/daily_input_companies', method: 'post' },
+  ];
+  for (var i = 0; i < calls.length; i++) {
+    var c = calls[i];
+    var opt = {
+      method: c.method,
+      headers: { 'apikey': key, 'Authorization': 'Bearer ' + key },
+      muteHttpExceptions: true,
+      timeout: 10000,
+    };
+    if (c.method === 'post') {
+      opt.contentType = 'application/json';
+      opt.payload = JSON.stringify({ p_date: kstToday });
+    }
+    var r = UrlFetchApp.fetch(SB_URL + c.path, opt);
+    Logger.log('%s → HTTP %s / %s', c.label, r.getResponseCode(), r.getContentText().slice(0, 200));
+  }
+  Logger.log('판정: 둘 다 401 → 키 문제 / 앞은 200 [] 이고 RPC 가 404 → SQL 미실행 / RPC 200 + 목록 → 정상');
+}
+
 // ── 메인 함수 (트리거로 실행) ─────────────────────────────────────────
 function checkAndSendDailyAlert() {
   try {
@@ -725,7 +772,8 @@ function checkAndSendDailyAlert() {
     }
 
     // 4. Supabase에서 오늘 입력된 법인 목록 조회
-    const sbKey = props.getProperty('SUPABASE_KEY') || SB_KEY;
+    // .trim() — 복붙 과정에서 앞뒤 공백·줄바꿈이 섞이면 헤더가 깨져 401 이 난다
+    const sbKey = (props.getProperty('SUPABASE_KEY') || SB_KEY || '').trim();
     if (!sbKey) {
       Logger.log('SUPABASE_KEY 없음 — 종료');
       return;
