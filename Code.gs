@@ -36,6 +36,11 @@ function doGet(e) {
     // ── 공휴일 조회: ?type=holidays&year=YYYY ─────────────────────
     if (type === 'holidays') return fetchKoreanHolidays_(e);
 
+    // ── 결재 요청 메일 발송: ?type=approvalnotify&reportId=<uuid> ──
+    //   자금일보 화면이 상신·승인 직후 호출한다(즉시 발송).
+    //   reportId 외의 정보는 받지 않는다 — 수신자·내용은 서버가 DB에서 결정한다.
+    if (type === 'approvalnotify') return sendApprovalNotify_(e);
+
     if (type === 'bond') {
       // ── 채권명으로 검색: ?type=bond&bondName=국고채권 ──────────
       if (e.parameter.bondName && !e.parameter.isinCd) {
@@ -900,6 +905,163 @@ function testDailyAlert() {
 
   Logger.log('\n설정이 완료되면 checkAndSendDailyAlert() 를 직접 실행해서 테스트하세요.');
   Logger.log('트리거 설정: 매일 오전 4시~5시 (KST 13시~14시)');
+}
+
+
+// ══════════════════════════════════════════════════════════════════════
+//  자금일보 결재 요청 메일 (상신·승인 즉시 + 주기 스윕 보완)
+//
+//  흐름
+//    자금일보 화면에서 상신/승인 성공 → ?type=approvalnotify&reportId=... 호출
+//      → 서버(GAS)가 DB에서 '지금 차례인 결재자'를 찾아 메일 발송
+//    누락 대비: sweepApprovalNotifications() 를 30분 주기 트리거로 함께 돌린다
+//      (브라우저가 닫히거나 네트워크가 끊겨 호출이 유실된 경우를 줍는다)
+//
+//  중복 발송은 DB의 unique(report_id, step)이 막는다 — 두 경로를 같이 켜도 안전하다.
+//
+//  선행:
+//    1) docs/db/approval_notification.sql 실행
+//    2) 스크립트 속성 NOTIFY_TOKEN = 위 SQL 이 출력한 토큰
+//    3) SUPABASE_KEY = 현재 anon 키(208자)
+// ══════════════════════════════════════════════════════════════════════
+
+const APP_URL = 'https://treasury.selvas.com';
+
+/** Supabase RPC 호출 (anon 키 + 토큰) */
+function callNotifyRpc_(fnName, args) {
+  var props = PropertiesService.getScriptProperties();
+  var sbKey = (props.getProperty('SUPABASE_KEY') || '').trim();
+  var token = (props.getProperty('NOTIFY_TOKEN') || '').trim();
+  if (!sbKey) throw new Error('SUPABASE_KEY 미설정');
+  if (!token) throw new Error('NOTIFY_TOKEN 미설정 — approval_notification.sql 실행 후 출력된 토큰을 넣으세요');
+
+  args.p_token = token;
+  var resp = UrlFetchApp.fetch(SB_URL + '/rest/v1/rpc/' + fnName, {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify(args),
+    headers: { 'apikey': sbKey, 'Authorization': 'Bearer ' + sbKey },
+    muteHttpExceptions: true,
+    timeout: 10000,
+  });
+  if (resp.getResponseCode() !== 200) {
+    throw new Error(fnName + ' HTTP ' + resp.getResponseCode() + ' / ' + resp.getContentText().slice(0, 200));
+  }
+  return JSON.parse(resp.getContentText());
+}
+
+/**
+ * 알림 대상 1건 발송.
+ * ⚠ 반드시 record → send 순서. 먼저 기록해 중복을 막는다.
+ *   (보내고 기록하면, 기록 실패 시 같은 메일이 계속 재발송된다)
+ * @return 'sent' | 'skipped' | 'failed'
+ */
+function sendOneApprovalMail_(row) {
+  var recipients = String(row.approver_email || '').trim();
+  if (!recipients) return 'skipped';
+
+  // 선점(중복 방지). false = 다른 경로가 이미 보냄 → 조용히 건너뛴다.
+  var claimed = callNotifyRpc_('record_approval_notification', {
+    p_report_id: row.report_id, p_step: row.step, p_recipients: recipients,
+  });
+  if (claimed !== true) {
+    Logger.log('이미 발송됨 — 건너뜀: ' + row.company + ' ' + row.report_date + ' ' + row.step + '단계');
+    return 'skipped';
+  }
+
+  var dateStr  = String(row.report_date || '').slice(0, 10);
+  var submitter = row.submitter_name || row.submitted_by || '담당자';
+  var subject = '[Selvas Treasury] 결재 요청 — ' + row.company + ' ' + dateStr + ' 자금일보';
+  var body = [
+    (row.approver_name || '') + '님, 결재하실 자금일보가 있습니다.',
+    '',
+    '■ 법인: ' + row.company,
+    '■ 작성일: ' + dateStr,
+    '■ 결재 단계: ' + row.step + '단계 (' + (row.role_label || '') + ')',
+    '■ 상신자: ' + submitter,
+    '',
+    '아래 링크에서 내용을 확인하고 승인 또는 반려해 주세요.',
+    APP_URL + '/daily-report/' + encodeURIComponent(row.company) + '/' + dateStr,
+    '',
+    '─────────────────────────────────',
+    '본 메일은 Selvas Treasury 시스템에서 자동 발송됩니다.',
+  ].join('\n');
+
+  try {
+    MailApp.sendEmail({
+      to: recipients,
+      from: 'matthew.y.jeong@selvas.com',
+      name: 'Selvas Treasury',
+      subject: subject,
+      body: body,
+    });
+    Logger.log('발송 완료 → ' + recipients + ' (' + row.company + ' ' + dateStr + ' ' + row.step + '단계)');
+    return 'sent';
+  } catch (mailErr) {
+    // 기록은 남았는데 발송만 실패한 경우 — 로그로 남기고 수동 확인한다.
+    // (기록을 지우면 무한 재시도가 될 수 있어 자동 롤백하지 않는다)
+    Logger.log('메일 발송 실패(기록은 남음): ' + mailErr.toString());
+    return 'failed';
+  }
+}
+
+/** 웹앱 진입점 — 화면이 상신·승인 직후 호출 */
+function sendApprovalNotify_(e) {
+  var reportId = (e.parameter.reportId || '').trim();
+  if (!/^[0-9a-fA-F-]{36}$/.test(reportId)) {
+    return createResponse({ success: false, error: 'reportId(uuid) 필요' }, 400);
+  }
+  try {
+    var rows = callNotifyRpc_('approval_notifications_pending', { p_report_id: reportId });
+    if (!rows.length) {
+      // 결재 완료·반려·이미 발송 등 — 정상 상황이다.
+      return createResponse({ success: true, sent: 0, reason: '발송 대상 없음' });
+    }
+    var sent = 0;
+    for (var i = 0; i < rows.length; i++) {
+      if (sendOneApprovalMail_(rows[i]) === 'sent') sent++;
+    }
+    return createResponse({ success: true, sent: sent });
+  } catch (err) {
+    Logger.log('sendApprovalNotify_ ERROR: ' + err.toString());
+    return createResponse({ success: false, error: err.toString().slice(0, 200) }, 500);
+  }
+}
+
+/**
+ * 누락 보완용 스윕 — 30분 주기 트리거로 등록할 것.
+ * 화면 호출이 유실된 건(브라우저 종료·네트워크 끊김)을 뒤늦게라도 발송한다.
+ */
+function sweepApprovalNotifications() {
+  try {
+    var rows = callNotifyRpc_('approval_notifications_pending', {});
+    Logger.log('=== 결재 알림 스윕: 대상 ' + rows.length + '건 ===');
+    var sent = 0;
+    for (var i = 0; i < rows.length; i++) {
+      if (sendOneApprovalMail_(rows[i]) === 'sent') sent++;
+    }
+    Logger.log('발송 ' + sent + '건');
+  } catch (err) {
+    Logger.log('sweepApprovalNotifications ERROR: ' + err.toString());
+  }
+}
+
+/** 진단 — 실제 발송 없이 현재 알림 대상만 확인 */
+function testApprovalNotify() {
+  try {
+    var rows = callNotifyRpc_('approval_notifications_pending', {});
+    Logger.log('발송 대기 ' + rows.length + '건');
+    rows.forEach(function (r) {
+      Logger.log('· ' + r.company + ' ' + String(r.report_date).slice(0, 10)
+        + ' / ' + r.step + '단계 ' + (r.role_label || '')
+        + ' → ' + (r.approver_name || '?') + ' <' + (r.approver_email || '없음') + '>');
+    });
+    if (!rows.length) {
+      Logger.log('(상신 상태이고 아직 알림을 안 보낸 일보가 없으면 0건이 정상입니다)');
+    }
+  } catch (err) {
+    Logger.log('오류: ' + err.toString());
+  }
 }
 
 

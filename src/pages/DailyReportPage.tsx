@@ -36,6 +36,7 @@ import { useFxLedgerDayActivity } from '../hooks/useFxLedgerDayActivity'
 import { outflowTxnLabel } from '../lib/fxTxnType'
 import { bizDaysBetween } from '../lib/bizDay'
 import { fmtKRW, fmtNumber } from '../lib/format'
+import { notifyApprovalTurn } from '../lib/approvalNotify'
 import type { Company, DailyRecord, FxCode } from '../types'
 
 
@@ -1009,6 +1010,9 @@ export default function DailyReportPage() {
         if (!ok) break   // 실패하면 뒤 단계까지 승인된 것처럼 남기지 않는다
       }
     }
+    // 자동 승인까지 끝난 뒤 호출한다 — '지금 차례'가 확정된 상태여야
+    // 서버가 올바른 다음 결재자를 고른다.
+    if (submitted) notifyApprovalTurn(reportId)
     setActionBusy(false)
   }
 
@@ -1019,7 +1023,9 @@ export default function DailyReportPage() {
     const step = user.role === 'master' ? (nextStep ?? lastStep ?? 1) : (myApproveStep ?? 1)
     // 최종 단계(또는 결재선 미설정)일 때만 승인 확정
     const isFinal = lastStep === undefined ? true : step === lastStep
-    await dr.approveReport(step, user.code, user.label ?? user.code, approveModal?.comment || undefined, isFinal)
+    const ok = await dr.approveReport(step, user.code, user.label ?? user.code, approveModal?.comment || undefined, isFinal)
+    // 다음 단계 결재자에게 요청 메일. 최종 승인이면 서버가 '대상 없음'으로 판단해 발송하지 않는다.
+    if (ok) notifyApprovalTurn(dr.report?.id)
     setApproveModal(null)
     setActionBusy(false)
   }
