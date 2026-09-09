@@ -1046,8 +1046,42 @@ function sweepApprovalNotifications() {
   }
 }
 
-/** 진단 — 실제 발송 없이 현재 알림 대상만 확인 */
+/**
+ * 진단 — 실제 발송 없이 현재 알림 대상만 확인.
+ *
+ * ⚠ 토큰이 틀리면 approval_notifications_pending 은 오류가 아니라 **빈 배열**을 돌려준다.
+ *   그러면 "발송 대상 없음"과 구별이 안 되므로, 토큰 유효성부터 따로 확인한다.
+ */
 function testApprovalNotify() {
+  var props = PropertiesService.getScriptProperties();
+  var sbKey = (props.getProperty('SUPABASE_KEY') || '').trim();
+  var token = (props.getProperty('NOTIFY_TOKEN') || '').trim();
+
+  Logger.log('=== 결재 알림 진단 ===');
+  Logger.log('SUPABASE_KEY: ' + (sbKey ? '설정됨(' + sbKey.length + '자)' : '⚠ 없음'));
+  Logger.log('NOTIFY_TOKEN: ' + (token ? '설정됨(' + token.length + '자, 앞6자=' + token.slice(0, 6) + ')' : '⚠ 없음'));
+  if (!sbKey || !token) {
+    Logger.log('→ 스크립트 속성을 먼저 채우세요.');
+    return;
+  }
+  if (token.length !== 48) {
+    Logger.log('⚠ 토큰 길이가 48자가 아닙니다 — approval_notification.sql 이 출력한 값 전체를 넣었는지 확인하세요.');
+  }
+
+  // 1) 토큰이 DB 값과 일치하는가
+  try {
+    var ok = callNotifyRpc_('check_notify_token', {});
+    Logger.log('토큰 검증: ' + (ok === true ? '✅ 일치' : '❌ 불일치 — DB의 app_secrets 값과 다릅니다'));
+    if (ok !== true) {
+      Logger.log('  Supabase 에서 확인: select value from app_secrets where name = ' + String.fromCharCode(39) + 'gas_notify_token' + String.fromCharCode(39) + ';');
+      return;
+    }
+  } catch (err) {
+    Logger.log('토큰 검증 실패: ' + err.toString());
+    return;
+  }
+
+  // 2) 발송 대기 목록
   try {
     var rows = callNotifyRpc_('approval_notifications_pending', {});
     Logger.log('발송 대기 ' + rows.length + '건');
@@ -1057,10 +1091,15 @@ function testApprovalNotify() {
         + ' → ' + (r.approver_name || '?') + ' <' + (r.approver_email || '없음') + '>');
     });
     if (!rows.length) {
-      Logger.log('(상신 상태이고 아직 알림을 안 보낸 일보가 없으면 0건이 정상입니다)');
+      Logger.log('0건입니다. 토큰은 정상이므로 아래 중 하나입니다:');
+      Logger.log('  · 결재 중(submitted) 상태인 자금일보가 없다');
+      Logger.log('    — 상신자가 유일한 결재자면 상신과 동시에 승인 완료되어 대상이 없다');
+      Logger.log('  · 그 단계에 대해 이미 발송했다 (approval_notifications 에 기록됨)');
+      Logger.log('  · 결재선의 결재자 코드가 treasury_users.user_code 와 매칭되지 않거나');
+      Logger.log('    그 계정에 이메일이 비어 있다 → 조직도 관리·사용자 관리에서 확인');
     }
   } catch (err) {
-    Logger.log('오류: ' + err.toString());
+    Logger.log('조회 실패: ' + err.toString());
   }
 }
 
