@@ -93,11 +93,15 @@ describe('scopeBalanceOn — 시점 잔액', () => {
 
 describe('buildBridge', () => {
   const investById = new Map<string, InvestmentRecord>([['dep', inv({ id: 'dep' })]])
+  const bd = (avail: number, bond = 0, locked = 0) =>
+    ({ availKrw: avail, bondKrw: bond, lockedKrw: locked, allKrw: avail + bond + locked })
   const base = {
     from: '2026-01-01', to: '2026-01-31',
     opening: { operatingKrw: 1000, investKrw: 0, total: 1000 },
     closing: { operatingKrw: 1200, investKrw: 0, total: 1200 },
     investById,
+    openingBreakdown: bd(0),
+    closingBreakdown: bd(0),
   }
 
   it('경계를 넘은 항목만 순증감에 반영한다', () => {
@@ -114,19 +118,55 @@ describe('buildBridge', () => {
     expect(b.coverage).toBe(1)
   })
 
-  it('내부이동은 순증감을 바꾸지 않는다', () => {
+  it('내부이동은 두 레인에 각각 잡혀 합계가 0이 된다', () => {
     const b = buildBridge({
       ...base,
       closing: { operatingKrw: 200, investKrw: 800, total: 1000 },   // 합계 불변
+      closingBreakdown: bd(800),
       items: [
         item({ direction: 'out', category: 'invest_execute', amountKrw: 800,
                linkedType: 'investment', linkedId: 'dep' }),
       ],
+      investFlowNet: 800,                // 레코드에서 도출한 운용 개시
     })
     expect(b.observed).toBe(0)
-    expect(b.explained).toBe(0)          // internal 은 explained 에 안 들어간다
-    expect(b.groups.internal.outKrw).toBe(800)
+    // 운전 레인: 800 나감 / 운용 레인: 800 들어옴 → 합계 0
+    expect(b.lanes.opDelta).toBe(-800)
+    expect(b.lanes.opExplained).toBe(-800)
+    expect(b.lanes.opUnexplained).toBe(0)
+    expect(b.lanes.investDelta).toBe(800)
+    expect(b.lanes.investExplained).toBe(800)
+    expect(b.explained).toBe(0)
     expect(b.unexplained).toBe(0)
+  })
+
+  // ⭐ 실사고 재발 방지 — 운용자금을 운용자금 메뉴에서 직접 등록하면 자금일보 항목이
+  //   하나도 없다. 그때 증감을 자금일보로만 설명하려 하면 전부 미설명으로 빠진다
+  //   (2026-09-08 메디아나 +130억이 미설명 109억으로 나온 사례).
+  it('자금일보 항목이 없어도 운용 증감은 레코드로 설명된다', () => {
+    const b = buildBridge({
+      ...base,
+      closing: { operatingKrw: 1000, investKrw: 130, total: 1130 },
+      closingBreakdown: bd(130),
+      items: [],
+      investFlowNet: 130,
+    })
+    expect(b.observed).toBe(130)
+    expect(b.explained).toBe(130)
+    expect(b.unexplained).toBe(0)
+    expect(b.coverage).toBe(1)
+  })
+
+  it('레코드로 설명되지 않는 운용 증감은 조정으로 남긴다', () => {
+    const b = buildBridge({
+      ...base,
+      closing: { operatingKrw: 1000, investKrw: 130, total: 1130 },
+      closingBreakdown: bd(130),
+      items: [],
+      investFlowNet: 100,               // 개시는 100뿐인데 잔액은 130 늘었다
+    })
+    expect(b.lanes.investAdjust).toBe(30)
+    expect(b.unexplained).toBe(30)
   })
 
   it('설명되지 않는 증감은 미설명 차액으로 남긴다', () => {
@@ -145,6 +185,23 @@ describe('buildBridge', () => {
     expect(b.groups.unknown.outKrw).toBe(500)
     expect(b.explained).toBe(0)
     expect(b.unexplained).toBe(200)
+  })
+
+  // 국채는 시가가 움직이면 현금 이동 없이 총액이 변한다 — 별도 레인으로 잡아야
+  // "왜 줄었나"에 엉뚱한 답이 나오지 않는다.
+  it('국채 평가 변동은 별도 레인으로 잡고 미설명으로 남기지 않는다', () => {
+    const b = buildBridge({
+      ...base,
+      opening: { operatingKrw: 1000, investKrw: 0, total: 1000 },
+      closing: { operatingKrw: 1000, investKrw: 0, total: 1000 },
+      openingBreakdown: bd(0, 500),
+      closingBreakdown: bd(0, 480),     // 국채 평가 −20
+      items: [],
+    })
+    expect(b.observed).toBe(-20)
+    expect(b.lanes.bondDelta).toBe(-20)
+    expect(b.explained).toBe(-20)
+    expect(b.unexplained).toBe(0)
   })
 
   it('카테고리는 금액 순으로 정렬한다', () => {

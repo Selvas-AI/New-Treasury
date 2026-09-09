@@ -19,6 +19,7 @@
  *   `unexplained` 로 그대로 남긴다 — 그 숫자가 곧 "어느 날 일보가 비었는지"를 알려준다.
  */
 import { opCashKRW, investValueKRW, isOpenOn, type ToKRWFn } from './treasuryCalc'
+import { getLatestBonds } from '../hooks/useInvestments'
 import type { DailyRecord, InvestmentRecord } from '../types'
 
 // ── 항목 분류 ────────────────────────────────────────────────
@@ -159,6 +160,30 @@ export interface FlowBridge {
   unexplained: number
   /** 환율효과 — Phase 2 에서 채운다. 지금은 미설명 차액에 포함돼 있다. */
   fxEffect: number | null
+  /**
+   * 레인별 분해 — 총 증감 = 운전 증감 + 운용 증감 (잔액에서 오는 항등식).
+   *   운전 = 자금일보 항목으로 설명 (없으면 미설명으로 남는다)
+   *   운용 = 운용자금 레코드(개시·해지)로 설명 — 자금일보와 무관하게 항상 잡힌다
+   * ⚠ 두 레인은 서로 상쇄하지 않는다. 보통예금으로 정기예금을 들면
+   *   운전 레인에 내부이동 유출, 운용 레인에 개시 유입으로 각각 잡히고 합이 0이 된다.
+   */
+  lanes: {
+    opDelta: number
+    opExplained: number
+    opUnexplained: number
+    investDelta: number
+    investExplained: number
+    investAdjust: number
+    /** 국채 평가 — 시가 변동이라 현금이 움직인 게 아니다 */
+    bondDelta: number
+    /** 불가용 운용자금 증감 */
+    lockedDelta: number
+  }
+  /** 총액 기준 잔액 (운전 + 운용 전체) — 자금 변동 이력과 같은 정의 */
+  openingFull: number
+  closingFull: number
+  openingBreakdown: InvestBreakdown
+  closingBreakdown: InvestBreakdown
   groups: Record<FlowGroup, { inKrw: number; outKrw: number; net: number; count: number }>
   categories: CategoryFlow[]
   /** 설명률 = |explained| / (|explained| + |unexplained|) */
@@ -174,8 +199,16 @@ export function buildBridge(params: {
   closing: ScopeBalance
   items: FlowItemInput[]
   investById: Map<string, InvestmentRecord>
+  /** 운용자금 레코드에서 도출한 순증감(개시−해지). investDeltas().net */
+  investFlowNet?: number
+  /** 총액 기준 구성 — 국채·불가용까지 포함해야 자금 변동 이력과 맞는다 */
+  openingBreakdown: InvestBreakdown
+  closingBreakdown: InvestBreakdown
 }): FlowBridge {
-  const { from, to, opening, closing, items, investById } = params
+  const {
+    from, to, opening, closing, items, investById, investFlowNet = 0,
+    openingBreakdown, closingBreakdown,
+  } = params
 
   const groups: FlowBridge['groups'] = {
     operating: EMPTY_GROUP(), financing: EMPTY_GROUP(), external: EMPTY_GROUP(),
@@ -201,14 +234,28 @@ export function buildBridge(params: {
     catMap.set(key, cur)
   }
 
-  // 경계를 넘은 것만 순증감에 반영한다.
-  // internal(운전↔운용)은 합계가 변하지 않고, excluded(평가손익)는 현금이 아니다.
-  // unknown 은 경계 판정을 못 했으므로 설명에 넣지 않는다 — 넣으면 틀린 값을 확정해 버린다.
-  const explained =
-    groups.operating.net + groups.financing.net + groups.external.net
+  // ── 레인별 분해 ────────────────────────────────────────────
+  // 운전 레인: 자금일보 항목으로 설명한다. 운용으로 나간 내부이동도 운전 입장에선 실제 유출이다.
+  const opDelta = closing.operatingKrw - opening.operatingKrw
+  const opExplained =
+    groups.operating.net + groups.financing.net + groups.external.net + groups.internal.net
+  const opUnexplained = opDelta - opExplained
 
-  const observed = closing.total - opening.total
-  const unexplained = observed - explained
+  // 운용 레인: 레코드(개시·해지)로 설명한다. 자금일보를 거치지 않고 등록돼도 잡힌다.
+  const investDelta = closingBreakdown.availKrw - openingBreakdown.availKrw
+  const investAdjust = investDelta - investFlowNet
+
+  // 국채 평가·불가용 증감은 잔액에서 그대로 관측된다 — 원인이 분명하므로 설명된 것으로 본다.
+  const bondDelta   = closingBreakdown.bondKrw   - openingBreakdown.bondKrw
+  const lockedDelta = closingBreakdown.lockedKrw - openingBreakdown.lockedKrw
+
+  // ⭐ 총액 기준 — 자금 변동 이력과 같은 정의여야 사용자가 두 화면을 대조할 수 있다.
+  const openingFull = opening.operatingKrw + openingBreakdown.allKrw
+  const closingFull = closing.operatingKrw + closingBreakdown.allKrw
+
+  const observed = closingFull - openingFull
+  const explained = opExplained + investFlowNet + bondDelta + lockedDelta
+  const unexplained = opUnexplained + investAdjust
 
   const denom = Math.abs(explained) + Math.abs(unexplained)
   const coverage = denom === 0 ? 1 : Math.abs(explained) / denom
@@ -217,10 +264,227 @@ export function buildBridge(params: {
     from, to, opening, closing,
     observed, explained, unexplained,
     fxEffect: null,
+    lanes: {
+      opDelta, opExplained, opUnexplained,
+      investDelta, investExplained: investFlowNet, investAdjust,
+      bondDelta, lockedDelta,
+    },
+    openingFull, closingFull, openingBreakdown, closingBreakdown,
     groups,
     categories: [...catMap.values()].sort((a, b) => Math.abs(b.net) - Math.abs(a.net)),
     coverage,
   }
+}
+
+// ── 범위에서 뺀 금액 (표시 전용) ─────────────────────────────
+/**
+ * 자금 변동 이력(HistoryPage)의 '운용자금'은 국채·불가용까지 전부 더한 값이다.
+ * 이 화면은 대상을 가용운용으로 좁혔으므로 두 숫자가 다를 수밖에 없다.
+ * 그 차이를 화면에 밝혀 "누락된 것 아닌가" 하는 의심을 없앤다.
+ */
+export interface ExcludedBalance { bondKrw: number; lockedKrw: number; total: number }
+
+export function excludedBalanceOn(
+  invests: InvestmentRecord[],
+  date: string,
+  toKRW: ToKRWFn,
+): ExcludedBalance {
+  const open = invests.filter(i => isOpenOn(i, date))
+  // ⚠ 국채는 기준일마다 새 행이 쌓인다(시세 이력). 종목별 최신 1건만 세지 않으면
+  //   보유액이 수 배로 부풀려진다(세션19차 6.2% vs 27.9% 사고와 같은 유형).
+  const bondKrw = getLatestBonds(open)
+    .reduce((s, i) => s + investValueKRW(i, toKRW), 0)
+  const lockedKrw = open
+    .filter(i => i.product !== '국채' && i.available !== '가용')
+    .reduce((s, i) => s + investValueKRW(i, toKRW), 0)
+  return { bondKrw, lockedKrw, total: bondKrw + lockedKrw }
+}
+
+// ── 운용자금 레코드에서 도출한 증감 ──────────────────────────
+/**
+ * ⭐ 운용자금 증감을 자금일보 항목만으로 설명하려 하면 안 된다.
+ *   운용자금은 자금일보 연동 팝업이 아니라 **운용자금 메뉴에서 직접 등록**되는 경우가
+ *   훨씬 많다. 그러면 잔액은 늘었는데 그것을 설명할 항목이 없어 전부 '미설명'으로 빠진다
+ *   (세션27차에 자금일보 자금현황에서 똑같은 문제를 겪었다 — 그때의 결론도
+ *    "행의 입출금액을 linked_id 로만 채우지 말고 레코드에서 도출하라" 였다).
+ *
+ * 그래서 기간 중 **개시·해지된 건을 레코드에서 직접 뽑아** 보여준다.
+ * 자금의 출처(운전에서 왔는지, 국채 만기에서 왔는지)까지는 레코드만으로 알 수 없으므로
+ * 단정하지 않고, "어떤 건이 새로 생겼고 어떤 건이 닫혔는지"를 그대로 나열한다.
+ */
+export interface InvestDelta {
+  id: string
+  label: string       // 은행 · 상품
+  date: string
+  amountKrw: number
+  kind: 'opened' | 'closed'
+}
+
+export function investDeltas(
+  invests: InvestmentRecord[],
+  from: string,
+  to: string,
+  toKRW: ToKRWFn,
+): { opened: InvestDelta[]; closed: InvestDelta[]; openedKrw: number; closedKrw: number; net: number } {
+  const inScope = (i: InvestmentRecord) => i.product !== '국채' && i.available === '가용'
+  const label = (i: InvestmentRecord) => `${i.bank || '-'} · ${i.product || '-'}`
+
+  const opened = invests
+    .filter(i => inScope(i) && i.start && i.start > from && i.start <= to)
+    .map(i => ({ id: i.id, label: label(i), date: i.start, amountKrw: investValueKRW(i, toKRW), kind: 'opened' as const }))
+
+  const closed = invests
+    .filter(i => inScope(i) && i.closed_date && i.closed_date > from && i.closed_date <= to)
+    .map(i => ({ id: i.id, label: label(i), date: i.closed_date as string, amountKrw: investValueKRW(i, toKRW), kind: 'closed' as const }))
+
+  const openedKrw = opened.reduce((s, d) => s + d.amountKrw, 0)
+  const closedKrw = closed.reduce((s, d) => s + d.amountKrw, 0)
+  return { opened, closed, openedKrw, closedKrw, net: openedKrw - closedKrw }
+}
+
+/**
+ * 그 시점의 운용자금 구성 — 가용 / 국채 / 불가용으로 나눠 돌려준다.
+ *
+ * ⭐ 잔액의 정본은 **자금 변동 이력과 같은 총액**이다(2026-09-08 사용자 결정).
+ *   분석 대상을 좁혀 놓고 잔액까지 좁히면 다른 화면과 숫자가 갈라져 아무도 못 믿는다.
+ *   총액으로 시계열을 만들고, 그 증감을 자금일보·운용자금 개시/해지로 **설명**한다.
+ *
+ * ⚠ 8월에 해지한 예금도 6월에는 존재했다 — 과거 잔액에는 반드시 포함돼야 한다.
+ *   그래서 현재 active 플래그가 아니라 isOpenOn(개시일·해지일)으로 판정한다.
+ */
+export interface InvestBreakdown {
+  availKrw:  number   // 가용 운용자금 (국채 제외)
+  bondKrw:   number   // 국채 (종목별 최신 기준가)
+  lockedKrw: number   // 불가용 운용자금 (국채 제외)
+  allKrw:    number   // 셋의 합 = 자금 변동 이력의 '운용자금'
+}
+
+export function investBreakdownOn(
+  invests: InvestmentRecord[],
+  date: string,
+  toKRW: ToKRWFn,
+): InvestBreakdown {
+  // 국채는 기준일마다 행이 쌓이므로 그 시점까지의 행 중 종목별 최신 1건만 센다
+  const bondsUpTo = invests.filter(i =>
+    i.product === '국채' && (i.priceDate || i.start || '') !== '' && (i.priceDate || i.start || '') <= date)
+  const bondKrw = getLatestBonds(bondsUpTo)
+    .reduce((sum, i) => sum + investValueKRW(i, toKRW), 0)
+
+  const nonBond = invests.filter(i => i.product !== '국채' && isOpenOn(i, date))
+  const availKrw  = nonBond.filter(i => i.available === '가용')
+    .reduce((sum, i) => sum + investValueKRW(i, toKRW), 0)
+  const lockedKrw = nonBond.filter(i => i.available !== '가용')
+    .reduce((sum, i) => sum + investValueKRW(i, toKRW), 0)
+
+  return { availKrw, bondKrw, lockedKrw, allKrw: availKrw + bondKrw + lockedKrw }
+}
+
+/**
+ * 그 시점의 **운용자금 전체** 원화액 — 국채·불가용까지 포함.
+ * 자금 변동 이력(HistoryPage) 의 '운용자금' 열과 같은 정의라 그 화면과 직접 대조된다.
+ *
+ * ⚠ 국채는 기준일마다 새 행이 쌓이므로 종목별 최신 1건만 센다(getLatestBonds).
+ * ⚠ 비국채는 isOpenOn 으로 그 시점 개시·해지를 판정한다.
+ *   자금 변동 이력은 과거 날짜에도 **현재 active 플래그**를 적용하므로,
+ *   나중에 해지된 건이 있으면 그 화면이 과거를 과소 표시한다(이쪽이 맞다).
+ */
+export function totalInvestKRWOn(
+  invests: InvestmentRecord[],
+  date: string,
+  toKRW: ToKRWFn,
+): number {
+  return investBreakdownOn(invests, date, toKRW).allKrw
+}
+
+// ── 일자별 증감 원장 (레코드 기반) ──────────────────────────
+/**
+ * ⭐ 자금일보 항목이 아니라 **운전자금·운용자금 입력 이력 자체**로 증감을 맞춘다
+ *   (2026-09-08 사용자 지적). 잔액 데이터가 곧 입력 이력이므로 이 방식은
+ *   좌변·우변이 구조적으로 항상 일치한다 — 미설명 차액이 생길 수 없다.
+ *
+ *   운전 증감 = daily[d] − daily[직전 영업일]      (운전자금 입력 이력)
+ *   운용 증감 = 그날 개시된 건 − 그날 해지된 건    (운용자금 입력 이력)
+ *              + 기타 조정(금액 수정 등 레코드로 설명되지 않는 나머지)
+ *
+ *   자금일보 항목은 여기에 **덧붙는 설명**이지 잔액의 근거가 아니다.
+ */
+export interface DailyLedgerRow {
+  date: string
+  opCash: number
+  opDelta: number
+  investKrw: number
+  investDelta: number
+  total: number
+  totalDelta: number
+  opened: InvestDelta[]
+  closed: InvestDelta[]
+  /** 운용 증감 중 개시·해지로 설명되지 않는 나머지 (금액 수정·가용 전환 등) */
+  investAdjust: number
+  /** 그날 자금일보 항목 수 — 운전 증감의 설명 여부 판단용 */
+  itemCount: number
+  itemNetKrw: number
+  /** 운용자금 구성 (가용/국채/불가용) */
+  breakdown: InvestBreakdown
+  /** 국채 증감 — 시가 변동이라 현금 흐름이 아니다 */
+  bondDelta: number
+  /** 불가용 증감 */
+  lockedDelta: number
+  /** 운전 + 운용 전체 = 자금 변동 이력의 총액 (이 화면 잔액의 정본) */
+  allTotal: number
+  /** 총액 증감 — 이 화면이 설명해야 할 값 */
+  allDelta: number
+}
+
+export function buildDailyLedger(params: {
+  dailies: DailyRecord[]              // 기간 내, 날짜 오름차순
+  openingDaily: DailyRecord | null    // from 직전 영업일
+  invests: InvestmentRecord[]
+  toKRW: ToKRWFn
+  itemsByDate: Map<string, { count: number; net: number }>
+}): DailyLedgerRow[] {
+  const { dailies, openingDaily, invests, toKRW, itemsByDate } = params
+  if (!dailies.length) return []
+
+  const seq = openingDaily ? [openingDaily, ...dailies] : dailies
+  const rows: DailyLedgerRow[] = []
+
+  for (let i = 1; i < seq.length; i++) {
+    const prev = seq[i - 1]
+    const cur  = seq[i]
+    const prevBal = scopeBalanceOn(prev, invests, prev.date, toKRW)
+    const curBal  = scopeBalanceOn(cur,  invests, cur.date,  toKRW)
+
+    // 그날 개시·해지된 in-scope 운용 건
+    const day = investDeltas(invests, prev.date, cur.date, toKRW)
+    const investDelta = curBal.investKrw - prevBal.investKrw
+
+    const it = itemsByDate.get(cur.date) ?? { count: 0, net: 0 }
+    const bdPrev = investBreakdownOn(invests, prev.date, toKRW)
+    const bdCur  = investBreakdownOn(invests, cur.date,  toKRW)
+    const allTotalPrev = prevBal.operatingKrw + bdPrev.allKrw
+    const allTotalCur  = curBal.operatingKrw  + bdCur.allKrw
+
+    rows.push({
+      date: cur.date,
+      opCash: curBal.operatingKrw,
+      opDelta: curBal.operatingKrw - prevBal.operatingKrw,
+      investKrw: curBal.investKrw,
+      investDelta,
+      total: curBal.total,
+      totalDelta: curBal.total - prevBal.total,
+      opened: day.opened,
+      closed: day.closed,
+      investAdjust: investDelta - day.net,
+      itemCount: it.count,
+      itemNetKrw: it.net,
+      breakdown: bdCur,
+      bondDelta:   bdCur.bondKrw   - bdPrev.bondKrw,
+      lockedDelta: bdCur.lockedKrw - bdPrev.lockedKrw,
+      allTotal: allTotalCur,
+      allDelta: allTotalCur - allTotalPrev,
+    })
+  }
+  return rows
 }
 
 /**

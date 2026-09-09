@@ -6,11 +6,12 @@ import {
 } from 'recharts'
 import { usePageCompany } from '../hooks/usePageCompany'
 import { useDaily } from '../hooks/useDaily'
-import { useInvestments, getLatestInvestments } from '../hooks/useInvestments'
+import { useInvestments } from '../hooks/useInvestments'
+import { investBreakdownOn } from '../lib/flowBridge'
 import { useLoans } from '../hooks/useLoans'
 import { useFx } from '../hooks/useFx'
 import { toKRWAmount } from '../lib/treasuryCalc'
-import { fmtKRW, fmtDateShort, calcBondValue } from '../lib/format'
+import { fmtKRW, fmtDateShort } from '../lib/format'
 
 type Period = 7 | 30 | 90 | 365
 const PERIODS: { label: string; value: Period }[] = [
@@ -79,21 +80,11 @@ export default function HistoryPage() {
       const operating =
         (d.krw_demand || 0) + (d.krw_govt || 0) + (d.krw_mmda || 0) + (d.fx_krw || 0)
 
-      // 운용자금: 해당 날짜 이하 레코드 기준 최신 집계
-      const investsUpTo = inv.data.filter(i => {
-        // 채권은 priceDate(시세 기준일) 우선, 비채권은 start(운용 시작일) 우선
-        const dt = i.product === '국채'
-          ? (i.priceDate || i.start || '')
-          : (i.start || i.priceDate || '')
-        return dt !== '' && dt <= d.date
-      })
-      const latest = getLatestInvestments(investsUpTo)
-      const invest = latest.reduce((s, i) => {
-        const v = i.product === '국채' && i.bondQty && i.bondPrice
-          ? calcBondValue(i.bondQty, i.bondPrice)
-          : toKRWAmt(i.amount || 0, i.currency || 'KRW')
-        return s + v
-      }, 0)
+      // 운용자금 — 자금흐름 분석과 **같은 함수**를 쓴다(SSOT).
+      // ⚠ 과거엔 현재 active 플래그로 걸러, 나중에 해지된 건이 과거 잔액에서도 빠졌다.
+      //   8월에 해지한 예금도 6월에는 존재했으므로 그건 틀린 값이다.
+      //   investBreakdownOn 은 개시일·해지일(isOpenOn)로 그 시점을 판정한다.
+      const invest = investBreakdownOn(inv.data, d.date, toKRWAmt).allKrw
 
       return {
         date:      d.date,

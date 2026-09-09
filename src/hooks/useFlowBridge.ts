@@ -18,8 +18,10 @@ import { toKRWAmount } from '../lib/treasuryCalc'
 import { useFx } from './useFx'
 import { investFromDb } from './useInvestments'
 import {
-  buildBridge, scopeBalanceOn, classifyItem,
+  buildBridge, scopeBalanceOn, classifyItem, excludedBalanceOn, investDeltas,
+  buildDailyLedger, investBreakdownOn,
   type FlowBridge, type FlowItemInput, type FlowGroup,
+  type ExcludedBalance, type InvestDelta, type DailyLedgerRow,
 } from '../lib/flowBridge'
 import type { DailyRecord, InvestmentRecord } from '../types'
 
@@ -41,6 +43,13 @@ export interface UseFlowBridgeResult {
   error: string | null
   bridge: FlowBridge | null
   rows: FlowRow[]
+  /** 대상에서 뺀 금액(국채·불가용) — 자금 변동 이력과의 차이를 설명하기 위한 표시용 */
+  excludedOpening: ExcludedBalance | null
+  excludedClosing: ExcludedBalance | null
+  /** 운용자금 레코드에서 직접 도출한 개시·해지 (자금일보 항목에 없어도 잡힌다) */
+  investFlows: { opened: InvestDelta[]; closed: InvestDelta[]; openedKrw: number; closedKrw: number; net: number } | null
+  /** 일자별 증감 원장 — 잔액 입력 이력으로 맞춘다(항상 정확히 떨어진다) */
+  ledger: DailyLedgerRow[]
   /** 기간 내 daily 행 수 / 항목이 있는 일보 수 — 설명률 해석용 */
   dailyDays: number
   reportDays: number
@@ -132,8 +141,14 @@ export function useFlowBridge(
 
   useEffect(() => { void fetchAll() }, [fetchAll])
 
-  const { bridge, rows } = useMemo(() => {
-    if (!company || !dailies.length) return { bridge: null, rows: [] as FlowRow[] }
+  const { bridge, rows, excludedOpening, excludedClosing, investFlows, ledger } = useMemo(() => {
+    if (!company || !dailies.length) {
+      return {
+        bridge: null, rows: [] as FlowRow[],
+        excludedOpening: null, excludedClosing: null, investFlows: null,
+        ledger: [] as DailyLedgerRow[],
+      }
+    }
 
     const investById = new Map(invests.map(i => [i.id, i]))
     const reportById = new Map(reports.map(r => [r.id, r]))
@@ -162,9 +177,14 @@ export function useFlowBridge(
       }
     })
 
+    const flows = investDeltas(invests, openingDate, closingDaily.date, fx.toKRW)
+
     const b = buildBridge({
       from: openingDate, to: closingDaily.date,
       opening, closing, items: flowItems, investById,
+      investFlowNet: flows.net,
+      openingBreakdown: investBreakdownOn(invests, openingDate, fx.toKRW),
+      closingBreakdown: investBreakdownOn(invests, closingDaily.date, fx.toKRW),
     })
 
     const r: FlowRow[] = flowItems.map(fi => ({
@@ -173,11 +193,27 @@ export function useFlowBridge(
       reportStatus: reportById.get(items.find(x => x.id === fi.id)?.report_id ?? '')?.status ?? '',
     })).sort((a, b2) => (b2.date.localeCompare(a.date)) || (b2.amountKrw - a.amountKrw))
 
-    return { bridge: b, rows: r }
+    // 일자별 원장 — 자금일보 항목은 '그날 몇 건 있었나'로만 곁들인다
+    const itemsByDate = new Map<string, { count: number; net: number }>()
+    for (const fi of flowItems) {
+      const cur = itemsByDate.get(fi.date) ?? { count: 0, net: 0 }
+      cur.count += 1
+      cur.net += fi.direction === 'in' ? Math.abs(fi.amountKrw) : -Math.abs(fi.amountKrw)
+      itemsByDate.set(fi.date, cur)
+    }
+
+    return {
+      bridge: b, rows: r,
+      ledger: buildDailyLedger({ dailies, openingDaily, invests, toKRW: fx.toKRW, itemsByDate }),
+      excludedOpening: excludedBalanceOn(invests, openingDate, fx.toKRW),
+      excludedClosing: excludedBalanceOn(invests, closingDaily.date, fx.toKRW),
+      investFlows: flows,
+    }
   }, [company, dailies, openingDaily, invests, reports, items, fx])
 
   return {
-    loading, error, bridge, rows,
+    loading, error, bridge, rows, ledger,
+    excludedOpening, excludedClosing, investFlows,
     dailyDays: dailies.length,
     reportDays: new Set(items.map(i => i.report_id)).size,
     refetch: fetchAll,
