@@ -234,6 +234,38 @@ export async function syncLatestFxHistory(currency: string): Promise<number> {
 
 // ── 훅 ────────────────────────────────────────────────────────────────
 
+/**
+ * 특정 일자의 환율 — 그 날짜 **이하**의 가장 최근 고시값을 쓴다.
+ * 주말·공휴일에는 고시가 없으므로 정확히 그 날짜로 찾으면 빈 값이 된다.
+ *
+ * ⚠ 전 구간을 읽는 useFxHistory 와 달리 딱 1행만 가져온다 — 분석 화면은 기초·기말
+ *   두 시점만 필요하므로, 통화마다 수천 행을 읽으면 낭비다.
+ */
+export async function fetchRateOnOrBefore(
+  currency: string,
+  date: string,
+): Promise<number | null> {
+  const res = await restSelect<FxRateRow>('fx_rate_history', {
+    match:   { currency },
+    filters: [`rate_date=lte.${date}`],
+    order:   'rate_date.desc',
+    limit:   1,
+  })
+  if (res.error || !res.data?.length) return null
+  return normalizedRate(fromDb(res.data[0]))
+}
+
+/** 여러 통화의 특정 일자 환율을 한 번에 — 없는 통화는 null */
+export async function fetchRatesOnOrBefore(
+  currencies: readonly string[],
+  date: string,
+): Promise<Record<string, number | null>> {
+  const pairs = await Promise.all(
+    currencies.map(async c => [c, await fetchRateOnOrBefore(c, date)] as const),
+  )
+  return Object.fromEntries(pairs)
+}
+
 export interface UseFxHistoryOptions {
   /** 조회 시작일 YYYY-MM-DD. 생략 시 전 구간 */
   from?: string

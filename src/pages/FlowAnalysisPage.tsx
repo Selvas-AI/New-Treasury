@@ -13,6 +13,7 @@ import { IN_CATEGORIES, OUT_CATEGORIES } from '../lib/dailyReportCategories'
 import { fmtKRW } from '../lib/format'
 import { NotionTable, type ColumnDef } from '../components/common/NotionTable'
 import DailyLedgerView from '../components/flow/DailyLedgerView'
+import FxEffectView from '../components/flow/FxEffectView'
 
 const CAT_LABEL: Record<string, string> = Object.fromEntries(
   [...IN_CATEGORIES, ...OUT_CATEGORIES].map(c => [c.code, c.label]),
@@ -40,7 +41,7 @@ const toneOf = (n: number) =>
   n > 0 ? 'text-emerald-600 dark:text-emerald-400'
         : n < 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-500'
 
-type Tab = 'daily' | 'bridge' | 'breakdown' | 'ledger'
+type Tab = 'daily' | 'bridge' | 'breakdown' | 'fx' | 'ledger'
 
 export default function FlowAnalysisPage() {
   const { company } = usePageCompany('/flow-analysis')
@@ -51,7 +52,7 @@ export default function FlowAnalysisPage() {
 
   const {
     loading, error, bridge, rows, dailyDays, reportDays,
-    investFlows, ledger,
+    investFlows, ledger, fxEffect,
   } = useFlowBridge(company, from, to)
 
   return (
@@ -111,7 +112,7 @@ export default function FlowAnalysisPage() {
 
       {/* ── 탭 ────────────────────────────────────────────── */}
       <div className="flex gap-2 border-b border-gray-200 dark:border-slate-700">
-        {([['daily', '📅 일자별 증감'], ['bridge', '📊 브릿지'], ['breakdown', '🔍 순유출 분해'], ['ledger', '📄 원장']] as const).map(([k, label]) => (
+        {([['daily', '📅 일자별 증감'], ['bridge', '📊 브릿지'], ['breakdown', '🔍 순유출 분해'], ['fx', '💱 환율효과'], ['ledger', '📄 원장']] as const).map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)}
             className={`px-4 py-2 text-sm font-medium -mb-px border-b-2 transition-colors ${
               tab === k ? 'border-blue-600 text-blue-600 dark:text-blue-400'
@@ -138,6 +139,7 @@ export default function FlowAnalysisPage() {
         <BridgeView bridge={bridge} company={company} investFlows={investFlows} />
       )}
       {!loading && bridge && tab === 'breakdown' && <BreakdownView bridge={bridge} />}
+      {!loading && bridge && tab === 'fx'        && <FxEffectView effect={fxEffect} />}
       {!loading && bridge && tab === 'ledger'    && <LedgerView rows={rows} />}
     </div>
   )

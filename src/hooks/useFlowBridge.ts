@@ -17,6 +17,11 @@ import { restSelect } from '../lib/supabase'
 import { toKRWAmount } from '../lib/treasuryCalc'
 import { useFx } from './useFx'
 import { investFromDb } from './useInvestments'
+import { fetchRatesOnOrBefore } from './useFxHistory'
+import {
+  computeFxEffect, amountsOf, FX_CODES,
+  type FxEffectResult, type FxRates,
+} from '../lib/fxEffect'
 import {
   buildBridge, scopeBalanceOn, classifyItem, excludedBalanceOn, investDeltas,
   buildDailyLedger, investBreakdownOn,
@@ -50,6 +55,8 @@ export interface UseFlowBridgeResult {
   investFlows: { opened: InvestDelta[]; closed: InvestDelta[]; openedKrw: number; closedKrw: number; net: number } | null
   /** 일자별 증감 원장 — 잔액 입력 이력으로 맞춘다(항상 정확히 떨어진다) */
   ledger: DailyLedgerRow[]
+  /** 환율효과 분해 (Phase 2) — 환율 이력이 없으면 null */
+  fxEffect: FxEffectResult | null
   /** 기간 내 daily 행 수 / 항목이 있는 일보 수 — 설명률 해석용 */
   dailyDays: number
   reportDays: number
@@ -69,6 +76,8 @@ export function useFlowBridge(
   const [invests, setInvests] = useState<InvestmentRecord[]>([])
   const [reports, setReports] = useState<ReportRow[]>([])
   const [items, setItems]     = useState<ItemRow[]>([])
+  // 환율효과용 — 기초·기말 두 시점의 통화별 환율만 가져온다(전 구간 조회 아님)
+  const [fxRates, setFxRates] = useState<{ open: FxRates; close: FxRates } | null>(null)
   const fetchIdRef = useRef(0)
 
   const fetchAll = useCallback(async () => {
@@ -141,12 +150,31 @@ export function useFlowBridge(
 
   useEffect(() => { void fetchAll() }, [fetchAll])
 
-  const { bridge, rows, excludedOpening, excludedClosing, investFlows, ledger } = useMemo(() => {
+  // 기초·기말 날짜가 정해지면 그 두 시점의 환율을 가져온다.
+  // ⚠ deps 는 문자열(primitive)만 — 배열을 넣으면 매 렌더 재조회된다(세션12차 렌더 루프).
+  const openingDateForFx = openingDaily?.date ?? dailies[0]?.date ?? ''
+  const closingDateForFx = dailies.length ? dailies[dailies.length - 1].date : ''
+  useEffect(() => {
+    if (!openingDateForFx || !closingDateForFx) { setFxRates(null); return }
+    let cancelled = false
+    void (async () => {
+      const [open, close] = await Promise.all([
+        fetchRatesOnOrBefore(FX_CODES, openingDateForFx),
+        fetchRatesOnOrBefore(FX_CODES, closingDateForFx),
+      ])
+      if (!cancelled) setFxRates({ open, close })
+    })()
+    return () => { cancelled = true }
+  }, [openingDateForFx, closingDateForFx])
+
+  const {
+    bridge, rows, excludedOpening, excludedClosing, investFlows, ledger, fxEffect,
+  } = useMemo(() => {
     if (!company || !dailies.length) {
       return {
         bridge: null, rows: [] as FlowRow[],
         excludedOpening: null, excludedClosing: null, investFlows: null,
-        ledger: [] as DailyLedgerRow[],
+        ledger: [] as DailyLedgerRow[], fxEffect: null,
       }
     }
 
@@ -202,17 +230,33 @@ export function useFlowBridge(
       itemsByDate.set(fi.date, cur)
     }
 
+    // ── 환율효과 (Phase 2) ─────────────────────────────────
+    // 총액은 저장된 fx_krw 가 정본이다. ECOS 환율은 그 안에서 통화별 기여를
+    // 나누는 데에만 쓰고, 맞지 않는 몫은 residual 로 드러낸다.
+    const openDaily = openingDaily ?? dailies[0]
+    const closeDaily = closingDaily
+    const fxEffect = fxRates
+      ? computeFxEffect({
+          from: openDaily.date, to: closeDaily.date,
+          openAmounts:  amountsOf(openDaily),
+          closeAmounts: amountsOf(closeDaily),
+          openRates:  fxRates.open,
+          closeRates: fxRates.close,
+          observedKrwDelta: (closeDaily.fx_krw ?? 0) - (openDaily.fx_krw ?? 0),
+        })
+      : null
+
     return {
-      bridge: b, rows: r,
+      bridge: b, rows: r, fxEffect,
       ledger: buildDailyLedger({ dailies, openingDaily, invests, toKRW: fx.toKRW, itemsByDate }),
       excludedOpening: excludedBalanceOn(invests, openingDate, fx.toKRW),
       excludedClosing: excludedBalanceOn(invests, closingDaily.date, fx.toKRW),
       investFlows: flows,
     }
-  }, [company, dailies, openingDaily, invests, reports, items, fx])
+  }, [company, dailies, openingDaily, invests, reports, items, fx, fxRates])
 
   return {
-    loading, error, bridge, rows, ledger,
+    loading, error, bridge, rows, ledger, fxEffect,
     excludedOpening, excludedClosing, investFlows,
     dailyDays: dailies.length,
     reportDays: new Set(items.map(i => i.report_id)).size,
