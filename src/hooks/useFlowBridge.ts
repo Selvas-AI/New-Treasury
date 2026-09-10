@@ -18,17 +18,19 @@ import { toKRWAmount } from '../lib/treasuryCalc'
 import { useFx } from './useFx'
 import { investFromDb } from './useInvestments'
 import { fetchRatesOnOrBefore } from './useFxHistory'
+import { buildAsOfSnapshots, applyAsOf, type AuditLogRow } from '../lib/recordAsOf'
 import {
   computeFxEffect, amountsOf, FX_CODES,
   type FxEffectResult, type FxRates,
 } from '../lib/fxEffect'
 import {
   buildBridge, scopeBalanceOn, classifyItem, excludedBalanceOn, investDeltas,
-  buildDailyLedger, investBreakdownOn,
+  buildDailyLedger, investBreakdownOn, fundScopeOf, investItemsOn,
   type FlowBridge, type FlowItemInput, type FlowGroup,
   type ExcludedBalance, type InvestDelta, type DailyLedgerRow,
 } from '../lib/flowBridge'
-import type { DailyRecord, InvestmentRecord } from '../types'
+import type { FundScopeSnapshot } from '../components/flow/FundScopeCards'
+import type { DailyRecord, InvestmentRecord, LoanRecord } from '../types'
 
 interface ReportRow { id: string; company: string; report_date: string; status: string }
 interface ItemRow {
@@ -57,6 +59,9 @@ export interface UseFlowBridgeResult {
   ledger: DailyLedgerRow[]
   /** 환율효과 분해 (Phase 2) — 환율 이력이 없으면 null */
   fxEffect: FxEffectResult | null
+  /** 가용/불가용 구분 — 실제 쓸 수 있는 돈 (기초·기말) */
+  scopeOpening: FundScopeSnapshot | null
+  scopeClosing: FundScopeSnapshot | null
   /** 기간 내 daily 행 수 / 항목이 있는 일보 수 — 설명률 해석용 */
   dailyDays: number
   reportDays: number
@@ -74,6 +79,9 @@ export function useFlowBridge(
   const [dailies, setDailies] = useState<DailyRecord[]>([])
   const [openingDaily, setOpeningDaily] = useState<DailyRecord | null>(null)
   const [invests, setInvests] = useState<InvestmentRecord[]>([])
+  const [loans, setLoans]     = useState<LoanRecord[]>([])
+  // 감사 로그 — 연장 등으로 덮어써진 과거 상태를 복원하는 데 쓴다
+  const [auditLogs, setAuditLogs] = useState<AuditLogRow[]>([])
   const [reports, setReports] = useState<ReportRow[]>([])
   const [items, setItems]     = useState<ItemRow[]>([])
   // 환율효과용 — 기초·기말 두 시점의 통화별 환율만 가져온다(전 구간 조회 아님)
@@ -108,6 +116,25 @@ export function useFlowBridge(
       if (fetchIdRef.current !== myId) return
       if (invRes.error) throw new Error(invRes.error.message)
 
+      // ③-2 차입금
+      const loanRes = await restSelect<LoanRecord>('loans', {
+        match: { company }, order: 'start_date.asc', limit: 500,
+      })
+      if (fetchIdRef.current !== myId) return
+      if (loanRes.error) throw new Error(loanRes.error.message)
+
+      // ③-3 운용자금 변경 이력 — 정기예금을 연장할 때 기존 레코드의 개시일·만기일을
+      //     덮어쓰므로, 현재 값만 보면 과거에 살아 있던 예금이 사라진다.
+      //     기준일 이후 로그의 before_data 로 그 시점 상태를 복원한다.
+      //     ⚠ 실패해도 분석 자체는 계속한다 — 복원은 정확도 향상이지 전제조건이 아니다.
+      //     ⚠ 기간 필터를 걸면 안 된다 — 기준일 **이전** 로그의 after_data 도
+      //       복원 재료다(before_data 가 없던 시기를 메운다). 전 구간을 가져온다.
+      const auditRes = await restSelect<AuditLogRow>('audit_logs', {
+        match: { company, table_name: 'investments' },
+        order: 'created_at.asc', limit: 2000,
+      })
+      if (fetchIdRef.current !== myId) return
+
       // ④ 기간 내 자금일보 → 그 일보들의 입출금 항목
       const repRes = await restSelect<ReportRow>('daily_reports', {
         match: { company },
@@ -139,6 +166,8 @@ export function useFlowBridge(
       setDailies(inRange.data ?? [])
       setOpeningDaily((before.data ?? [])[0] ?? null)
       setInvests((invRes.data ?? []).map(investFromDb))
+      setLoans(loanRes.data ?? [])
+      setAuditLogs(auditRes.error ? [] : (auditRes.data ?? []))
       setReports(repRows)
       setItems(itemRows)
     } catch (e) {
@@ -169,12 +198,14 @@ export function useFlowBridge(
 
   const {
     bridge, rows, excludedOpening, excludedClosing, investFlows, ledger, fxEffect,
+    scopeOpening, scopeClosing,
   } = useMemo(() => {
     if (!company || !dailies.length) {
       return {
         bridge: null, rows: [] as FlowRow[],
         excludedOpening: null, excludedClosing: null, investFlows: null,
         ledger: [] as DailyLedgerRow[], fxEffect: null,
+        scopeOpening: null, scopeClosing: null,
       }
     }
 
@@ -246,17 +277,38 @@ export function useFlowBridge(
         })
       : null
 
+    // ⭐ 시점별로 레코드를 복원한다. 기초·기말은 서로 다른 시점이므로 각각 따로 만든다.
+    const investsAsOf = (d: string) => applyAsOf(
+      invests, buildAsOfSnapshots(auditLogs, d), investFromDb,
+    )
+    const openSnap  = investsAsOf(openingDate)
+    const closeSnap = investsAsOf(closingDaily.date)
+
+    const bdOpen  = investBreakdownOn(openSnap.records,  openingDate,       fx.toKRW)
+    const bdClose = investBreakdownOn(closeSnap.records, closingDaily.date, fx.toKRW)
+
     return {
       bridge: b, rows: r, fxEffect,
+      scopeOpening: {
+        date: openingDate, breakdown: bdOpen,
+        scope: fundScopeOf(opening.operatingKrw, bdOpen),
+        items: investItemsOn(openSnap.records, openingDate, fx.toKRW, openSnap.restoredIds),
+      },
+      scopeClosing: {
+        date: closingDaily.date, breakdown: bdClose,
+        scope: fundScopeOf(closing.operatingKrw, bdClose),
+        items: investItemsOn(closeSnap.records, closingDaily.date, fx.toKRW, closeSnap.restoredIds),
+      },
       ledger: buildDailyLedger({ dailies, openingDaily, invests, toKRW: fx.toKRW, itemsByDate }),
       excludedOpening: excludedBalanceOn(invests, openingDate, fx.toKRW),
       excludedClosing: excludedBalanceOn(invests, closingDaily.date, fx.toKRW),
       investFlows: flows,
     }
-  }, [company, dailies, openingDaily, invests, reports, items, fx, fxRates])
+  }, [company, dailies, openingDaily, invests, loans, auditLogs, reports, items, fx, fxRates])
 
   return {
     loading, error, bridge, rows, ledger, fxEffect,
+    scopeOpening, scopeClosing,
     excludedOpening, excludedClosing, investFlows,
     dailyDays: dailies.length,
     reportDays: new Set(items.map(i => i.report_id)).size,

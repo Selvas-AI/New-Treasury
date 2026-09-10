@@ -14,6 +14,7 @@ import { fmtKRW } from '../lib/format'
 import { NotionTable, type ColumnDef } from '../components/common/NotionTable'
 import DailyLedgerView from '../components/flow/DailyLedgerView'
 import FxEffectView from '../components/flow/FxEffectView'
+import FundScopeCards from '../components/flow/FundScopeCards'
 
 const CAT_LABEL: Record<string, string> = Object.fromEntries(
   [...IN_CATEGORIES, ...OUT_CATEGORIES].map(c => [c.code, c.label]),
@@ -52,7 +53,7 @@ export default function FlowAnalysisPage() {
 
   const {
     loading, error, bridge, rows, dailyDays, reportDays,
-    investFlows, ledger, fxEffect,
+    investFlows, ledger, fxEffect, scopeOpening, scopeClosing,
   } = useFlowBridge(company, from, to)
 
   return (
@@ -110,6 +111,38 @@ export default function FlowAnalysisPage() {
         )}
       </div>
 
+      {/* ── 과거 데이터 한계 안내 ──────────────────────────
+          연장·수정이 레코드를 덮어쓰던 시기의 건은 그 시점 상태를 복원할 수 없다.
+          숫자가 왜 다를 수 있는지 사용자가 먼저 알아야 혼선이 없다. */}
+      <details className="rounded-xl border border-amber-200 dark:border-amber-800/40 bg-amber-50/60 dark:bg-amber-900/15 px-4 py-2.5">
+        <summary className="cursor-pointer text-xs font-medium text-amber-800 dark:text-amber-300 list-none flex items-center gap-1.5">
+          <span>ⓘ</span>
+          과거 시점 분석은 제한적입니다 — 오래된 기간일수록 정확도가 떨어집니다
+          <span className="ml-auto text-[10px] font-normal text-amber-600 dark:text-amber-400">자세히</span>
+        </summary>
+        <div className="mt-2 pt-2 border-t border-amber-200/60 dark:border-amber-800/30 text-[11px] leading-relaxed text-amber-900/80 dark:text-amber-200/70 space-y-1">
+          <p>
+            <strong>정기예금 연장을 기존 건 수정으로 처리하던 시기</strong>가 있어, 그 건들은 개시일·만기일이
+            현재 값으로 덮어써졌습니다. 그런 건은 과거 잔액에서 빠지거나 금액이 현재 기준으로 보일 수 있습니다.
+            변경 이력이 남아 있으면 자동 복원하며, 복원된 건에는 <strong>이력복원</strong> 배지가 붙습니다.
+          </p>
+          <p>
+            종료일 기록이 없는 과거 만기 건은 <strong>만기일로 종료 시점을 추정</strong>합니다(<strong>만기추정</strong> 배지).
+            중도해지된 건이라면 실제보다 길게 잡힐 수 있습니다.
+          </p>
+          <p>
+            <strong>자금일보에 입출금 항목이 없는 날</strong>의 증감은 항목으로 설명되지 않아 ‘미설명’으로 남습니다.
+            상단 설명률이 그 비율입니다.
+          </p>
+          <p className="text-amber-700 dark:text-amber-300">
+            2026-09-10 이후 연장 건부터는 <strong>기존 건 종료 + 새 건 생성</strong>으로 기록되어 과거가 그대로 보존됩니다.
+          </p>
+        </div>
+      </details>
+
+      {/* ── 가용 / 불가용 / 총액 — 모든 탭에서 항상 보인다 ── */}
+      {!loading && <FundScopeCards opening={scopeOpening} closing={scopeClosing} />}
+
       {/* ── 탭 ────────────────────────────────────────────── */}
       <div className="flex gap-2 border-b border-gray-200 dark:border-slate-700">
         {([['daily', '📅 일자별 증감'], ['bridge', '📊 브릿지'], ['breakdown', '🔍 순유출 분해'], ['fx', '💱 환율효과'], ['ledger', '📄 원장']] as const).map(([k, label]) => (
@@ -165,26 +198,6 @@ function BridgeView({ bridge, company, investFlows }: {
 
   return (
     <div className="space-y-4">
-      {/* 기초 → 기말 */}
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Panel title="기초 잔액" sub={bridge.from}>
-          <Big value={bridge.openingFull} />
-          <Compose op={bridge.opening.operatingKrw} bd={bridge.openingBreakdown} />
-        </Panel>
-        <Panel title="기간 증감" sub="관측된 사실">
-          <div className={`text-2xl font-bold tabular-nums ${toneOf(bridge.observed)}`}>
-            {signed(bridge.observed)}
-          </div>
-          <p className="text-[11px] text-gray-400 dark:text-slate-500 mt-1">
-            기말 − 기초
-          </p>
-        </Panel>
-        <Panel title="기말 잔액" sub={bridge.to}>
-          <Big value={bridge.closingFull} />
-          <Compose op={bridge.closing.operatingKrw} bd={bridge.closingBreakdown} />
-        </Panel>
-      </div>
-
       {/* 레인별 분해 — 총 증감 = 운전 증감 + 운용 증감 (잔액 항등식) */}
       <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-5">
         <h3 className="text-sm font-semibold text-gray-700 dark:text-slate-100 mb-1">
@@ -281,38 +294,6 @@ function BridgeView({ bridge, company, investFlows }: {
         원천 데이터 확인은 <Link to={`/daily-report-list/${company}`} className="text-blue-600 hover:underline">자금일보 목록</Link> ·
         <Link to={`/invest/${company}`} className="text-blue-600 hover:underline ml-1">운용자금</Link>에서.
       </p>
-    </div>
-  )
-}
-
-function Panel({ title, sub, children }: { title: string; sub: string; children: React.ReactNode }) {
-  return (
-    <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-4">
-      <div className="flex items-baseline justify-between mb-2">
-        <span className="text-xs font-semibold text-gray-600 dark:text-slate-300">{title}</span>
-        <span className="text-[10px] text-gray-400 dark:text-slate-500 tabular-nums">{sub}</span>
-      </div>
-      {children}
-    </div>
-  )
-}
-
-function Big({ value }: { value: number }) {
-  return <div className="text-2xl font-bold tabular-nums text-gray-800 dark:text-gray-100">{fmtKRW(value)}</div>
-}
-
-/** 잔액 구성 — 총액이 무엇으로 이뤄져 있는지. 자금 변동 이력과 같은 정의다. */
-function Compose({ op, bd }: { op: number; bd: { availKrw: number; bondKrw: number; lockedKrw: number } }) {
-  return (
-    <div className="mt-1.5 space-y-0.5 text-[11px] tabular-nums text-gray-500 dark:text-slate-400">
-      <div className="flex justify-between"><span>운전자금</span><span>{fmtKRW(op)}</span></div>
-      <div className="flex justify-between"><span>가용 운용자금</span><span>{fmtKRW(bd.availKrw)}</span></div>
-      {bd.bondKrw !== 0 && (
-        <div className="flex justify-between"><span>국채</span><span>{fmtKRW(bd.bondKrw)}</span></div>
-      )}
-      {bd.lockedKrw !== 0 && (
-        <div className="flex justify-between"><span>불가용 운용자금</span><span>{fmtKRW(bd.lockedKrw)}</span></div>
-      )}
     </div>
   )
 }

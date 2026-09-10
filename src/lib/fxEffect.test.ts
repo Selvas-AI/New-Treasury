@@ -62,21 +62,33 @@ describe('computeFxEffect — 3분해', () => {
     expect(r.residual).toBe(2_000_000)     // 200만은 환율 출처 차이
   })
 
-  it('환율 이력이 없는 통화는 분해하지 않고 명시한다', () => {
+  // CNY 는 분해 대상에서 제외했다(ECOS 통화코드 미등록 + 잔액 미미).
+  // 그 몫은 조용히 사라지지 않고 residual 로 남는다.
+  it('CNY 는 분해 대상이 아니며 그 몫은 잔차로 남는다', () => {
     const r = computeFxEffect({
       from: '2026-01-01', to: '2026-01-31',
       openAmounts:  { USD: 1_000_000, CNY: 500_000 },
       closeAmounts: { USD: 1_000_000, CNY: 700_000 },
-      openRates:  { USD: 1400, CNY: null },
-      closeRates: { USD: 1450, CNY: null },
+      openRates:  { USD: 1400 },
+      closeRates: { USD: 1450 },
       observedKrwDelta: 90_000_000,
     })
-    expect(r.missingCurrencies).toEqual(['CNY'])
+    expect(r.currencies.some(c => c.currency === 'CNY')).toBe(false)
+    expect(r.missingCurrencies).toEqual([])      // CNY 를 '이력 없음'으로 경고하지 않는다
     expect(r.fxEffect).toBe(50_000_000)          // USD 만 분해됨
     expect(r.residual).toBe(40_000_000)          // CNY 몫은 잔차로
-    const cny = r.currencies.find(c => c.currency === 'CNY')!
-    expect(cny.totalEffect).toBeNull()
-    expect(cny.missingRate).toBe(true)
+  })
+
+  it('분해 대상 통화의 환율 이력이 비면 명시한다', () => {
+    const r = computeFxEffect({
+      from: '2026-01-01', to: '2026-01-31',
+      openAmounts:  { USD: 1_000_000, GBP: 100_000 },
+      closeAmounts: { USD: 1_000_000, GBP: 100_000 },
+      openRates:  { USD: 1400 },
+      closeRates: { USD: 1450 },
+      observedKrwDelta: 50_000_000,
+    })
+    expect(r.missingCurrencies).toEqual(['GBP'])
   })
 
   it('잔액이 양쪽 다 0 인 통화는 환율이 없어도 경고하지 않는다', () => {

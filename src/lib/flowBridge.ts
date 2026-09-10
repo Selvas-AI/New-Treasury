@@ -18,7 +18,7 @@
  * ⚠ 맞지 않는 차액은 숨기지 않는다. 좌변(관측된 잔액 증감)과 우변(항목 합계)의 차이는
  *   `unexplained` 로 그대로 남긴다 — 그 숫자가 곧 "어느 날 일보가 비었는지"를 알려준다.
  */
-import { opCashKRW, investValueKRW, isOpenOn, type ToKRWFn } from './treasuryCalc'
+import { opCashKRW, investValueKRW, type ToKRWFn } from './treasuryCalc'
 import { getLatestBonds } from '../hooks/useInvestments'
 import type { DailyRecord, InvestmentRecord } from '../types'
 
@@ -132,7 +132,7 @@ export function scopeBalanceOn(
   const investKrw = invests
     .filter(i => i.product !== '국채')
     .filter(i => i.available === '가용')
-    .filter(i => isOpenOn(i, date))
+    .filter(i => wasOpenOnAnalysis(i, date).open)
     .reduce((s, i) => s + investValueKRW(i, toKRW), 0)
   return { operatingKrw, investKrw, total: operatingKrw + investKrw }
 }
@@ -289,7 +289,7 @@ export function excludedBalanceOn(
   date: string,
   toKRW: ToKRWFn,
 ): ExcludedBalance {
-  const open = invests.filter(i => isOpenOn(i, date))
+  const open = invests.filter(i => wasOpenOnAnalysis(i, date).open)
   // ⚠ 국채는 기준일마다 새 행이 쌓인다(시세 이력). 종목별 최신 1건만 세지 않으면
   //   보유액이 수 배로 부풀려진다(세션19차 6.2% vs 27.9% 사고와 같은 유형).
   const bondKrw = getLatestBonds(open)
@@ -353,10 +353,107 @@ export function investDeltas(
  *   그래서 현재 active 플래그가 아니라 isOpenOn(개시일·해지일)으로 판정한다.
  */
 export interface InvestBreakdown {
-  availKrw:  number   // 가용 운용자금 (국채 제외)
-  bondKrw:   number   // 국채 (종목별 최신 기준가)
-  lockedKrw: number   // 불가용 운용자금 (국채 제외)
-  allKrw:    number   // 셋의 합 = 자금 변동 이력의 '운용자금'
+  availKrw:      number   // 가용 운용자금 (국채 제외)
+  bondAvailKrw:  number   // 가용 국채
+  bondLockedKrw: number   // 불가용 국채
+  lockedKrw:     number   // 불가용 운용자금 (국채 제외)
+  /** 국채 합계 (가용+불가용) — 평가 변동을 따로 볼 때 쓴다 */
+  bondKrw:   number
+  allKrw:    number       // 전부 합 = 자금 변동 이력의 '운용자금'
+}
+
+/**
+ * ⭐ 실제 사용 가능한 자금 — 통합 상황판의 '가용자금'과 같은 관점.
+ *   불가용에는 장기·초장기·실현 불가 자산이 섞여 있어, 총액만 보면
+ *   당장 쓸 수 있는 돈이 훨씬 많은 것처럼 왜곡된다(2026-09-09 사용자 지적).
+ */
+export interface FundScope {
+  /** 운전자금 + 가용 운용자금 + 가용 국채 = 지금 쓸 수 있는 돈 */
+  availableKrw: number
+  /** 불가용 운용자금 + 불가용 국채 = 묶여 있는 돈 */
+  lockedKrw: number
+  /** 자산 합계 (운전 + 운용 전체) */
+  totalKrw: number
+  operatingKrw: number
+}
+
+/**
+ * ⚠ 차입금은 여기 넣지 않는다 (2026-09-09 사용자 결정).
+ *   차입금은 회사가 활용할 수 있는 자금이 아니고, 자금흐름 분석의 관심사도 아니다.
+ *   그래서 자금 변동 이력의 '순현금 포지션'(자산 − 차입금)과는 정의가 다르다 —
+ *   그 화면과 대조할 때는 운전자금·운용자금 열을 보면 된다.
+ */
+export function fundScopeOf(operatingKrw: number, bd: InvestBreakdown): FundScope {
+  const availableKrw = operatingKrw + bd.availKrw + bd.bondAvailKrw
+  const lockedKrw    = bd.lockedKrw + bd.bondLockedKrw
+  return { availableKrw, lockedKrw, totalKrw: availableKrw + lockedKrw, operatingKrw }
+}
+
+/**
+ * ⭐ 과거 시점 개시 여부 — 분석 화면 전용 판정.
+ *
+ * treasuryCalc.isOpenOn 은 `closed_date` 가 없고 `active=false` 면 **모든 날짜에서 닫힘**으로
+ * 본다. closed_date 는 세션19차에 신설된 컬럼이라, 그 이전에 만기·해지된 건은 전부 null 이다.
+ * 그래서 "6/25 당시 살아 있던 정기예금"이 과거 잔액에서 통째로 사라진다
+ * (2026-09-09 셀바스헬스케어 리포트 — 가용 운용자금 46.5억이 0 으로 표시됨).
+ *
+ * 정기예금·MMF 는 대개 만기에 종료되므로, closed_date 가 없으면 **만기일을 종료일로 추정**한다.
+ * 추정이라는 사실을 숨기지 않고 inferred 로 돌려줘 화면이 배지로 표시한다.
+ *
+ * ⚠ treasuryCalc.isOpenOn 자체는 건드리지 않는다 — 대시보드·현금흐름 차트가 쓰는
+ *   "현재 잔액" 판정이라, 여기서 바꾸면 세션19차 과대산정 회귀가 재발한다.
+ *   과거 재구성이 필요한 이 화면에서만 이 함수를 쓴다.
+ */
+export interface OpenOnResult { open: boolean; inferred: boolean }
+
+export function wasOpenOnAnalysis(
+  rec: { start?: string | null; maturity?: string | null; active?: boolean | null; closed_date?: string | null },
+  date: string,
+): OpenOnResult {
+  if (rec.start && rec.start > date) return { open: false, inferred: false }
+  if (rec.closed_date) return { open: rec.closed_date > date, inferred: false }
+  if (rec.active !== false) return { open: true, inferred: false }
+  // 이미 닫혔는데 종료일 기록이 없다 → 만기일로 추정
+  if (rec.maturity) return { open: rec.maturity > date, inferred: rec.maturity > date }
+  return { open: false, inferred: false }
+}
+
+/** 그 시점의 운용자금 건별 목록 — 왜 불가용으로 잡혔는지 화면에서 확인하기 위한 것 */
+export interface InvestItem {
+  id: string
+  label: string          // 은행 · 상품
+  currency: string
+  amount: number         // 원통화
+  amountKrw: number
+  available: string
+  isBond: boolean
+  /** 종료일 기록이 없어 만기일로 개시 여부를 추정한 건 */
+  inferred: boolean
+  /** 변경 이력(audit_logs)으로 그 시점 상태를 복원한 건 */
+  restored: boolean
+  maturity: string
+}
+
+export function investItemsOn(
+  invests: InvestmentRecord[], date: string, toKRW: ToKRWFn,
+  restoredIds?: Set<string>,
+): InvestItem[] {
+  const bondsUpTo = invests.filter(i =>
+    i.product === '국채' && (i.priceDate || i.start || '') !== '' && (i.priceDate || i.start || '') <= date)
+  const nonBond = invests.filter(i => i.product !== '국채' && wasOpenOnAnalysis(i, date).open)
+  const rows = [...getLatestBonds(bondsUpTo), ...nonBond]
+  return rows.map(i => ({
+    id: i.id,
+    label: `${i.bank || '-'} · ${i.product || '-'}`,
+    currency: i.currency || 'KRW',
+    amount: i.amount || 0,
+    amountKrw: investValueKRW(i, toKRW),
+    available: i.available ?? '가용',
+    isBond: i.product === '국채',
+    inferred: i.product !== '국채' && wasOpenOnAnalysis(i, date).inferred,
+    restored: restoredIds?.has(i.id) ?? false,
+    maturity: i.maturity || '',
+  })).sort((a, b) => b.amountKrw - a.amountKrw)
 }
 
 export function investBreakdownOn(
@@ -367,16 +464,22 @@ export function investBreakdownOn(
   // 국채는 기준일마다 행이 쌓이므로 그 시점까지의 행 중 종목별 최신 1건만 센다
   const bondsUpTo = invests.filter(i =>
     i.product === '국채' && (i.priceDate || i.start || '') !== '' && (i.priceDate || i.start || '') <= date)
-  const bondKrw = getLatestBonds(bondsUpTo)
-    .reduce((sum, i) => sum + investValueKRW(i, toKRW), 0)
+  const bonds = getLatestBonds(bondsUpTo)
+  // ⚠ 국채도 가용/불가용이 나뉜다. 뭉뚱그리면 '실제 쓸 수 있는 돈'이 왜곡된다.
+  const sumOf = (arr: InvestmentRecord[]) =>
+    arr.reduce((sum, i) => sum + investValueKRW(i, toKRW), 0)
+  const bondAvailKrw  = sumOf(bonds.filter(i => i.available === '가용'))
+  const bondLockedKrw = sumOf(bonds.filter(i => i.available !== '가용'))
 
-  const nonBond = invests.filter(i => i.product !== '국채' && isOpenOn(i, date))
-  const availKrw  = nonBond.filter(i => i.available === '가용')
-    .reduce((sum, i) => sum + investValueKRW(i, toKRW), 0)
-  const lockedKrw = nonBond.filter(i => i.available !== '가용')
-    .reduce((sum, i) => sum + investValueKRW(i, toKRW), 0)
+  const nonBond = invests.filter(i => i.product !== '국채' && wasOpenOnAnalysis(i, date).open)
+  const availKrw  = sumOf(nonBond.filter(i => i.available === '가용'))
+  const lockedKrw = sumOf(nonBond.filter(i => i.available !== '가용'))
 
-  return { availKrw, bondKrw, lockedKrw, allKrw: availKrw + bondKrw + lockedKrw }
+  return {
+    availKrw, bondAvailKrw, bondLockedKrw, lockedKrw,
+    bondKrw: bondAvailKrw + bondLockedKrw,
+    allKrw:  availKrw + bondAvailKrw + bondLockedKrw + lockedKrw,
+  }
 }
 
 /**
@@ -433,6 +536,10 @@ export interface DailyLedgerRow {
   allTotal: number
   /** 총액 증감 — 이 화면이 설명해야 할 값 */
   allDelta: number
+  /** 가용/불가용 구분 — 실제 쓸 수 있는 돈이 얼마인지 */
+  scope: FundScope
+  availDelta: number
+  lockedTotalDelta: number
 }
 
 export function buildDailyLedger(params: {
@@ -463,6 +570,8 @@ export function buildDailyLedger(params: {
     const bdCur  = investBreakdownOn(invests, cur.date,  toKRW)
     const allTotalPrev = prevBal.operatingKrw + bdPrev.allKrw
     const allTotalCur  = curBal.operatingKrw  + bdCur.allKrw
+    const scopePrev = fundScopeOf(prevBal.operatingKrw, bdPrev)
+    const scopeCur  = fundScopeOf(curBal.operatingKrw,  bdCur)
 
     rows.push({
       date: cur.date,
@@ -482,6 +591,9 @@ export function buildDailyLedger(params: {
       lockedDelta: bdCur.lockedKrw - bdPrev.lockedKrw,
       allTotal: allTotalCur,
       allDelta: allTotalCur - allTotalPrev,
+      scope: scopeCur,
+      availDelta:       scopeCur.availableKrw - scopePrev.availableKrw,
+      lockedTotalDelta: scopeCur.lockedKrw    - scopePrev.lockedKrw,
     })
   }
   return rows

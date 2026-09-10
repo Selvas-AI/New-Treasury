@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
-  buildBridge, classifyItem, scopeBalanceOn, isMaterialFxEffect,
+  buildBridge, classifyItem, scopeBalanceOn, isMaterialFxEffect, fundScopeOf,
+  wasOpenOnAnalysis,
   type FlowItemInput,
 } from './flowBridge'
 import type { DailyRecord, InvestmentRecord } from '../types'
@@ -93,8 +94,10 @@ describe('scopeBalanceOn — 시점 잔액', () => {
 
 describe('buildBridge', () => {
   const investById = new Map<string, InvestmentRecord>([['dep', inv({ id: 'dep' })]])
-  const bd = (avail: number, bond = 0, locked = 0) =>
-    ({ availKrw: avail, bondKrw: bond, lockedKrw: locked, allKrw: avail + bond + locked })
+  const bd = (avail: number, bond = 0, locked = 0) => ({
+    availKrw: avail, bondAvailKrw: bond, bondLockedKrw: 0, lockedKrw: locked,
+    bondKrw: bond, allKrw: avail + bond + locked,
+  })
   const base = {
     from: '2026-01-01', to: '2026-01-31',
     opening: { operatingKrw: 1000, investKrw: 0, total: 1000 },
@@ -213,6 +216,61 @@ describe('buildBridge', () => {
       ],
     })
     expect(b.categories[0].category).toBe('ap_payment')
+  })
+})
+
+describe('fundScopeOf — 실제 쓸 수 있는 돈', () => {
+  it('국채도 가용/불가용을 나눠 계산한다', () => {
+    const scope = fundScopeOf(1000, {
+      availKrw: 500, bondAvailKrw: 300, bondLockedKrw: 200, lockedKrw: 700,
+      bondKrw: 500, allKrw: 1700,
+    })
+    expect(scope.availableKrw).toBe(1800)   // 운전 1000 + 가용운용 500 + 가용국채 300
+    expect(scope.lockedKrw).toBe(900)       // 불가용운용 700 + 불가용국채 200
+    expect(scope.totalKrw).toBe(2700)
+  })
+
+  // 불가용에는 장기·초장기·실현 불가 자산이 섞여 있다. 총액만 보면
+  // 당장 쓸 수 있는 돈이 훨씬 많은 것처럼 왜곡된다.
+  it('총액과 가용은 다르다 — 이 차이가 왜곡의 원인이다', () => {
+    const scope = fundScopeOf(100, {
+      availKrw: 0, bondAvailKrw: 0, bondLockedKrw: 0, lockedKrw: 900,
+      bondKrw: 0, allKrw: 900,
+    })
+    expect(scope.totalKrw).toBe(1000)
+    expect(scope.availableKrw).toBe(100)    // 실제로는 100 뿐이다
+  })
+})
+
+// ⭐ closed_date 는 세션19차 신설 컬럼이라 그 이전에 만기된 건은 전부 null 이다.
+//   treasuryCalc.isOpenOn 은 그런 건을 '모든 날짜에서 닫힘'으로 봐서, 과거에 살아
+//   있던 정기예금이 통째로 사라진다(2026-09-09 셀바스헬스케어 가용운용 46.5억 → 0).
+describe('wasOpenOnAnalysis — 과거 시점 재구성', () => {
+  it('종료일이 있으면 그대로 판정한다', () => {
+    const r = { start: '2026-01-01', maturity: '2026-12-31', active: false, closed_date: '2026-07-01' }
+    expect(wasOpenOnAnalysis(r, '2026-06-25')).toEqual({ open: true,  inferred: false })
+    expect(wasOpenOnAnalysis(r, '2026-08-01')).toEqual({ open: false, inferred: false })
+  })
+
+  it('아직 활성이면 개시일 이후 항상 열려 있다', () => {
+    const r = { start: '2026-01-01', maturity: '2027-12-31', active: true, closed_date: null }
+    expect(wasOpenOnAnalysis(r, '2026-06-25')).toEqual({ open: true, inferred: false })
+  })
+
+  it('개시 전 날짜는 닫힘이다', () => {
+    const r = { start: '2026-08-01', maturity: '2027-01-01', active: true, closed_date: null }
+    expect(wasOpenOnAnalysis(r, '2026-06-25').open).toBe(false)
+  })
+
+  it('종료일 기록이 없으면 만기일로 추정한다 — 이게 없으면 과거 잔액이 사라진다', () => {
+    const r = { start: '2026-01-01', maturity: '2026-09-01', active: false, closed_date: null }
+    expect(wasOpenOnAnalysis(r, '2026-06-25')).toEqual({ open: true, inferred: true })
+    expect(wasOpenOnAnalysis(r, '2026-10-01')).toEqual({ open: false, inferred: false })
+  })
+
+  it('종료일도 만기일도 없으면 닫힘으로 본다 — 추측하지 않는다', () => {
+    const r = { start: '2026-01-01', maturity: '', active: false, closed_date: null }
+    expect(wasOpenOnAnalysis(r, '2026-06-25').open).toBe(false)
   })
 })
 

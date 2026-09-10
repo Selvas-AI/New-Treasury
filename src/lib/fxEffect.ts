@@ -23,7 +23,17 @@
 
 export type FxCode = 'USD' | 'EUR' | 'JPY' | 'GBP' | 'CNY'
 
-export const FX_CODES: FxCode[] = ['USD', 'EUR', 'JPY', 'GBP', 'CNY']
+/**
+ * 환율효과 분해 대상 통화.
+ *
+ * ⚠ CNY 는 제외한다 (2026-09-09 사용자 결정). ECOS 731Y001 통화코드 매핑에
+ *   위안화가 등록돼 있지 않아 환율 이력을 채울 수 없고, 실제 잔액도 미미해
+ *   ('환율 이력 없음' 배지만 계속 뜨는) 노이즈가 된다.
+ *   CNY 잔액이 만든 환산액 변동은 residual('설명 안 됨')에 포함된다.
+ *   나중에 필요해지면 Code.gs 의 ECOS_CURRENCY_CODES 에 위안화 코드를 추가하고
+ *   여기 배열에 'CNY' 를 넣으면 된다.
+ */
+export const FX_CODES: FxCode[] = ['USD', 'EUR', 'JPY', 'GBP']
 
 /** 통화별 분해 결과 */
 export interface FxCurrencyEffect {
