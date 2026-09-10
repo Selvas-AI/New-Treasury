@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { restSelect, restInsert, restUpdate, restDelete, restUpdateIn } from '../lib/supabase'
 import { useAuth } from './useAuth'
+import { planRollover, isRolloverError } from '../lib/rollover'
 import { useAuditLog } from './useAuditLog'
 import { generateUUID } from '../lib/format'
 import type { Company, InvestmentRecord, UseQueryResult } from '../types'
@@ -91,6 +92,11 @@ export function useInvestments(activeOnly = false, companyOverride?: string): Us
   save: (record: Omit<InvestmentRecord, 'id'> & { id?: string }) => Promise<string | null>
   remove: (id: string) => Promise<string | null>
   setActive: (id: string, active: boolean, closedDate?: string) => Promise<string | null>
+  /** 연장 — 기존 건 종료 + 새 건 생성 (과거 보존) */
+  rollover: (
+    id: string,
+    opts: { closeDate: string; newMaturity: string; newAmount: number; newRate: number },
+  ) => Promise<string | null>
   updateAcquisitionCost: (ids: string[], cost: number) => Promise<string | null>
   updateAvailableById: (id: string, available: '가용' | '불가용') => Promise<string | null>
   updateAvailableByBondKey: (bondKey: string, available: '가용' | '불가용') => Promise<string | null>
@@ -136,6 +142,10 @@ export function useInvestments(activeOnly = false, companyOverride?: string): Us
   async function save(record: Omit<InvestmentRecord, 'id'> & { id?: string }): Promise<string | null> {
     const isNew = !record.id
     const recordWithId = isNew ? { ...record, id: generateUUID() } : record
+    // ⚠ 변경 전 스냅샷 — 정기예금 연장처럼 개시일·만기일을 덮어쓰는 수정이 있어,
+    //   이게 없으면 과거 시점 잔액을 재구성할 수 없다(2026-09-09 실사례).
+    //   자금흐름 분석의 시점 복원이 이 값을 읽는다.
+    const beforeRec = isNew ? undefined : data.find(r => r.id === record.id)
     const payload = toDb(recordWithId)
     const { error: err } = isNew
       ? await restInsert('investments', payload)
@@ -143,7 +153,13 @@ export function useInvestments(activeOnly = false, companyOverride?: string): Us
     if (err) return err.message
     const company = record.company || fetchCompany || ''
     const label = `${record.product ?? ''} ${record.bank ?? ''} ${record.amount ? record.amount.toLocaleString() + '원' : ''}`.trim()
-    void logAction({ table: 'investments', action: isNew ? 'CREATE' : 'UPDATE', company, recordId: recordWithId.id as string, summary: isNew ? `${label} 신규 등록` : `${label} 수정`, after: record as unknown as Record<string, unknown> })
+    void logAction({
+      table: 'investments', action: isNew ? 'CREATE' : 'UPDATE', company,
+      recordId: recordWithId.id as string,
+      summary: isNew ? `${label} 신규 등록` : `${label} 수정`,
+      before: beforeRec ? (toDb(beforeRec) as Record<string, unknown>) : undefined,
+      after:  toDb(recordWithId) as Record<string, unknown>,
+    })
     await fetch()
     return null
   }
@@ -157,6 +173,51 @@ export function useInvestments(activeOnly = false, companyOverride?: string): Us
       void logAction({ table: 'investments', action: 'DELETE', company: target.company, recordId: id, summary: `${label} 삭제`, before: target as unknown as Record<string, unknown> })
     }
     setData(prev => prev.filter(r => r.id !== id))
+    return null
+  }
+
+  /**
+   * 연장(rollover) — 기존 건을 **만기 종료**하고 새 건을 만든다.
+   *
+   * ⭐ 왜 수정이 아니라 종료+신규인가.
+   *   연장할 때 기존 레코드의 개시일·만기일을 덮어쓰면 **과거가 지워진다.**
+   *   지금 DB 만 보면 "그 예금은 8/21에 시작했다"가 되어, 6월 잔액을 재구성할 때
+   *   통째로 사라진다(2026-09-09 셀바스헬스케어 외화 정기예금 실사례).
+   *   감사 로그로 복원을 시도할 수는 있지만, 로그가 없거나 before 가 비면 방법이 없다.
+   *   → 구조적으로 과거가 남게 만든다. 종료된 건은 closed_date 로 그 시점까지 살아 있고,
+   *     새 건은 개시일부터 잡힌다. 복원이 필요 없어진다.
+   *
+   * @param closeDate  기존 건의 종료일(= 새 건의 개시일). 보통 기존 만기일.
+   */
+  async function rollover(
+    id: string,
+    opts: { closeDate: string; newMaturity: string; newAmount: number; newRate: number },
+  ): Promise<string | null> {
+    const target = data.find(r => r.id === id)
+    if (!target) return '대상을 찾을 수 없습니다.'
+
+    // 계산·검증은 순수 함수에 위임한다(lib/rollover.ts) — 테스트로 검증된 경로다.
+    const newId = generateUUID()
+    const plan = planRollover(target, opts, newId)
+    if (isRolloverError(plan)) return plan.error
+
+    // ① 기존 건 종료 — 실제로 그날까지 존재했으므로 closed_date 를 정확히 남긴다
+    const closeErr = await setActive(id, false, plan.closeDate)
+    if (closeErr) return closeErr
+
+    // ② 새 건 생성 — 은행·상품·통화·가용여부는 승계, 기간·금액·금리만 새로
+    const newRec = plan.next
+    const { error: err } = await restInsert('investments', toDb(newRec))
+    if (err) return err.message
+
+    const amountLabel = `${opts.newAmount.toLocaleString()}${target.currency && target.currency !== 'KRW' ? target.currency : '원'}`
+    void logAction({
+      table: 'investments', action: 'CREATE', company: target.company, recordId: newId,
+      summary: `${target.product ?? ''} ${target.bank ?? ''} ${amountLabel} 연장 (${opts.closeDate} → ${opts.newMaturity})`,
+      before: toDb(target) as Record<string, unknown>,
+      after:  toDb(newRec) as Record<string, unknown>,
+    })
+    await fetch()
     return null
   }
 
@@ -221,5 +282,5 @@ export function useInvestments(activeOnly = false, companyOverride?: string): Us
     return null
   }
 
-  return { data, loading, error, refetch: fetch, bonds, nonBonds, save, remove, setActive, updateAcquisitionCost, updateAvailableById, updateAvailableByBondKey }
+  return { data, loading, error, refetch: fetch, bonds, nonBonds, save, remove, setActive, rollover, updateAcquisitionCost, updateAvailableById, updateAvailableByBondKey }
 }

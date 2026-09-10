@@ -13,6 +13,7 @@ import { NumInput } from '../components/common/NumInput'
 import NegoLogPanel from '../components/common/NegoLogPanel'
 import AvailabilityModal, { type AvailItem } from '../components/common/AvailabilityModal'
 import CloseDateModal from '../components/common/CloseDateModal'
+import RolloverModal, { type RolloverValues } from '../components/common/RolloverModal'
 import type { InvestmentRecord } from '../types'
 
 const PRODUCT_OPTIONS = ['정기예금', '중금채', 'RP', 'MMF', '발행어음', 'CMA', '채권', '기타']
@@ -169,6 +170,20 @@ export default function InvestPage() {
       id: rec.id, active,
       label: `${rec.bank} ${rec.product} ${(rec.amount ?? 0).toLocaleString()}${rec.currency && rec.currency !== 'KRW' ? ` ${rec.currency}` : '원'}`,
     })
+  }
+
+  // 연장 — 기존 건을 수정하지 않고 종료 + 신규로 처리해 과거를 보존한다
+  const [rolloverTarget, setRolloverTarget] = useState<InvestmentRecord | null>(null)
+  const [rolloverBusy,   setRolloverBusy]   = useState(false)
+
+  async function confirmRollover(v: RolloverValues) {
+    if (!rolloverTarget) return
+    setRolloverBusy(true)
+    const err = await invest.rollover(rolloverTarget.id, v)
+    setRolloverBusy(false)
+    if (err) { toast.error(`연장 실패: ${err}`); return }
+    toast.success(`연장 완료 — ${v.closeDate} 종료, ${v.newMaturity}까지 신규 등록`)
+    setRolloverTarget(null)
   }
 
   async function confirmSetActive() {
@@ -425,6 +440,11 @@ export default function InvestPage() {
                         {isEditable && (
                           <>
                             <button onClick={() => loadRecord(rec)} className="flex-1 text-xs text-blue-600 dark:text-blue-400 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100">수정</button>
+                            {tab === 'active' && rec.product !== '국채' && (
+                              <button onClick={() => setRolloverTarget(rec)}
+                                title="기존 건을 종료하고 새 건을 만듭니다 — 과거 잔액이 보존됩니다"
+                                className="flex-1 text-xs text-indigo-600 dark:text-indigo-400 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-900/20 hover:bg-indigo-100">연장</button>
+                            )}
                             {tab === 'active'
                               ? <button onClick={() => handleSetActive(rec, false)} className="flex-1 text-xs text-amber-600 dark:text-amber-400 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100">만기처리</button>
                               : <button onClick={() => handleSetActive(rec, true)} className="flex-1 text-xs text-emerald-600 dark:text-emerald-400 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100">복원</button>
@@ -501,6 +521,9 @@ export default function InvestPage() {
                                 {isEditable && (
                                   <>
                                     <button onClick={() => loadRecord(rec)} className="text-xs text-blue-500 hover:text-blue-700">수정</button>
+                                    {tab === 'active' && rec.product !== '국채' && (
+                                      <button onClick={() => setRolloverTarget(rec)} className="text-xs text-indigo-500 hover:text-indigo-700" title="종료 + 신규로 연장">연장</button>
+                                    )}
                                     {tab === 'active' ? <button onClick={() => handleSetActive(rec, false)} className="text-xs text-amber-500 hover:text-amber-700">만기</button> : <button onClick={() => handleSetActive(rec, true)} className="text-xs text-emerald-500 hover:text-emerald-700">복원</button>}
                                     <button onClick={() => handleDelete(rec.id)} className="text-xs text-red-400 hover:text-red-600">삭제</button>
                                   </>
@@ -556,6 +579,15 @@ export default function InvestPage() {
         items={availInvestItems}
         onSave={handleAvailInvestSave}
       />
+
+      {rolloverTarget && (
+        <RolloverModal
+          record={rolloverTarget}
+          busy={rolloverBusy}
+          onCancel={() => setRolloverTarget(null)}
+          onConfirm={v => void confirmRollover(v)}
+        />
+      )}
 
       {closeTarget && (
         <CloseDateModal
