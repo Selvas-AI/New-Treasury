@@ -16,7 +16,7 @@ import { useAuth } from '../../hooks/useAuth'
 import type { ReportItem, ThreadEntry } from '../../hooks/useDailyReportItems'
 import type { Company, FxCode } from '../../types'
 
-import { ACCOUNT_LABELS } from '../../lib/accountLabels'
+import { ACCOUNT_LABELS, defaultAccountTypeFor } from '../../lib/accountLabels'
 import { IN_CATEGORIES, OUT_CATEGORIES } from '../../lib/dailyReportCategories'
 
 const FX_OPTIONS: FxCode[] = ['KRW' as FxCode, 'USD', 'EUR', 'JPY', 'GBP', 'CNY']
@@ -139,7 +139,11 @@ export default function ItemsSection({
       currency,
       amount_krw:   krw,
       memo:         memo || null,
-      account_type: draft?.accountType || null,
+      // ⭐ 계좌구분이 비면 통화로 추론한다. 비워두면 그 현금이 어느 계좌에서 움직였는지
+      //   표시되지 않아, 자금현황에서 `기초 + 입금 − 출금 = 마감` 이 그 행에서
+      //   성립하지 않는 것처럼 보인다(2026-09-11 리포트).
+      //   사용자가 직접 고른 값이 있으면 그것을 우선한다.
+      account_type: draft?.accountType || defaultAccountTypeFor(currency),
       // 팝업이 방금 생성한 원천 레코드(운용자금/지분/차입금) 역참조 —
       // 이 값이 없으면 일보 항목에서 어떤 자산이 만들어졌는지 추적할 수 없다
       linked_type:  linkedType ?? null,
@@ -517,7 +521,7 @@ export default function ItemsSection({
                 </button>
               </div>
               <p className="mt-1.5 text-[10px] text-gray-400 dark:text-gray-600">
-                {isLinked ? '🔗 연동 팝업에서 데이터를 선택하면 자동으로 저장됩니다' : 'Enter 저장 · Esc 취소 · 계좌구분은 선택사항'}
+                {isLinked ? '🔗 연동 팝업에서 데이터를 선택하면 자동으로 저장됩니다 · 계좌구분은 통화에 따라 자동 지정됩니다' : 'Enter 저장 · Esc 취소 · 계좌구분은 선택사항'}
               </p>
             </div>
           )

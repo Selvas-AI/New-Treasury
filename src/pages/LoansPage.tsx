@@ -12,13 +12,12 @@ import { NumInput } from '../components/common/NumInput'
 import NegoLogPanel from '../components/common/NegoLogPanel'
 import type { LoanRecord } from '../types'
 import CloseDateModal from '../components/common/CloseDateModal'
-
-const LOAN_TYPES    = ['일반대출', '한도대출', 'CP', '전자단기사채', '팩토링', '기타']
+import { LOAN_TYPES, DEFAULT_LOAN_TYPE } from '../lib/loanTypes'
 const CURRENCY_LIST = ['KRW', 'USD', 'EUR', 'JPY', 'GBP', 'CNY']
 
 const EMPTY_FORM = {
   lender:     '',
-  type:       '일반대출',
+  type:       DEFAULT_LOAN_TYPE as string,
   currency:   'KRW',
   amount:     '',
   rate:       '',

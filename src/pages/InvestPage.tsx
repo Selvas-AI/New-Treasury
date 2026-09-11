@@ -13,10 +13,11 @@ import { NumInput } from '../components/common/NumInput'
 import NegoLogPanel from '../components/common/NegoLogPanel'
 import AvailabilityModal, { type AvailItem } from '../components/common/AvailabilityModal'
 import CloseDateModal from '../components/common/CloseDateModal'
+import { INVEST_PRODUCTS } from '../lib/investProducts'
 import RolloverModal, { type RolloverValues } from '../components/common/RolloverModal'
 import type { InvestmentRecord } from '../types'
 
-const PRODUCT_OPTIONS = ['정기예금', '중금채', 'RP', 'MMF', '발행어음', 'CMA', '채권', '기타']
+// 상품유형은 lib/investProducts.ts 가 정본이다(연동 팝업과 공유)
 const CURRENCY_OPTIONS = ['KRW', 'USD', 'EUR', 'JPY', 'GBP', 'CNY']
 
 const EMPTY_FORM = {
@@ -287,7 +288,7 @@ export default function InvestPage() {
               <label className="block text-xs text-gray-500 mb-1 dark:text-slate-300">상품유형 *</label>
               <select value={form.product} onChange={e => setField('product', e.target.value)}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:border-slate-600 dark:text-gray-100">
-                {PRODUCT_OPTIONS.map(p => <option key={p}>{p}</option>)}
+                {INVEST_PRODUCTS.map(p => <option key={p}>{p}</option>)}
               </select>
             </div>
             <div>

@@ -18,6 +18,7 @@ import { investToDb } from '../../hooks/useInvestments'
 import { generateUUID, calcBondValue } from '../../lib/format'
 import { todayStr } from '../../lib/bizDay'
 import type { Company } from '../../types'
+import { INVEST_PRODUCTS } from '../../lib/investProducts'
 
 interface Props {
   company:    Company
@@ -40,7 +41,7 @@ const DESTS: { key: Dest; label: string; hint: string }[] = [
   { key: 'unlisted', label: '비상장주식', hint: 'RCPS·CB 등 · 지분/장기투자 > 비상장 탭' },
 ]
 
-const PRODUCTS  = ['정기예금', '중금채', 'MMF', 'RP', 'CP', '전자단기사채', '기타']
+// ⚠ 상품유형 목록은 lib/investProducts.ts 하나만 쓴다 — 운용자금 화면과 갈라졌던 이력이 있다
 const PURPOSES  = ['단순투자', '경영참여', '전략적제휴', '기타']
 
 /** 자산 구분별 가용여부 기본값 — 비상장·상장은 즉시 현금화가 어렵거나 매각제한이 흔함 */
@@ -262,7 +263,7 @@ export default function InvestExecutePopup({ company, reportDate, onSaved, onClo
                 </Row>
                 <Row label="상품 유형">
                   <select value={product} onChange={e => setProduct(e.target.value)} className={inputCls}>
-                    {PRODUCTS.map(p => <option key={p} value={p}>{p}</option>)}
+                    {INVEST_PRODUCTS.map(p => <option key={p} value={p}>{p}</option>)}
                   </select>
                 </Row>
                 <Row label="금액" req>

@@ -7,6 +7,7 @@ import { restInsert } from '../../lib/supabase'
 import { generateUUID } from '../../lib/format'
 import { todayStr } from '../../lib/bizDay'
 import type { Company } from '../../types'
+import { LOAN_TYPES, DEFAULT_LOAN_TYPE } from '../../lib/loanTypes'
 
 interface Props {
   company:  Company
@@ -14,13 +15,13 @@ interface Props {
   onClose:  () => void
 }
 
-const LOAN_TYPES = ['단기', '장기', '운전', '시설', '기타']
+// ⚠ 목록을 여기서 다시 정의하지 말 것 — 차입금 화면과 갈라져 실제로 어긋났다(lib/loanTypes.ts)
 
 export default function LoanDrawdownPopup({ company, onSaved, onClose }: Props) {
   const today = todayStr()
   const [form, setForm] = useState({
     lender:     '',
-    type:       '단기',
+    type:       DEFAULT_LOAN_TYPE as string,
     currency:   'KRW',
     amtStr:     '',
     rate:       '',
