@@ -210,6 +210,18 @@ export default function ItemsSection({
     setSaving(false)
   }
 
+  // ── 계좌구분 인라인 수정 ─────────────────────────────────
+  // 연동 팝업으로 만든 과거 항목은 account_type 이 비어 있다(2026-09-11 이전).
+  // 그 항목은 자금현황의 계좌 행에 잡히지 않아 `기초+입금−출금=마감` 이 어긋나 보인다.
+  // 삭제 후 재등록하지 않고 여기서 바로 고칠 수 있게 한다.
+  const [acctEditId, setAcctEditId] = useState<string | null>(null)
+
+  async function commitAccount(item: ReportItem, value: string) {
+    setAcctEditId(null)
+    if ((item.account_type ?? '') === value) return
+    await onUpdate(item.id, { account_type: value || null })
+  }
+
   // ── 인라인 금액 수정 ─────────────────────────────────────
   function startEdit(item: ReportItem) {
     setEditId(item.id)
@@ -291,11 +303,34 @@ export default function ItemsSection({
                 {catLabel(item.category)}
               </span>
 
-              {/* 계좌구분 배지 */}
-              {acctLabel && (
-                <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] bg-gray-100 dark:bg-slate-700 text-gray-500 dark:text-slate-300">
-                  {acctLabel}
-                </span>
+              {/* 계좌구분 — 클릭해서 바로 고친다. 미지정이면 눈에 띄게 표시해
+                  "이 항목이 어느 계좌 행에도 안 잡힌다"는 사실을 드러낸다. */}
+              {acctEditId === item.id ? (
+                <select
+                  autoFocus
+                  defaultValue={item.account_type ?? ''}
+                  onChange={e => void commitAccount(item, e.target.value)}
+                  onBlur={() => setAcctEditId(null)}
+                  className="shrink-0 text-[10px] px-1.5 py-0.5 rounded border border-blue-300 dark:border-blue-600 bg-white dark:bg-slate-700 text-gray-700 dark:text-slate-100 focus:outline-none"
+                >
+                  <option value="">미지정</option>
+                  {activeAccounts.map(k => (
+                    <option key={k} value={k}>{ACCOUNT_LABELS[k] ?? k}</option>
+                  ))}
+                </select>
+              ) : (
+                <button
+                  disabled={isReadOnly}
+                  onClick={() => setAcctEditId(item.id)}
+                  title={isReadOnly ? undefined : '클릭해서 계좌구분 변경'}
+                  className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] disabled:cursor-default ${
+                    acctLabel
+                      ? 'bg-gray-100 dark:bg-slate-700 text-gray-500 dark:text-slate-300 enabled:hover:bg-gray-200 dark:enabled:hover:bg-slate-600'
+                      : 'bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 border border-dashed border-amber-300 dark:border-amber-700 enabled:hover:bg-amber-100'
+                  }`}
+                >
+                  {acctLabel ?? '계좌 미지정'}
+                </button>
               )}
 
               {/* 금액 (인라인 편집) */}
