@@ -15,6 +15,9 @@ import { NotionTable, type ColumnDef } from '../components/common/NotionTable'
 import DailyLedgerView from '../components/flow/DailyLedgerView'
 import FxEffectView from '../components/flow/FxEffectView'
 import FundScopeCards from '../components/flow/FundScopeCards'
+import FlowMapView from '../components/flow/FlowMapView'
+import { exportFlowAnalysis } from '../lib/flowExcel'
+import { loadFlowViews, saveFlowView, removeFlowView, type SavedFlowView } from '../lib/flowViews'
 
 const CAT_LABEL: Record<string, string> = Object.fromEntries(
   [...IN_CATEGORIES, ...OUT_CATEGORIES].map(c => [c.code, c.label]),
@@ -42,7 +45,7 @@ const toneOf = (n: number) =>
   n > 0 ? 'text-emerald-600 dark:text-emerald-400'
         : n < 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-500'
 
-type Tab = 'daily' | 'bridge' | 'breakdown' | 'fx' | 'ledger'
+type Tab = 'daily' | 'bridge' | 'breakdown' | 'fx' | 'map' | 'ledger'
 
 export default function FlowAnalysisPage() {
   const { company } = usePageCompany('/flow-analysis')
@@ -50,6 +53,9 @@ export default function FlowAnalysisPage() {
   const [from, setFrom] = useState(init.from)
   const [to,   setTo]   = useState(init.to)
   const [tab,  setTab]  = useState<Tab>('daily')
+  const [views, setViews] = useState<SavedFlowView[]>(() => loadFlowViews())
+  const [naming, setNaming] = useState(false)
+  const [viewName, setViewName] = useState('')
 
   const {
     loading, error, bridge, rows, dailyDays, reportDays,
@@ -83,9 +89,60 @@ export default function FlowAnalysisPage() {
               </button>
             ))}
           </div>
-          <div className="ml-auto text-xs text-gray-400 dark:text-slate-500">
-            {company} · 임시 입력 포함
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              onClick={() => {
+                if (!bridge || !scopeOpening || !scopeClosing) return
+                exportFlowAnalysis({
+                  company, from, to, bridge, ledger, fxEffect, rows,
+                  openingItems: scopeOpening.items, closingItems: scopeClosing.items,
+                })
+              }}
+              disabled={!bridge}
+              title="화면의 모든 탭을 시트로 내려받습니다"
+              className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-slate-600 text-gray-600 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-700 disabled:opacity-40"
+            >
+              ⬇ 엑셀
+            </button>
+            <span className="text-xs text-gray-400 dark:text-slate-500">{company} · 임시 입력 포함</span>
           </div>
+        </div>
+
+        {/* 저장된 조회 조건 — 자주 보는 구간을 매번 찍지 않게 */}
+        <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+          {views.map(v => (
+            <span key={v.id}
+              className="group inline-flex items-center gap-1 text-xs pl-2.5 pr-1 py-1 rounded-full border border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-700/50">
+              <button onClick={() => { setFrom(v.from); setTo(v.to) }}
+                title={`${v.from} ~ ${v.to}`}
+                className="text-gray-600 dark:text-slate-200 hover:text-blue-600">
+                {v.name}
+              </button>
+              <button onClick={() => setViews(removeFlowView(v.id))}
+                title="삭제"
+                className="text-gray-300 dark:text-slate-500 hover:text-red-500 px-0.5">×</button>
+            </span>
+          ))}
+          {naming ? (
+            <span className="inline-flex items-center gap-1">
+              <input autoFocus value={viewName} maxLength={20}
+                placeholder="이름 (예: 1분기)"
+                onChange={e => setViewName(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') { setViews(saveFlowView(viewName, from, to)); setNaming(false); setViewName('') }
+                  if (e.key === 'Escape') { setNaming(false); setViewName('') }
+                }}
+                className="text-xs px-2 py-1 rounded-lg border border-blue-300 dark:border-blue-600 bg-white dark:bg-slate-700 text-gray-800 dark:text-gray-100 focus:outline-none" />
+              <button onClick={() => { setViews(saveFlowView(viewName, from, to)); setNaming(false); setViewName('') }}
+                className="text-xs px-2 py-1 rounded-lg bg-blue-600 text-white">저장</button>
+            </span>
+          ) : (
+            <button onClick={() => setNaming(true)}
+              title="이 브라우저에만 저장됩니다"
+              className="text-xs px-2.5 py-1 rounded-full border border-dashed border-gray-300 dark:border-slate-600 text-gray-400 dark:text-slate-500 hover:text-blue-600 hover:border-blue-400">
+              + 현재 기간 저장
+            </button>
+          )}
         </div>
 
         {/* 설명률 — 이 분석의 신뢰도. 항상 보인다. */}
@@ -145,7 +202,7 @@ export default function FlowAnalysisPage() {
 
       {/* ── 탭 ────────────────────────────────────────────── */}
       <div className="flex gap-2 border-b border-gray-200 dark:border-slate-700">
-        {([['daily', '📅 일자별 증감'], ['bridge', '📊 브릿지'], ['breakdown', '🔍 순유출 분해'], ['fx', '💱 환율효과'], ['ledger', '📄 원장']] as const).map(([k, label]) => (
+        {([['daily', '📅 일자별 증감'], ['bridge', '📊 브릿지'], ['breakdown', '🔍 순유출 분해'], ['fx', '💱 환율효과'], ['map', '🗺 이동 지도'], ['ledger', '📄 원장']] as const).map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)}
             className={`px-4 py-2 text-sm font-medium -mb-px border-b-2 transition-colors ${
               tab === k ? 'border-blue-600 text-blue-600 dark:text-blue-400'
@@ -173,6 +230,7 @@ export default function FlowAnalysisPage() {
       )}
       {!loading && bridge && tab === 'breakdown' && <BreakdownView bridge={bridge} />}
       {!loading && bridge && tab === 'fx'        && <FxEffectView effect={fxEffect} />}
+      {!loading && bridge && tab === 'map'       && <FlowMapView bridge={bridge} />}
       {!loading && bridge && tab === 'ledger'    && <LedgerView rows={rows} />}
     </div>
   )
