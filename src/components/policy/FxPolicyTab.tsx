@@ -165,7 +165,7 @@ function SellOrderList({ orders, company, onDelete, canEdit, canDeleteOrder }: {
 }
 
 export default function FxPolicyTab({ company }: { company: Company }) {
-  const { user, canAction, canDelete } = useAuth()
+  const { user, canAction } = useAuth()
   const isMaster = user?.role === 'master'
   // 자금정책 편집 권한 — master는 항상 가능, 그 외 역할은 UsersPage에서 개별 부여된
   // action_permissions['policy'].write 로 허용(기존엔 master 고정이라 admin에게도 부여 불가했음)
@@ -674,7 +674,7 @@ export default function FxPolicyTab({ company }: { company: Company }) {
             }
           }}
           canEdit={canEditPolicy}
-          canDeleteOrder={canDelete()}
+          canDeleteOrder={canAction('fx_trade', 'delete')}
         />
       </div>
 

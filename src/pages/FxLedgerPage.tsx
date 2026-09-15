@@ -41,7 +41,10 @@ function Stat({ label, value }: { label: string; value: string }) {
  */
 export default function FxLedgerPage() {
   const { company } = usePageCompany('/fx-ledger')
-  const { user, canEdit, canDelete } = useAuth()
+  const { user, canEdit, canAction } = useAuth()
+  // ⚠ 삭제는 섹션 권한(fx_trade)으로 판정한다. 레거시 canDelete() 는 전역 can_delete
+  //   플래그만 봐서 권한 트리 설정이 반영되지 않았다.
+  const canDeleteFxTrade = canAction('fx_trade', 'delete')
   const [searchParams] = useSearchParams()
   const [currency, setCurrency] = useState<FxCode>(() => {
     const c = searchParams.get('currency')
@@ -176,7 +179,7 @@ export default function FxLedgerPage() {
         valuationMethod={valuationMethod} termInvestments={termInvestments}
         transfers={transferHist.transfers}
         userCode={user?.code ?? 'unknown'}
-        canEdit={canEdit()} canDelete={canDelete()} onChanged={refreshAll}
+        canEdit={canEdit()} canDelete={canDeleteFxTrade} onChanged={refreshAll}
       />
     )}
     {activeTab === 'pnl' && (

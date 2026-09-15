@@ -390,7 +390,14 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
     const perms = custom !== null
       ? (custom[section] ?? roleDefaults[section])   // custom 우선, 섹션 미정의 시 role default
       : roleDefaults[section]
-    return perms?.[action] ?? false
+    if (perms?.[action]) return true
+    // 레거시 전역 삭제 권한(treasury_users.can_delete)을 하한으로 둔다.
+    // ⚠ 이걸 빼면 기존에 can_delete=true 로 삭제하던 사용자가 권한을 잃는다 —
+    //   ACTION_DEFAULTS 의 delete 는 master 외 전부 false 이기 때문이다.
+    //   즉 권한 트리는 삭제를 **더 줄 수만** 있고, 회수하려면 사용자 관리에서
+    //   can_delete 를 꺼야 한다(레거시 필드가 남아 있는 한 이 비대칭은 불가피).
+    if (action === 'delete' && user.can_delete) return true
+    return false
   }, [user])
 
   const setCurrentCompany = useCallback((c: Company | null) => setSelectedCompany(c), [])

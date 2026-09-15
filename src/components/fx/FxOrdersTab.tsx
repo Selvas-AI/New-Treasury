@@ -110,7 +110,10 @@ export function FxOrdersTab({ company, currency, pendingOrders, initialOrderId, 
   initialOrderId?: string | null
   onChanged: () => void
 }) {
-  const { user, canEdit, canApprove, canDelete, canAction } = useAuth()
+  const { user, canEdit, canApprove, canAction } = useAuth()
+  // ⚠ 삭제 게이트는 섹션 권한으로 본다 — 레거시 canDelete()(전역 can_delete)를 쓰면
+  //   사용자 관리 권한 트리의 '외화거래명세 › 삭제' 체크가 화면에 반영되지 않는다.
+  const canDeleteFxTrade = canAction('fx_trade', 'delete')
   const canWriteFxTrade = canAction('fx_trade', 'write')
   const hist = useFxTradeHistory()
 
@@ -520,7 +523,7 @@ export function FxOrdersTab({ company, currency, pendingOrders, initialOrderId, 
                                 취소
                               </button>
                             )}
-                            {(r.status === '발의' || r.status === '취소') && canDelete() && (
+                            {(r.status === '발의' || r.status === '취소') && canDeleteFxTrade && (
                               <button onClick={() => setDeleteTarget(r)}
                                 className="text-xs px-2.5 py-1 border border-red-200 dark:border-red-800 text-red-500 dark:text-red-400 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30">
                                 삭제

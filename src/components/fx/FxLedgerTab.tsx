@@ -69,7 +69,7 @@ export function FxLedgerTab({
   onGotoOrders: () => void
   onChanged: () => void
 }) {
-  const { user, canEdit, canDelete, canApprove, canAction } = useAuth()
+  const { user, canEdit, canApprove, canAction } = useAuth()
   // 조회 시작일 — 개시 로트(source_type='opening')는 개시일 이전 이력을 이미 흡수한
   // 잔고라, 기본값을 이번 달 1일로 잡아 개시 이전 날짜가 무더기로 잡히지 않게 한다.
   // 경계 근처 날짜는 아래 "무시" 버튼으로 개별 처리하거나 이 값을 더 당겨서 확인한다.
@@ -80,6 +80,10 @@ export function FxLedgerTab({
   const [dismissTarget, setDismissTarget] = useState<string | null>(null)
   const [dismissing, setDismissing] = useState<string | null>(null)
   const canWriteFxTrade = canAction('fx_trade', 'write')
+  // ⚠ 과거엔 canDelete()(레거시 can_delete 전역 플래그)를 봤다. 그래서 사용자 관리
+  //   권한 트리에서 '외화거래명세 › 삭제'를 체크해도 화면에 아무 반영이 없었다.
+  //   삭제 게이트는 반드시 해당 섹션의 canAction 으로 볼 것(§1-A 4번 SSOT).
+  const canDeleteFxTrade = canAction('fx_trade', 'delete')
   const [editingLot, setEditingLot] = useState<FxLot | null>(null)
   const [pendingDeleteLot, setPendingDeleteLot] = useState<FxLot | null>(null)
   const [expandedLotId, setExpandedLotId] = useState<string | null>(null)
@@ -363,7 +367,7 @@ export function FxLedgerTab({
                           <td className="text-right tabular-nums">{fmtRate(lot.acqRate)}</td>
                           <td className="text-right whitespace-nowrap">
                             {canEdit() && <button onClick={() => setEditingLot(lot)} className="text-blue-600 hover:underline">수정</button>}
-                            {canDelete() && <button onClick={() => setPendingDeleteLot(lot)} className="ml-2 text-red-600 hover:underline">삭제</button>}
+                            {canDeleteFxTrade && <button onClick={() => setPendingDeleteLot(lot)} className="ml-2 text-red-600 hover:underline">삭제</button>}
                           </td>
                         </tr>
                         {expanded && (
