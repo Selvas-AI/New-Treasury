@@ -8,19 +8,34 @@
  * ⚠ window.confirm 을 쓰지 않는다. 크롬이 반복 대화상자를 차단하면 즉시 false 를 반환해
  *   "눌러도 아무 일이 없는" 상태가 된다(세션24차 실사고).
  */
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import type { InvestmentRecord } from '../../types'
+import type { FxLot } from '../../lib/fxLots'
+import { isFxTermDeposit, planRolloverLedger, termStateAt, isPlanError } from '../../lib/fxTermSettle'
 
 export interface RolloverValues {
   closeDate: string
   newMaturity: string
   newAmount: number
   newRate: number
+  /**
+   * 외화 정기예금일 때 — 외화거래명세(원장)에도 해지·재예치를 함께 반영할지.
+   * ⚠ 두 장부(investments / fx_lots)는 같은 예금을 각자 기록한다. 한쪽만 처리하면
+   *   원장에 만기 지난 정기예금이 남아 환전 가능액이 과소 계산된다.
+   */
+  syncLedger?: boolean
+  /** 이자 재예치분의 장부환율(해지일 환율). syncLedger + 증액일 때만 쓰인다 */
+  interestRate?: number
 }
 
-export default function RolloverModal({ record, busy, onCancel, onConfirm }: {
+export default function RolloverModal({ record, busy, ledgerLots, ledgerLoading, defaultRate, onCancel, onConfirm }: {
   record: InvestmentRecord
   busy?: boolean
+  /** 이 법인·통화의 원장 로트. 외화 정기예금일 때만 전달된다 */
+  ledgerLots?: FxLot[] | null
+  ledgerLoading?: boolean
+  /** 이자 장부환율 기본값 = 현재 시세 */
+  defaultRate?: number
   onCancel: () => void
   onConfirm: (v: RolloverValues) => void
 }) {
@@ -33,9 +48,28 @@ export default function RolloverModal({ record, busy, onCancel, onConfirm }: {
 
   const newAmount = Number(amountStr.replace(/,/g, '')) || 0
   const newRate   = Number(rateStr) || 0
+  const interest = newAmount - (record.amount ?? 0)
+
+  // ── 외화 원장 연동 ────────────────────────────────────────────────────────
+  const ledgerEligible = isFxTermDeposit(record)
+  const [syncLedger,   setSyncLedger]   = useState(true)
+  const [interestRateStr, setInterestRateStr] = useState('')
+  const interestRate = Number(interestRateStr) || defaultRate || 0
+
+  // 계산은 순수 함수 하나에만 둔다(lib/fxTermSettle.ts) — 화면에서 다시 만들면 갈라진다.
+  const ledgerPlan = useMemo(() => {
+    if (!ledgerEligible || !ledgerLots) return null
+    return planRolloverLedger(record, { closeDate, newMaturity, newAmount, newRate },
+      termStateAt(ledgerLots, closeDate))
+  }, [ledgerEligible, ledgerLots, record, closeDate, newMaturity, newAmount, newRate])
+
+  const ledgerBlocked = !!ledgerPlan && isPlanError(ledgerPlan)
+  const needsRate = !!ledgerPlan && !isPlanError(ledgerPlan) && ledgerPlan.plan.interest > 0
+  const rateMissing = syncLedger && needsRate && !(interestRate > 0)
+
   const invalid =
     !closeDate || !newMaturity || newMaturity <= closeDate || newAmount <= 0
-  const interest = newAmount - (record.amount ?? 0)
+    || (syncLedger && ledgerBlocked) || rateMissing
 
   const fmt = (n: number) =>
     `${n.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}${isFx ? ' ' + record.currency : '원'}`
@@ -93,13 +127,62 @@ export default function RolloverModal({ record, busy, onCancel, onConfirm }: {
           <div>· 새 건 — <strong>{closeDate || '?'}</strong> ~ {newMaturity || '?'} · {fmt(newAmount)}</div>
         </div>
 
+        {/* 외화 원장 연동 — 같은 사실을 두 장부에 두 번 넣지 않게 한다.
+            ⚠ 여기서 끄면 외화거래명세 › 데이터 등록에서 **직접 해지**해야 한다. */}
+        {ledgerEligible && (
+          <div className="mt-3 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50/60 dark:bg-blue-900/20 p-3 space-y-2">
+            <label className="flex items-start gap-2 cursor-pointer">
+              <input type="checkbox" checked={syncLedger} onChange={e => setSyncLedger(e.target.checked)}
+                className="mt-0.5" disabled={ledgerLoading} />
+              <span className="text-xs font-medium text-gray-700 dark:text-slate-200">
+                외화거래명세(원장)에도 해지·재예치를 함께 반영
+                <span className="block text-[10px] font-normal text-gray-500 dark:text-slate-400">
+                  끄면 외화거래명세 › 데이터 등록 › 정기예금 관리에서 따로 해지해야 합니다.
+                </span>
+              </span>
+            </label>
+
+            {ledgerLoading && <p className="text-[11px] text-gray-400">원장 잔액 확인 중…</p>}
+
+            {syncLedger && ledgerPlan && isPlanError(ledgerPlan) && (
+              <p className="text-[11px] text-red-600 dark:text-red-400 break-keep">⚠ {ledgerPlan.error}</p>
+            )}
+
+            {syncLedger && ledgerPlan && !isPlanError(ledgerPlan) && (
+              <>
+                {needsRate && (
+                  <Field label={`이자 장부환율 (${record.currency} 해지일 환율)`}
+                    hint="이자는 새로 생긴 외화라 원금 장부환율이 아니라 해지일 환율로 잡아야 원가가 왜곡되지 않습니다.">
+                    <input type="text" inputMode="decimal"
+                      value={interestRateStr} placeholder={defaultRate ? String(Math.round(defaultRate * 100) / 100) : ''}
+                      onChange={e => setInterestRateStr(e.target.value)} className={inputCls} />
+                  </Field>
+                )}
+                <ul className="text-[11px] text-gray-600 dark:text-slate-300 space-y-0.5">
+                  <li>· 원금 {fmt(ledgerPlan.plan.principal)} → 정기예금 대체 (장부환율 승계, 손익 0)</li>
+                  {ledgerPlan.plan.interest > 0 && (
+                    <li>· 이자 {fmt(ledgerPlan.plan.interest)} → 정기예금 신규 로트 @{interestRate ? interestRate.toLocaleString() : '?'}</li>
+                  )}
+                  {ledgerPlan.plan.allowEarly && (
+                    <li className="text-amber-600 dark:text-amber-400">· 만기 도래분이 부족해 <strong>중도해지</strong>로 처리됩니다</li>
+                  )}
+                </ul>
+                {ledgerPlan.warning && (
+                  <p className="text-[11px] text-amber-700 dark:text-amber-300 break-keep">⚠ {ledgerPlan.warning}</p>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
         <div className="flex gap-2 mt-4">
           <button onClick={onCancel}
             className="flex-1 text-sm py-2 border border-gray-200 dark:border-slate-600 rounded-xl text-gray-500 hover:bg-gray-50 dark:hover:bg-slate-700">
             취소
           </button>
           <button
-            onClick={() => onConfirm({ closeDate, newMaturity, newAmount, newRate })}
+            onClick={() => onConfirm({ closeDate, newMaturity, newAmount, newRate,
+              syncLedger: ledgerEligible && syncLedger, interestRate })}
             disabled={invalid || busy}
             className="flex-1 text-sm py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium disabled:opacity-50">
             {busy ? '처리 중…' : '연장 처리'}

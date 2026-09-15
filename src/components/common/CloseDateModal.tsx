@@ -10,6 +10,8 @@
  *   크롬은 같은 페이지에서 대화상자가 반복되면 차단하고, 그때 confirm() 은 즉시 false 를
  *   반환한다 → 버튼을 눌러도 아무 일이 없는 것처럼 보인다(세션24차 실사고).
  */
+import type { ReactNode } from 'react'
+
 interface Props {
   title:      string
   recordLabel: string
@@ -18,13 +20,18 @@ interface Props {
   date:       string
   onDateChange: (v: string) => void
   confirmLabel: string
+  /** 날짜 입력 아래에 끼워 넣을 추가 영역 (예: 외화 정기예금 원장 연동) */
+  extra?:     ReactNode
   busy?:      boolean
+  /** 추가 영역의 입력이 유효하지 않을 때 확인 버튼을 막는다 */
+  confirmDisabled?: boolean
   onConfirm:  () => void
   onCancel:   () => void
 }
 
 export default function CloseDateModal({
-  title, recordLabel, dateless, date, onDateChange, confirmLabel, busy, onConfirm, onCancel,
+  title, recordLabel, dateless, date, onDateChange, confirmLabel, extra, busy,
+  confirmDisabled, onConfirm, onCancel,
 }: Props) {
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onCancel}>
@@ -56,6 +63,8 @@ export default function CloseDateModal({
           </div>
         )}
 
+        {extra}
+
         <div className="flex gap-2 pt-1">
           <button
             onClick={onCancel}
@@ -63,7 +72,7 @@ export default function CloseDateModal({
           >취소</button>
           <button
             onClick={onConfirm}
-            disabled={busy || (!dateless && !date)}
+            disabled={busy || confirmDisabled || (!dateless && !date)}
             className="flex-1 py-2 text-xs rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
           >{busy ? '처리 중…' : confirmLabel}</button>
         </div>

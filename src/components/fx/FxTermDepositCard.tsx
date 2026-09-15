@@ -106,6 +106,10 @@ export default function FxTermDepositCard({
           <p className="mt-0.5 text-[11px] text-gray-500 dark:text-slate-400">
             해지 시 <strong>원금은 계좌 대체(원가승계), 이자는 해지일 환율의 신규 로트</strong>로 기록됩니다.
           </p>
+          <p className="mt-0.5 text-[11px] text-blue-700 dark:text-blue-300 break-keep">
+            💡 <strong>운용자금 화면에서 연장·만기처리하면 이 원장까지 함께 반영</strong>됩니다(2026-09-15).
+            여기서 하는 해지는 원장에만 반영되므로, 운용자금 쪽 만기처리는 따로 해야 합니다.
+          </p>
         </div>
         {canEdit && termLots.length > 0 && (
           <button onClick={() => { setOpen(o => !o); setMsg(null) }}
@@ -130,6 +134,7 @@ export default function FxTermDepositCard({
         {mismatch && (
           <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-300">
             한쪽만 해지·예치 처리됐을 수 있습니다. 아래 목록과 운용자금 화면을 대조하세요.
+            앞으로는 <strong>운용자금 화면에서 연장·만기처리</strong>하면 양쪽이 한 번에 맞춰집니다.
           </p>
         )}
       </div>

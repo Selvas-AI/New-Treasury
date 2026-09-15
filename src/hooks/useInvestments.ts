@@ -92,11 +92,15 @@ export function useInvestments(activeOnly = false, companyOverride?: string): Us
   save: (record: Omit<InvestmentRecord, 'id'> & { id?: string }) => Promise<string | null>
   remove: (id: string) => Promise<string | null>
   setActive: (id: string, active: boolean, closedDate?: string) => Promise<string | null>
-  /** 연장 — 기존 건 종료 + 새 건 생성 (과거 보존) */
+  /**
+   * 연장 — 기존 건 종료 + 새 건 생성 (과거 보존).
+   * ⚠ 새 건의 id 를 돌려준다. 외화 정기예금은 원장 로트를 이 id 에 연결해야
+   *   두 장부가 서로를 참조하게 된다(연결이 없으면 다시 따로 논다).
+   */
   rollover: (
     id: string,
     opts: { closeDate: string; newMaturity: string; newAmount: number; newRate: number },
-  ) => Promise<string | null>
+  ) => Promise<{ error: string | null; newId: string | null }>
   updateAcquisitionCost: (ids: string[], cost: number) => Promise<string | null>
   updateAvailableById: (id: string, available: '가용' | '불가용') => Promise<string | null>
   updateAvailableByBondKey: (bondKey: string, available: '가용' | '불가용') => Promise<string | null>
@@ -192,23 +196,23 @@ export function useInvestments(activeOnly = false, companyOverride?: string): Us
   async function rollover(
     id: string,
     opts: { closeDate: string; newMaturity: string; newAmount: number; newRate: number },
-  ): Promise<string | null> {
+  ): Promise<{ error: string | null; newId: string | null }> {
     const target = data.find(r => r.id === id)
-    if (!target) return '대상을 찾을 수 없습니다.'
+    if (!target) return { error: '대상을 찾을 수 없습니다.', newId: null }
 
     // 계산·검증은 순수 함수에 위임한다(lib/rollover.ts) — 테스트로 검증된 경로다.
     const newId = generateUUID()
     const plan = planRollover(target, opts, newId)
-    if (isRolloverError(plan)) return plan.error
+    if (isRolloverError(plan)) return { error: plan.error, newId: null }
 
     // ① 기존 건 종료 — 실제로 그날까지 존재했으므로 closed_date 를 정확히 남긴다
     const closeErr = await setActive(id, false, plan.closeDate)
-    if (closeErr) return closeErr
+    if (closeErr) return { error: closeErr, newId: null }
 
     // ② 새 건 생성 — 은행·상품·통화·가용여부는 승계, 기간·금액·금리만 새로
     const newRec = plan.next
     const { error: err } = await restInsert('investments', toDb(newRec))
-    if (err) return err.message
+    if (err) return { error: err.message, newId: null }
 
     const amountLabel = `${opts.newAmount.toLocaleString()}${target.currency && target.currency !== 'KRW' ? target.currency : '원'}`
     void logAction({
@@ -218,7 +222,7 @@ export function useInvestments(activeOnly = false, companyOverride?: string): Us
       after:  toDb(newRec) as Record<string, unknown>,
     })
     await fetch()
-    return null
+    return { error: null, newId }
   }
 
   async function setActive(id: string, active: boolean, closedDate?: string): Promise<string | null> {

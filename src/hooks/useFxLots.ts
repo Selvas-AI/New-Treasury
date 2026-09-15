@@ -62,6 +62,63 @@ function mapRow(row: FxLotRow): FxLot {
     memo: row.memo }
 }
 
+/**
+ * 훅 밖에서 특정 법인·통화의 로트를 1회 조회한다.
+ *
+ * 운용자금 화면(InvestPage)은 통화가 행마다 다르고 훅은 통화 하나에 고정돼 있어
+ * useFxLots 를 그대로 쓸 수 없다(조건부 훅 호출 금지). 조회 경로만 함수로 빼서
+ * **같은 테이블·같은 매핑**을 쓰게 한다 — 화면마다 restSelect 를 다시 쓰면
+ * 매핑이 갈라진다(세션26차 autoRefreshPrices 사고 유형).
+ */
+export async function fetchFxLots(company: string, currency: string) {
+  const { data, error: err } = await restSelect<FxLotRow>('fx_lots', {
+    match: { company, currency }, order: 'acquired_date.asc', limit: 1000,
+  })
+  return { lots: (data ?? []).map(mapRow), error: err?.message ?? null }
+}
+
+export interface FxTermSettleInput {
+  date: string; principal: number; toAccountType: FxLot['accountType']
+  interest: number; interestRate: number | null
+  /** 이자 행선지. 미지정이면 서버 기본값(재예치면 보통예금, 아니면 원금과 같은 곳) */
+  interestAccountType?: FxLot['accountType'] | null
+  maturityDate: string | null; annualInterestRate: number
+  transferRate: number | null; allowEarly: boolean
+  investmentId: string | null; memo: string; userCode: string
+}
+
+/**
+ * 정기예금 해지·재예치 RPC 호출 (docs/db/fx_term_deposit_settle.sql
+ * + fx_term_deposit_investment_link.sql).
+ *
+ * ⚠ 이 함수가 **유일한 호출 경로**다. 훅(settleTermDeposit)도, 운용자금 화면도 여기를 거친다 —
+ *   인자 조립을 화면마다 다시 하면 한쪽만 새 파라미터를 놓친다.
+ */
+export async function settleFxTermDeposit(
+  company: string, currency: string, input: FxTermSettleInput,
+): Promise<string | null> {
+  const { error: err } = await restRpc('settle_fx_term_deposit', {
+    p_company: company, p_currency: currency, p_settle_date: input.date,
+    p_principal: input.principal, p_to_account_type: input.toAccountType,
+    p_interest: input.interest, p_interest_rate: input.interestRate,
+    p_maturity_date: input.maturityDate, p_annual_interest_rate: input.annualInterestRate,
+    p_transfer_rate: input.transferRate, p_allow_early: input.allowEarly,
+    p_investment_id: input.investmentId, p_memo: input.memo, p_by: input.userCode,
+    p_interest_account_type: input.interestAccountType ?? null,
+  })
+  return err?.message ?? null
+}
+
+/** 로트를 운용자금 레코드에 연결한다(훅 밖 경로 — 운용자금 화면의 자동 연동용). */
+export async function linkFxLotsToInvestment(
+  lotIds: string[], investmentId: string, userCode: string,
+): Promise<string | null> {
+  const { error: err } = await restRpc('link_fx_lots_to_investment', {
+    p_lot_ids: lotIds, p_investment_id: investmentId, p_by: userCode,
+  })
+  return err?.message ?? null
+}
+
 export function useFxLots(company: string, currency: string) {
   const [lots, setLots] = useState<FxLot[]>([])
   const [loading, setLoading] = useState(true)
@@ -325,32 +382,17 @@ export function useFxLots(company: string, currency: string) {
    * 원금 대체 + 이자 신규 로트를 한 트랜잭션으로 처리한다.
    * ⚠ 이자는 새로 생긴 외화라 **해지일 환율의 신규 로트**다 — 원금 장부환율로 넣으면 원가가 희석된다.
    */
-  const settleTermDeposit = useCallback(async (input: {
-    date: string; principal: number; toAccountType: FxLot['accountType']
-    interest: number; interestRate: number | null
-    maturityDate: string | null; annualInterestRate: number
-    transferRate: number | null; allowEarly: boolean
-    investmentId: string | null; memo: string; userCode: string
-  }) => {
-    const { error: err } = await restRpc('settle_fx_term_deposit', {
-      p_company: company, p_currency: currency, p_settle_date: input.date,
-      p_principal: input.principal, p_to_account_type: input.toAccountType,
-      p_interest: input.interest, p_interest_rate: input.interestRate,
-      p_maturity_date: input.maturityDate, p_annual_interest_rate: input.annualInterestRate,
-      p_transfer_rate: input.transferRate, p_allow_early: input.allowEarly,
-      p_investment_id: input.investmentId, p_memo: input.memo, p_by: input.userCode,
-    })
+  const settleTermDeposit = useCallback(async (input: FxTermSettleInput) => {
+    const err = await settleFxTermDeposit(company, currency, input)
     if (!err) await refetch()
-    return err?.message ?? null
+    return err
   }, [company, currency, refetch])
 
   /** 이미 양쪽에 따로 들어가 있는 정기예금을 1회 연결한다(설계 §4 D). */
   const linkLotsToInvestment = useCallback(async (lotIds: string[], investmentId: string, userCode: string) => {
-    const { error: err } = await restRpc('link_fx_lots_to_investment', {
-      p_lot_ids: lotIds, p_investment_id: investmentId, p_by: userCode,
-    })
+    const err = await linkFxLotsToInvestment(lotIds, investmentId, userCode)
     if (!err) await refetch()
-    return err?.message ?? null
+    return err
   }, [refetch])
 
   /**
