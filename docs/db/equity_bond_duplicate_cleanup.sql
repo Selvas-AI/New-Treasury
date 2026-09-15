@@ -179,3 +179,41 @@ union all
 select 'investments(국채)', count(*) from (
   select 1 from public.investments where product='국채'
   group by company, coalesce(bond_ticker,bond_name), start_date having count(*) > 1) t;
+
+
+-- ============================================================================
+-- 1단계 추가 진단 (2026-09-15 · 1-A 결과에서 '서로다른평가액=2' 그룹이 발견되어 추가)
+--   값이 동일한 중복은 어느 것을 지워도 같지만, 값이 다른 중복은 '무엇을 남길지'가
+--   판단의 문제다. 특히 total_value=0 행(시세 조회 실패분)이 섞여 있다.
+-- ============================================================================
+
+-- 1-E. 값이 다른 그룹만 — 여기 나온 것만 사람이 판단하면 된다
+select company, name, date,
+       min(total_value) as 값1, max(total_value) as 값2,
+       max(total_value) - min(total_value) as 차이,
+       min(price) as 주가1, max(price) as 주가2,
+       bool_or(coalesce(total_value,0) = 0) as 값0포함
+from public.equities
+group by company, name, date
+having count(*) > 1 and count(distinct total_value) > 1
+order by 값0포함 desc, 차이 desc;
+
+-- 1-F. equities 에 삽입 순서를 알 수 있는 타임스탬프 컬럼이 있는가?
+--      (있으면 '나중에 들어온 행 = 종가'를 남기는 것이 옳다. 없으면 판단 근거가 없다.)
+select column_name, data_type
+from information_schema.columns
+where table_schema = 'public' and table_name = 'equities'
+order by ordinal_position;
+
+-- 1-G. audit_logs 로 삽입 시각을 역추적할 수 있는가?
+--      (eq.save() 경로는 logAction 을 남기지만 autoRefreshPrices 의 restInsert 직접
+--       호출은 남기지 않는다 — 일부만 추적될 수 있다.)
+select count(*) as 중복행중_감사로그있음
+from public.audit_logs a
+where a.table_name = 'equities'
+  and a.record_id in (
+    select e.id from public.equities e
+    join (select company, name, date from public.equities
+          group by company, name, date having count(*) > 1) g
+      on g.company = e.company and g.name = e.name and g.date = e.date
+  );
