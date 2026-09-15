@@ -7,11 +7,24 @@
 --     부풀려지는 곳은 '날짜별로 합산하는' 추이 차트·자금흐름 분석이다.
 --
 --   반드시 1단계 → (결과 검토·승인) → 2단계 → 3단계 순서로 실행할 것.
+--   ⚠ Supabase SQL Editor 는 여러 문장을 한 번에 실행하면 **마지막 문장의 결과만** 보여준다.
+--     1-A ~ 1-D 는 블록 단위로 하나씩 선택해 실행할 것(전체 실행하면 1-D 만 보인다).
 --   1단계는 읽기 전용이다.
 -- ============================================================================
 
 
 -- ── 1단계 ▸ 진단 (읽기 전용 — 먼저 이것만 실행해 결과를 확인할 것) ───────────
+
+-- 1-0. 타입 확인 — equities.id / investments.id 는 text, daily_report_items.linked_id 는
+--      uuid 라 그대로 비교하면 42883(operator does not exist: uuid = text)이 난다.
+--      아래 1-C·1-D 와 2단계는 양쪽을 ::text 로 맞춰 비교한다.
+select table_name, column_name, data_type
+from information_schema.columns
+where table_schema = 'public'
+  and (   (table_name = 'equities'           and column_name = 'id')
+       or (table_name = 'investments'        and column_name = 'id')
+       or (table_name = 'daily_report_items' and column_name = 'linked_id'))
+order by table_name;
 
 -- 1-A. 지분 중복 요약: 어떤 종목의 어느 날짜가 몇 건씩 쌓였나
 select company, name, date, count(*) as 건수,
@@ -44,7 +57,7 @@ with dup as (
 select d.company, d.name, d.date, d.id, i.id as 참조한_일보항목
 from dup d
 join public.daily_report_items i
-  on i.linked_id = d.id and i.linked_type = 'equity'
+  on i.linked_id::text = d.id::text and i.linked_type = 'equity'
 where d.c > 1
 order by d.company, d.name, d.date desc;
 
@@ -53,7 +66,7 @@ select count(*) as 삭제예정_지분건수 from (
   select id, row_number() over (
     partition by company, name, date
     order by (exists (select 1 from public.daily_report_items i
-                      where i.linked_id = e.id and i.linked_type = 'equity')) desc,
+                      where i.linked_id::text = e.id::text and i.linked_type = 'equity')) desc,
              (coalesce(acquisition_cost,0) > 0) desc,
              coalesce(total_value,0) desc,
              id
@@ -82,7 +95,7 @@ begin
     select e.id, row_number() over (
       partition by e.company, e.name, e.date
       order by (exists (select 1 from public.daily_report_items i
-                        where i.linked_id = e.id and i.linked_type = 'equity')) desc,
+                        where i.linked_id::text = e.id::text and i.linked_type = 'equity')) desc,
                (coalesce(e.acquisition_cost,0) > 0) desc,
                coalesce(e.total_value,0) desc,
                e.id
@@ -101,7 +114,7 @@ begin
       select e.id, row_number() over (
         partition by e.company, e.name, e.date
         order by (exists (select 1 from public.daily_report_items i
-                          where i.linked_id = e.id and i.linked_type = 'equity')) desc,
+                          where i.linked_id::text = e.id::text and i.linked_type = 'equity')) desc,
                  (coalesce(e.acquisition_cost,0) > 0) desc,
                  coalesce(e.total_value,0) desc,
                  e.id
@@ -114,7 +127,7 @@ begin
     select v.id, row_number() over (
       partition by v.company, coalesce(v.bond_ticker, v.bond_name), v.start_date
       order by (exists (select 1 from public.daily_report_items i
-                        where i.linked_id = v.id and i.linked_type = 'investment')) desc,
+                        where i.linked_id::text = v.id::text and i.linked_type = 'investment')) desc,
                (coalesce(v.acquisition_cost,0) > 0) desc,
                coalesce(v.amount,0) desc,
                v.id
@@ -133,7 +146,7 @@ begin
       select v.id, row_number() over (
         partition by v.company, coalesce(v.bond_ticker, v.bond_name), v.start_date
         order by (exists (select 1 from public.daily_report_items i
-                          where i.linked_id = v.id and i.linked_type = 'investment')) desc,
+                          where i.linked_id::text = v.id::text and i.linked_type = 'investment')) desc,
                  (coalesce(v.acquisition_cost,0) > 0) desc,
                  coalesce(v.amount,0) desc,
                  v.id
