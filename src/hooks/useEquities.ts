@@ -5,6 +5,12 @@ import { useAuditLog } from './useAuditLog'
 import { generateUUID } from '../lib/format'
 import type { EquityRecord, UseQueryResult } from '../types'
 
+/** 중복키(23505) — 같은 법인·종목·기준일 행이 이미 있다는 뜻 */
+function isDuplicateKey(msg?: string): boolean {
+  if (!msg) return false
+  return msg.includes('23505') || msg.includes('duplicate key') || msg.includes('already exists')
+}
+
 /** 종목별 최신 날짜 1건만 반환 */
 export function getLatestEquities(equities: EquityRecord[]): EquityRecord[] {
   const latest = new Map<string, EquityRecord>()
@@ -72,9 +78,22 @@ export function useEquities(companyOverride?: string): UseQueryResult<EquityReco
     }
     const isNew = !record.id
     const newId = generateUUID()
-    const { error: err } = record.id
+    let { error: err } = record.id
       ? await restUpdate('equities', record, { id: record.id })
       : await restInsert('equities', { ...record, id: newId })
+    // 위 중복검사는 조회 시점의 클라이언트 스냅샷이라, 다른 탭·다른 사용자가 같은
+    // 순간에 같은 기준일을 넣으면 둘 다 '없음'을 보고 둘 다 INSERT 한다(TOCTOU).
+    // DB 유니크 인덱스가 그 경합을 막으면 여기로 23505 가 돌아온다 → 수정으로 전환.
+    if (err && !record.id && isDuplicateKey(err.message)) {
+      const { data: dup } = await restSelect<EquityRecord>('equities', {
+        match: { company: record.company, name: record.name, date: record.date }, limit: 1,
+      })
+      const hit = dup?.[0]
+      if (hit) {
+        record = { ...record, id: hit.id }
+        ;({ error: err } = await restUpdate('equities', record, { id: hit.id }))
+      }
+    }
     if (err) return err.message
     const company = record.company || fetchCompany || ''
     void logAction({ table: 'equities', action: isNew ? 'CREATE' : 'UPDATE', company, recordId: record.id ?? newId, summary: `${record.name ?? ''} ${record.date ?? ''} ${isNew ? '등록' : '수정'}` })

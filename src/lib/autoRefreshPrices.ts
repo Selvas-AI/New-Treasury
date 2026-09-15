@@ -47,6 +47,18 @@ function saveLog(log: RefreshLog) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(log))
 }
 
+/**
+ * 중복키(23505) 오류인가 — 같은 종목·같은 기준일 행이 이미 있다는 뜻이다.
+ * 아래 유니크 인덱스가 적용된 뒤에만 발생한다(docs/db/equity_bond_duplicate_cleanup.sql):
+ *   equities_company_name_date_uniq / investments_bond_company_ticker_date_uniq
+ * ⚠ 이건 실패가 아니라 **경합에서 진 것**이다. 다른 탭·다른 사용자가 같은 순간에 같은
+ *   시세를 넣었을 뿐 데이터는 이미 정상이므로 skip 으로 센다.
+ */
+function isDuplicateKey(msg?: string): boolean {
+  if (!msg) return false
+  return msg.includes('23505') || msg.includes('duplicate key') || msg.includes('already exists')
+}
+
 export interface AutoRefreshResult {
   equityOk:   number
   equityFail: number
@@ -115,7 +127,7 @@ export async function autoRefreshAllPrices(
               result.equitySkip++
               continue
             }
-            await restInsert<EquityRecord>('equities', {
+            const { error: insErr } = await restInsert<EquityRecord>('equities', {
               id:               generateUUID(),
               company,
               name:             eq.name,
@@ -129,7 +141,14 @@ export async function autoRefreshAllPrices(
               date:             priceDate,
               acquisition_cost: eq.acquisition_cost ?? 0,
             })
-            result.equityOk++
+            // ⚠ 과거엔 반환 error 를 통째로 무시해 INSERT 가 실패해도 equityOk 를 올렸다.
+            if (insErr) {
+              if (isDuplicateKey(insErr.message)) result.equitySkip++
+              else {
+                console.warn(`[autoRefresh] ${company} · ${eq.name} 지분 INSERT 실패:`, insErr.message)
+                result.equityFail++
+              }
+            } else result.equityOk++
           } catch {
             result.equityFail++
           }
@@ -189,7 +208,7 @@ export async function autoRefreshAllPrices(
             }
             // ⚠ camelCase 를 그대로 보내면 없는 컬럼(bondPrice/priceDate)이라 400 이 난다.
             //   반드시 investToDb 를 거칠 것 (bondPrice→bond_price, priceDate→start_date).
-            await restInsert('investments', investToDb({
+            const { error: bondErr } = await restInsert('investments', investToDb({
               id:               generateUUID(),
               company,
               bank:             bond.bank,
@@ -207,7 +226,13 @@ export async function autoRefreshAllPrices(
               amount:           calcBondValue(bond.bondQty ?? 0, res.price),
               acquisition_cost: bond.acquisition_cost,
             }))
-            result.bondOk++
+            if (bondErr) {
+              if (isDuplicateKey(bondErr.message)) result.bondSkip++
+              else {
+                console.warn(`[autoRefresh] ${company} · ${bond.bondName ?? bond.bank} 국채 INSERT 실패:`, bondErr.message)
+                result.bondFail++
+              }
+            } else result.bondOk++
           } catch {
             result.bondFail++
           }
