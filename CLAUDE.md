@@ -1429,6 +1429,14 @@ baf8ef9 fix: 투자 집행 연동 저장 실패 수정 + 자산 구분(운용/�
 - 1좌 = 1,000원 면액 기준 → `7514 ÷ 10 = 751.4원/좌`
 
 ### DB 마이그레이션 미적용 (실행 필요)
+> ⚠ **이 목록이 적용 현황의 정본이다.** 아래 세션별 기록에도 같은 파일이 "실행 필요"로
+> 적혀 있을 수 있으나 그건 **그 세션 시점의 기록**이라 현재 상태와 다르다.
+>
+> ⛔ **문서의 미적용 표시를 실측 없이 믿고 판단하지 말 것.** 2026-09-15 에 `fx_txn_type.sql`
+> 이 "실행 필요 — 다음 세션 최우선"으로 남아 있었으나 실제로는 이미 적용돼 있었다.
+> 적용 여부가 판단에 영향을 주면 **카탈로그를 SELECT 로 확인**한다
+> (`docs/db/fx_term_deposit_verify.sql` 이 그 예다 — information_schema · pg_proc 조회).
+> ⛔ RPC 를 호출해 확인하지 말 것 — 개발 브라우저의 관리자 세션이 권한 검사를 통과한다(세션24차 §5.1).
 - **`docs/db/rls_enable_all.sql`** ⭐ — Supabase Security Advisor `rls_disabled_in_public` 경고 해소. 전 public 테이블 RLS 활성화 + anon/authenticated permissive 정책. **반드시 SQL Editor 실행**. ⚠ permissive라 anon 키 노출 시 데이터 접근은 여전히 가능 → 완전 차단은 authenticated 전용 전환(로드맵) 필요.
 - **`docs/db/daily_report_tables.sql` §8-1** — category CHECK 제약에 신규 항목(`interest_income`/`trade_ap_payment`/`interest_expense`/`enote_payment`) 추가. **미실행 시 해당 입출금 항목 저장이 제약 위반으로 실패**.
 - **`docs/db/user_permissions_migration.sql`** — `treasury_users.allowed_categories` / `action_permissions` 컬럼 (세션13차 세분화 권한). 미실행 시 카테고리/작업 권한 탭 저장이 컬럼 부재로 실패. 읽기는 `null` fallback이라 앱은 정상.
@@ -1448,24 +1456,32 @@ baf8ef9 fix: 투자 집행 연동 저장 실패 수정 + 자산 구분(운용/�
 - **`docs/db/fx_lots_daily_report_source.sql`** ⭐ — `fx_lots_insert_authenticated` 정책에 `'daily_report_item'` 추가 + 신규 RPC `consume_fx_lots_for_source` (세션26차 6일차, 자금일보 ↔ 외화 원장 자동 반영). **실행 필요**. 미실행 시 원장 ①탭 "자금일보 미반영 증감" 패널의 "원장 반영" 버튼이 유입은 RLS 거부, 유출은 함수 없음 오류를 반환.
 - **`docs/db/fx_ledger_reconcile_ignore.sql`** ⭐ — `fx_ledger_reconcile_ignored` 테이블(세션26차 6일차 후속, 개시일 이전 미반영 항목 "무시" 처리). **실행 필요**. 미실행 시 "무시" 버튼이 테이블 없음 오류를 반환(원장 반영/타임라인 표시 자체는 영향 없음).
 - **`docs/db/fx_transfer_selfconsume_guard.sql`** ⭐⭐ — 계좌 대체 자기 소진 방어 hotfix
-  (세션26차 12일차 후속). **실행 필요.** `fx_txn_type.sql` 이후 실행.
+  (세션26차 12일차 후속). **실행 완료** (2026-09-15 검증 — link 판본에 이 방어가 포함돼 있어
+  transfer_fx_lots 에 반영됨을 카탈로그 조회로 확인).
   ⚠ 재예치(정기예금→정기예금)처럼 출금·입금 계좌유형이 같으면 FIFO 루프가 **자기가 방금 만든
   로트를 다시 소진**할 수 있었다(plpgsql 커서 가시성은 "절대 안 보인다"를 보장하지 않는다).
   소진 대상 WHERE 에 `transfer_id <> v_transfer_id` 를 추가해 구조적으로 차단.
 - **`docs/db/fx_term_deposit_settle.sql`** ⭐⭐ — 정기예금 해지·재예치 + 운용자금 연동
-  (세션26차 12일차 Phase 2). **실행 필요.** `fx_lot_transfer.sql`·`fx_txn_type.sql` 적용 후 실행할 것.
-  미실행 시 데이터 등록 탭의 "정기예금 관리" 해지·연결이 함수 없음 오류를 반환한다.
+  (세션26차 12일차 Phase 2). **실행 완료** (2026-09-15 사용자 확인).
 - **`docs/db/fx_term_deposit_investment_link.sql`** ⭐⭐ — 운용자금 연장·만기처리 →
-  외화 원장 자동 반영 (2026-09-15). **실행 필요.** `fx_term_deposit_settle.sql` 이후 실행할 것.
+  외화 원장 자동 반영 (2026-09-15). **실행 완료** (2026-09-15 사용자 확인 — settle → link 순서).
   ① `settle_fx_term_deposit` 에 `p_interest_account_type` 추가(**drop 후 재생성** — 인자를
      늘리면 새 오버로드가 생겨 호출이 모호해진다) ② `transfer_fx_lots` 의 소진 순서를
      **만기 도래분 우선**으로 교정.
-  ⚠ 미실행 시 운용자금 화면의 "외화거래명세에도 함께 반영" 체크가 **시그니처 불일치로
-    실패**한다(운용자금 연장 자체는 완료되고, 실패 사실은 토스트로 안내된다).
+  ⚠ plpgsql 함수는 **생성 시점에 본문의 컬럼 존재를 검사하지 않는다** — 선행 마이그레이션이
+    빠진 채 실행해도 SQL Editor 는 Success 를 보여주고 **해지하는 순간에야** 실패한다.
+    적용 여부는 `docs/db/fx_term_deposit_verify.sql`(읽기 전용 12항목)로 확인할 것.
+    ⛔ RPC 를 호출해 확인하지 말 것 — 개발 브라우저의 관리자 세션이 권한 검사를 통과한다(세션24차 §5.1).
 - **`docs/db/fx_txn_type.sql`** ⭐⭐ — 거래 유형(`txn_type`) 도입 (세션26차 12일차 Phase 3).
-  **실행 필요 — 다음 세션 최우선.** 미실행 시 수동 유출 등록·자금일보 반영이 `p_txn_type` 을
-  넘기는데 서버는 8인자 버전이라 **시그니처 불일치로 실패**한다(다른 기능은 영향 없음).
-  ⚠ `fx_lot_transfer.sql` 적용 후에 실행할 것(transfer_fx_lots 를 재정의한다).
+  **실행 완료** (2026-09-15 검증 — fx_lots·fx_lot_consumptions 의 txn_type 컬럼 존재 확인).
+  ⚠ 과거 이 항목이 오래 "실행 필요"로 남아 있었으나 실제로는 적용돼 있었다 —
+    **문서의 미적용 표시를 실측 없이 믿지 말 것.** 판단 전에 verify 스크립트로 확인한다.
+- **`docs/db/equity_bond_duplicate_cleanup.sql`** ⭐ — 지분·국채 동일 기준일 중복 행 정리 +
+  유니크 인덱스 2개(`equities_company_name_date_uniq` / `investments_bond_company_ticker_date_uniq`).
+  **실행 완료** (2026-09-15 — 지분 73건 삭제 · 국채 0건(중복 없었음) · 남은 중복 0그룹 · 인덱스 2개 생성).
+  백업 `backup.equities_dup_20260915` / `backup.investments_dup_20260915` 에 삭제분 보존.
+- **`docs/db/fx_term_deposit_verify.sql`** — 정기예금 연동 적용 상태 검증(읽기 전용, 12항목).
+  마이그레이션이 아니라 **점검 도구**다. 2026-09-15 실행 결과 12/12 OK.
 - **`docs/db/fx_lot_transfer.sql`** ⭐⭐ — 계좌 간 대체 (세션26차 12일차). `fx_lot_transfers` 테이블 +
   `transfer_fx_lots`/`reverse_fx_lot_transfer` RPC + `fx_lots.transfer_id`/`investment_id` 컬럼 +
   `source_type` CHECK 확장. **실행 완료** (2026-08-20 사용자 확인).
