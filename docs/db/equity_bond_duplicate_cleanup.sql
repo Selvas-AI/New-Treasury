@@ -76,8 +76,15 @@ select count(*) as 삭제예정_지분건수 from (
 
 
 -- ── 2단계 ▸ 삭제 (1단계 결과를 승인한 뒤에만 실행) ───────────────────────────
---   보존 규칙(우선순위 순): ① 자금일보가 참조하는 행 ② 취득가액이 입력된 행
---                          ③ 평가액이 큰 행 ④ id (결정적 tie-break)
+--   보존 규칙(우선순위 순):
+--     ① 자금일보(daily_report_items.linked_id)가 참조하는 행 — 지우면 역추적이 끊긴다
+--     ② 값이 유효한 행 (total_value>0 · price>0) — 시세 조회 실패분(0)은 무조건 버린다
+--     ③ created_at 이 늦은 행 — 같은 날 두 번 조회됐다면 나중 것이 **종가**다
+--     ④ 취득가액이 입력된 행  ⑤ 평가액이 큰 행  ⑥ id (결정적 tie-break)
+--   ⚠ ②를 ③보다 앞에 둔 이유: 0원 행이 더 늦게 들어온 경우가 실제로 있다
+--     (셀바스헬스케어 2026-07-01 → price 0 / 2,825). ③만 쓰면 0원을 남기게 된다.
+--   ⚠ created_at 은 to_jsonb 로 읽는다 — investments 에 이 컬럼이 없어도 오류 없이
+--     null(= nulls last)로 떨어져 기존 규칙으로 자연히 폴백한다.
 --   → 그룹당 정확히 1건만 남고 나머지가 삭제된다.
 --   ⚠ 실행 전 백업을 먼저 만든다(아래 create table 이 그 백업이다).
 
@@ -96,6 +103,8 @@ begin
       partition by e.company, e.name, e.date
       order by (exists (select 1 from public.daily_report_items i
                         where i.linked_id::text = e.id::text and i.linked_type = 'equity')) desc,
+               (coalesce(e.total_value,0) > 0 and coalesce(e.price,0) > 0) desc,
+               (to_jsonb(e)->>'created_at')::timestamptz desc nulls last,
                (coalesce(e.acquisition_cost,0) > 0) desc,
                coalesce(e.total_value,0) desc,
                e.id
@@ -115,6 +124,8 @@ begin
         partition by e.company, e.name, e.date
         order by (exists (select 1 from public.daily_report_items i
                           where i.linked_id::text = e.id::text and i.linked_type = 'equity')) desc,
+                 (coalesce(e.total_value,0) > 0 and coalesce(e.price,0) > 0) desc,
+                 (to_jsonb(e)->>'created_at')::timestamptz desc nulls last,
                  (coalesce(e.acquisition_cost,0) > 0) desc,
                  coalesce(e.total_value,0) desc,
                  e.id
@@ -128,6 +139,8 @@ begin
       partition by v.company, coalesce(v.bond_ticker, v.bond_name), v.start_date
       order by (exists (select 1 from public.daily_report_items i
                         where i.linked_id::text = v.id::text and i.linked_type = 'investment')) desc,
+               (coalesce(v.amount,0) > 0) desc,
+               (to_jsonb(v)->>'created_at')::timestamptz desc nulls last,
                (coalesce(v.acquisition_cost,0) > 0) desc,
                coalesce(v.amount,0) desc,
                v.id
@@ -147,6 +160,8 @@ begin
         partition by v.company, coalesce(v.bond_ticker, v.bond_name), v.start_date
         order by (exists (select 1 from public.daily_report_items i
                           where i.linked_id::text = v.id::text and i.linked_type = 'investment')) desc,
+                 (coalesce(v.amount,0) > 0) desc,
+                 (to_jsonb(v)->>'created_at')::timestamptz desc nulls last,
                  (coalesce(v.acquisition_cost,0) > 0) desc,
                  coalesce(v.amount,0) desc,
                  v.id
@@ -230,3 +245,43 @@ select company, name, date, id, shares, price, total_value, acquisition_cost, av
 from dup
 where c > 1 and v > 1
 order by company, name, date desc, price;
+
+
+-- ── 1-I. created_at 이 중복 판정에 쓸 만한가 (2단계 전 필수 확인) ─────────────
+--   ① 중복 행에 created_at 이 비어 있지 않은가
+--   ② 한 그룹의 두 행이 같은 시각이면 순서를 가릴 수 없다
+with dup as (
+  select e.*, count(*) over (partition by e.company, e.name, e.date) as c
+  from public.equities e
+)
+select count(*)                                              as 중복행수,
+       count(*) filter (where created_at is null)             as created_at_없음,
+       count(distinct (company, name, date)) filter (where created_at is null) as 영향그룹,
+       min(created_at)                                        as 가장이른기록,
+       max(created_at)                                        as 가장늦은기록
+from dup where c > 1;
+
+-- 1-J. 2단계가 '무엇을 남기고 무엇을 지울지' 미리보기 (읽기 전용 — 삭제 아님)
+--      값이 다른 그룹만 보여준다. 보존/삭제 행의 주가·시각을 나란히 확인할 것.
+with ranked as (
+  select e.*,
+         count(*)                   over (partition by e.company, e.name, e.date) as c,
+         count(distinct e.total_value) over (partition by e.company, e.name, e.date) as v,
+         row_number() over (
+           partition by e.company, e.name, e.date
+           order by (exists (select 1 from public.daily_report_items i
+                             where i.linked_id::text = e.id::text and i.linked_type = 'equity')) desc,
+                    (coalesce(e.total_value,0) > 0 and coalesce(e.price,0) > 0) desc,
+                    (to_jsonb(e)->>'created_at')::timestamptz desc nulls last,
+                    (coalesce(e.acquisition_cost,0) > 0) desc,
+                    coalesce(e.total_value,0) desc,
+                    e.id
+         ) as rn
+  from public.equities e
+)
+select company, name, date,
+       case when rn = 1 then '✅ 보존' else '🗑 삭제' end as 처리,
+       price, total_value, created_at, acquisition_cost
+from ranked
+where c > 1 and v > 1
+order by company, name, date desc, rn;
