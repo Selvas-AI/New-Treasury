@@ -217,3 +217,16 @@ where a.table_name = 'equities'
           group by company, name, date having count(*) > 1) g
       on g.company = e.company and g.name = e.name and g.date = e.date
   );
+
+
+-- ── 1-H. 값이 다른 그룹의 두 행을 나란히 — 육안 확인용 ───────────────────────
+--   1-E 는 min/max 만 보여줘서 어느 행이 어느 값인지 알 수 없다. 실제 행을 편다.
+with dup as (
+  select e.*, count(*) over (partition by e.company, e.name, e.date) as c,
+         count(distinct e.total_value) over (partition by e.company, e.name, e.date) as v
+  from public.equities e
+)
+select company, name, date, id, shares, price, total_value, acquisition_cost, available
+from dup
+where c > 1 and v > 1
+order by company, name, date desc, price;
