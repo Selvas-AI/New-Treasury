@@ -62,6 +62,21 @@ const CATEGORY_LABEL: Record<string, string> = {
   other_out:        '기타',
 }
 
+/**
+ * 평가손익 자동기재의 방향·카테고리 — 지분·국채 두 effect 의 **유일한 정본**.
+ *
+ * ⚠ 이 규칙이 두 곳에 복제돼 있던 것이 2026-09-16 사고의 원인이다. 지분 effect 에만
+ *   "기존 항목의 direction 도 재검증" 로직이 들어가고 국채 effect 에는 빠져서,
+ *   평가이익(in)으로 만들어진 국채 항목이 나중에 평가손실로 뒤집혀도 금액만 갱신되고
+ *   **방향은 in 으로 굳었다** → 마감잔액이 줄었는데 입금액에 표시됨.
+ * 금지: 이 분기를 effect 안에서 다시 쓰지 말 것.
+ */
+function evalFlow(diff: number): { direction: 'in' | 'out'; category: 'invest_eval_in' | 'invest_eval_out' } {
+  return diff > 0
+    ? { direction: 'in',  category: 'invest_eval_in'  }
+    : { direction: 'out', category: 'invest_eval_out' }
+}
+
 // ── 인쇄 전용 컬러 헤더 (네이비 바) ─────────────────────────
 const PRINT_NAVY = '#1e3a5f'
 function PrintColorHeader({
@@ -731,8 +746,7 @@ export default function DailyReportPage() {
           const autoKey = `@auto:${g.name}`
           const existing = cleanMap.get(autoKey)
 
-          const correctDir = diff > 0 ? 'in' : 'out'
-          const correctCat = diff > 0 ? 'invest_eval_in' : 'invest_eval_out'
+          const { direction: correctDir, category: correctCat } = evalFlow(diff)
 
           if (existing) {
             // direction / category 도 함께 검증 — 이전 오류로 잘못 저장된 경우 수정
@@ -808,10 +822,14 @@ export default function DailyReportPage() {
           .like('memo', '@auto:bond:%')
           .order('created_at', { ascending: false })
 
-        const existing = new Map<string, { id: string; amount: number }>()
+        const existing = new Map<string, { id: string; amount: number; direction: string }>()
         for (const row of dbItems ?? []) {
           if (!existing.has(row.memo as string))
-            existing.set(row.memo as string, { id: row.id as string, amount: row.amount as number })
+            existing.set(row.memo as string, {
+              id: row.id as string,
+              amount: row.amount as number,
+              direction: row.direction as string,
+            })
         }
 
         // 🆕 현재 유효 후보가 아닌 국채 자동항목 제거 (평가변동 0 복귀·수량변동 등)
@@ -827,14 +845,27 @@ export default function DailyReportPage() {
           const diff    = g.totalKrw - (g.prevKrw ?? g.totalKrw)
           const autoKey = `@auto:bond:${g.label}`
           const ex      = existing.get(autoKey)
+          const flow    = evalFlow(diff)
 
           if (ex) {
-            if (Math.abs(ex.amount - Math.abs(diff)) >= 1)
-              await itemHook.updateItem(ex.id, { amount: Math.abs(diff), amount_krw: Math.abs(diff) })
+            // ⚠ direction 도 함께 검증한다. 금액만 갱신하면 평가이익(in)으로 만들어진
+            //   항목이 평가손실로 뒤집혀도 입금액에 남는다(2026-09-16 실사고 — 국고
+            //   02625-5503(25-2) 평가 −30,479,828 이 입금액으로 표시).
+            const needsUpdate =
+              Math.abs(ex.amount - Math.abs(diff)) >= 1 ||
+              ex.direction !== flow.direction
+            if (needsUpdate) {
+              await itemHook.updateItem(ex.id, {
+                direction:  flow.direction,
+                category:   flow.category,
+                amount:     Math.abs(diff),
+                amount_krw: Math.abs(diff),
+              })
+            }
           } else {
             await itemHook.addItem(reportId, {
-              direction:  diff > 0 ? 'in' : 'out',
-              category:   diff > 0 ? 'invest_eval_in' : 'invest_eval_out',
+              direction:  flow.direction,
+              category:   flow.category,
               amount:     Math.abs(diff),
               currency:   'KRW',
               amount_krw: Math.abs(diff),
