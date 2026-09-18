@@ -56,13 +56,39 @@ export function availableAmount(lots: FxLot[], asOfDate: string): number {
     .reduce((sum, lot) => sum + Math.max(0, lot.remainingAmount), 0)
 }
 
-/** 단리 기준 예상 이자. 이자 입금 전에는 FIFO 원금에 합치지 않는다. */
-export function expectedTermInterestFx(lot: FxLot): number {
+/**
+ * 정기예금 로트의 **이자 기산일**.
+ *
+ * ⚠ 대체(재예치·신규 예치)로 만들어진 로트는 FIFO 순서 보존을 위해 **원본의 취득일을
+ *   승계**한다(세션26차 12일차 설계). 그래서 `acquiredDate` 를 예치 시작일로 쓰면
+ *   **이전 예치 기간까지 이자를 계산**한다 — 재예치를 반복할수록 오차가 누적된다.
+ *   실측(2026-09-18): 06-17 취득 승계 / 만기 12-17 로트가 183일로 계산됐으나
+ *   실제 재예치 기간은 09-17→12-17 = 91일이었다(약 2배 과대).
+ * → 대체 로트는 그 대체가 실행된 날(fx_lot_transfers.transfer_date)이 예치 시작일이다.
+ *   대체가 아닌 로트(개시·수동 유입·자금일보 반영)는 acquiredDate 가 곧 예치일이라 그대로 쓴다.
+ */
+export function interestStartDate(lot: FxLot, transferDateById?: Map<string, string>): string {
+  if (lot.transferId && transferDateById) {
+    const d = transferDateById.get(lot.transferId)
+    if (d) return d
+  }
+  return lot.acquiredDate
+}
+
+/**
+ * 단리 기준 예상 이자(세전). 이자 입금 전에는 FIFO 원금에 합치지 않는다.
+ *
+ * ⚠ 기준 금액은 `remainingAmount` 다 — `originalAmount` 를 쓰면 **이미 해지·소진된
+ *   정기예금까지 "앞으로 받을 이자"에 계상된다**(2026-09-18 실사고). 중도해지로 일부만
+ *   남은 예금도 남은 원금 기준이 맞다. 같은 파일의 totalAmount/availableAmount 와도 일관된다.
+ */
+export function expectedTermInterestFx(lot: FxLot, transferDateById?: Map<string, string>): number {
   if (lot.accountType !== 'term_deposit' || !lot.maturityDate || lot.annualInterestRate <= 0) return 0
-  const start = Date.parse(`${lot.acquiredDate}T00:00:00Z`)
+  if (lot.remainingAmount <= 0) return 0
+  const start = Date.parse(`${interestStartDate(lot, transferDateById)}T00:00:00Z`)
   const end = Date.parse(`${lot.maturityDate}T00:00:00Z`)
   const days = Math.max(0, (end - start) / 86_400_000)
-  return lot.originalAmount * (lot.annualInterestRate / 100) * days / 365
+  return lot.remainingAmount * (lot.annualInterestRate / 100) * days / 365
 }
 
 export interface FxLotConsumptionPreview {

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   consumeFifoLots, previewFifoConsumption, weightedBookRate,
-  isLotAvailable, availableAmount, parseAccountPriority, type FxLot,
+  isLotAvailable, availableAmount, parseAccountPriority,
+  expectedTermInterestFx, interestStartDate, type FxLot,
 } from './fxLots'
 
 const lot = (over: Partial<FxLot>): FxLot => ({
@@ -111,3 +112,45 @@ describe('계좌유형 소진 우선순위 (세션26차 11일차)', () => {
     expect(previewFifoConsumption(mixed, 100, 1400, '9999-12-31', p)[0].lotId).toBe('demand-new')
   })
 })
+
+describe('정기예금 예상 만기이자 (2026-09-18 실사고)', () => {
+  const td = (over: Partial<FxLot>): FxLot => lot({
+    accountType: 'term_deposit', annualInterestRate: 4,
+    acquiredDate: '2026-06-17', maturityDate: '2026-12-17',
+    originalAmount: 5_000_000, remainingAmount: 5_000_000, ...over,
+  })
+
+  it('소진 완료된 정기예금은 예상이자에 잡히지 않는다', () => {
+    // ⚠ 과거엔 originalAmount 를 써서, 이미 해지된 예금까지 '앞으로 받을 이자'에 들어갔다.
+    expect(expectedTermInterestFx(td({ remainingAmount: 0 }))).toBe(0)
+  })
+
+  it('중도해지로 일부만 남으면 남은 원금 기준으로 계산한다', () => {
+    const full = expectedTermInterestFx(td({}))
+    const half = expectedTermInterestFx(td({ remainingAmount: 2_500_000 }))
+    expect(half).toBeCloseTo(full / 2, 6)
+  })
+
+  it('대체 로트는 승계된 취득일이 아니라 대체 실행일부터 계산한다', () => {
+    // 06-17 취득 승계 / 09-17 재예치 / 만기 12-17 → 183일이 아니라 91일이어야 한다
+    const l = td({ transferId: 't1' })
+    const map = new Map([['t1', '2026-09-17']])
+    expect(interestStartDate(l, map)).toBe('2026-09-17')
+    const days = (Date.parse('2026-12-17') - Date.parse('2026-09-17')) / 86400000
+    expect(expectedTermInterestFx(l, map)).toBeCloseTo(5_000_000 * 0.04 * days / 365, 6)
+    // 맵이 없으면 취득일로 폴백한다(대체 이력 조회 실패 시에도 화면은 살아 있어야 한다)
+    expect(interestStartDate(l)).toBe('2026-06-17')
+  })
+
+  it('대체가 아닌 로트는 취득일이 곧 예치 시작일이다', () => {
+    const l = td({ transferId: null })
+    expect(interestStartDate(l, new Map([['t1', '2026-09-17']]))).toBe('2026-06-17')
+  })
+
+  it('정기예금이 아니거나 만기·이율이 없으면 0', () => {
+    expect(expectedTermInterestFx(td({ accountType: 'mmda' }))).toBe(0)
+    expect(expectedTermInterestFx(td({ maturityDate: null }))).toBe(0)
+    expect(expectedTermInterestFx(td({ annualInterestRate: 0 }))).toBe(0)
+  })
+})
+

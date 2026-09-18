@@ -121,6 +121,8 @@ export async function linkFxLotsToInvestment(
 
 export function useFxLots(company: string, currency: string) {
   const [lots, setLots] = useState<FxLot[]>([])
+  /** transfer_id → 대체 실행일. 정기예금 이자 기산일 판정에 쓴다. */
+  const [transferDates, setTransferDates] = useState<Map<string, string>>(new Map())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -131,6 +133,16 @@ export function useFxLots(company: string, currency: string) {
     })
     if (err) { setError(err.message); setLots([]) }
     else setLots((data ?? []).map(mapRow))
+
+    // 대체 실행일 — 정기예금 **이자 기산일**의 정본이다.
+    // 대체 로트는 FIFO 순서 보존을 위해 원본 취득일을 승계하므로, 취득일을 예치
+    // 시작일로 쓰면 이전 예치 기간까지 이자가 계산된다(fxLots.interestStartDate 주석 참조).
+    // ⚠ 실패해도 로트 조회는 살린다 — 기산일 맵이 비면 acquiredDate 로 폴백되어
+    //   종전과 같은(과대) 값이 나올 뿐, 화면이 깨지지는 않는다.
+    const { data: tRows } = await restSelect<{ id: string; transfer_date: string }>(
+      'fx_lot_transfers', { match: { company, currency }, limit: 1000 },
+    )
+    setTransferDates(new Map((tRows ?? []).map(r => [r.id, r.transfer_date])))
     setLoading(false)
   }, [company, currency])
 
@@ -427,9 +439,10 @@ export function useFxLots(company: string, currency: string) {
     transferLots, reverseTransfer, settleTermDeposit, linkLotsToInvestment, reverseConsumption,
     totalAmount: remainingAmount(lots),
     availableAmount: availableAmount(lots, today), lockedAmount: remainingAmount(lots)-availableAmount(lots, today),
-    expectedInterestFx: lots.reduce((sum, lot) => sum + expectedTermInterestFx(lot), 0),
+    expectedInterestFx: lots.reduce((sum, lot) => sum + expectedTermInterestFx(lot, transferDates), 0),
+    transferDates,
     bookRate: weightedBookRate(lots) }),
   [lots, loading, error, refetch, addOpeningLot, importOpeningLots, updateLot, deleteLot,
    planLotRepair, applyLotRepair, reconcileDailyInflow, reconcileDailyOutflow, addManualOutflow,
-   transferLots, reverseTransfer, settleTermDeposit, linkLotsToInvestment, reverseConsumption, today])
+   transferLots, reverseTransfer, settleTermDeposit, linkLotsToInvestment, reverseConsumption, today, transferDates])
 }

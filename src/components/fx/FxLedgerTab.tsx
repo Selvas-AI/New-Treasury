@@ -1,7 +1,7 @@
 import { Fragment, useMemo, useState } from 'react'
 import { useAuth } from '../../hooks/useAuth'
 import { fmtKRW, fmtNumber, fmtRate } from '../../lib/format'
-import { ACCOUNT_TYPE_LABEL, type FxAccountType, type FxLot } from '../../lib/fxLots'
+import { ACCOUNT_TYPE_LABEL, interestStartDate, type FxAccountType, type FxLot } from '../../lib/fxLots'
 import { outflowTxnLabel } from '../../lib/fxTxnType'
 import { useFxLedgerReconciliation, type PendingReconcileItem } from '../../hooks/useFxLedgerReconciliation'
 import type { FxTradeFill, FxLotConsumption, FxTradeRecord, Company, FxCode } from '../../types'
@@ -47,11 +47,14 @@ const SOURCE_LABEL: Record<string, string> = {
  */
 export function FxLedgerTab({
   company, lots, fills, consumptionsByLotId, loading, currency, totalAmount, pendingOrders,
+  transferDates,
   onUpdateLot, onDeleteLot, onReconcileInflow, onReconcileOutflow, onReverseConsumption,
   onGotoOrders, onChanged,
 }: {
   company: Company
   lots: FxLot[]
+  /** transfer_id → 대체 실행일. 정기예금 이자 기산일 표기에 쓴다. */
+  transferDates: Map<string, string>
   /** 로트별 소진 내역 — 매각 체결/자금일보/수동 유출을 모두 포함한다 */
   consumptionsByLotId: Record<string, FxLotConsumption[]>
   /** 소진 내역의 fill_id → 체결일 등 부가 표시용 */
@@ -340,7 +343,12 @@ export function FxLedgerTab({
                                 오늘 만든 것인지 알 수 없다 — 배지로 구분한다. */}
                             {lot.transferId && (
                               <span className="ml-1 rounded bg-blue-100 px-1 py-0.5 text-[10px] text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
-                                title="계좌 대체로 들어온 로트 — 유입일은 원본 취득일을 승계합니다">
+                                title={'계좌 대체(재예치·계좌이동)로 들어온 로트입니다.\n'
+                                     + '· 유입일과 장부환율은 원본에서 그대로 승계됩니다 — 원가승계(carryover) 정책이라\n'
+                                     + '  정상이며, 장부환율을 따로 바꾸실 필요가 없습니다.\n'
+                                     + '· 같은 외화가 회사에 계속 남아 있는 것이라 취득원가가 바뀔 사건이 아닙니다.\n'
+                                     + '  임의로 바꾸면 미실현 손익이 왜곡됩니다.\n'
+                                     + '· 이자 기산일은 유입일이 아니라 대체 실행일입니다(옆 괄호 표기 참고).'}>
                                 대체
                               </span>
                             )}
@@ -352,6 +360,18 @@ export function FxLedgerTab({
                             {lot.accountType === 'term_deposit' && lot.maturityDate && (
                               <span className="ml-1 text-gray-400">(만기 {lot.maturityDate})</span>
                             )}
+                            {/* 이자 기산일 — 대체 로트는 승계된 유입일과 다르다. 다를 때만 표시해
+                                "왜 이자가 이 금액인가"를 표에서 바로 확인할 수 있게 한다. */}
+                            {lot.accountType === 'term_deposit' && (() => {
+                              const from = interestStartDate(lot, transferDates)
+                              if (from === lot.acquiredDate) return null
+                              return (
+                                <span className="ml-1 text-blue-500 dark:text-blue-400"
+                                  title={`이자 기산일 ${from} — 유입일(${lot.acquiredDate})은 원본에서 승계된 값이라 이자 계산에 쓰지 않습니다.`}>
+                                  (이자 기산 {from})
+                                </span>
+                              )
+                            })()}
                           </td>
                           <td className="text-right tabular-nums text-emerald-600 dark:text-emerald-400">{lot.originalAmount.toLocaleString()}</td>
                           <td className="text-right tabular-nums">

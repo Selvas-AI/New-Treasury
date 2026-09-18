@@ -24,8 +24,14 @@ const TAB_LABEL: Record<TabKey, string> = {
   ledger: '📒 원장', orders: '📝 외화매도이력', lots: '⚙️ 데이터 등록', pnl: '📊 환차손익 요약',
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
-  return <div className={CARD}><div className="text-xs text-gray-500">{label}</div><div className="mt-1 text-lg font-bold text-gray-900 dark:text-slate-100">{value}</div></div>
+function Stat({ label, value, help }: { label: string; value: string; help?: string }) {
+  return <div className={CARD}>
+    <div className="flex items-center gap-1 text-xs text-gray-500">
+      {label}
+      {help && <span title={help} className="cursor-help text-gray-400 dark:text-slate-500">ⓘ</span>}
+    </div>
+    <div className="mt-1 text-lg font-bold text-gray-900 dark:text-slate-100">{value}</div>
+  </div>
 }
 
 /**
@@ -136,7 +142,11 @@ export default function FxLedgerPage() {
       <Stat label="잔여 외화" value={ledger.totalAmount.toLocaleString()} />
       <Stat label="현재 환전 가능" value={ledger.availableAmount.toLocaleString()} />
       <Stat label="만기 전 잠금" value={ledger.lockedAmount.toLocaleString()} />
-      <Stat label="예상 만기이자" value={ledger.expectedInterestFx.toLocaleString(undefined, { maximumFractionDigits: 2 })} />
+      <Stat label="예상 만기이자" value={ledger.expectedInterestFx.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+        help={'잔존 정기예금만 합산합니다(소진·해지분 제외).\n'
+            + '각 로트 = 잔여원금 × 연이율 × 예치일수 ÷ 365 (단리·세전)\n'
+            + '예치일수는 이자 기산일부터 만기까지입니다. 재예치 로트는 취득일이 아니라\n'
+            + '대체(재예치) 실행일이 기산일입니다 — 원장 표의 "이자 기산일" 참고.'} />
       <Stat label="FIFO 잔존 장부환율" value={ledger.bookRate ? `${fmtRate(ledger.bookRate)}원` : '—'} />
       <Stat label="현재 시장환율" value={marketRate ? `${fmtRate(marketRate)}원` : '조회 전'} />
       <Stat label="미실현 평가손익" value={ledger.bookRate && marketRate ? fmtKRW(ledger.totalAmount * (marketRate - ledger.bookRate)) : '—'} />
@@ -151,7 +161,7 @@ export default function FxLedgerPage() {
     </div>
 
     {activeTab === 'ledger' && (
-      <FxLedgerTab
+      <FxLedgerTab transferDates={ledger.transferDates}
         company={company}
         lots={ledger.lots} consumptionsByLotId={fillsData.consumptionsByLotId}
         fills={fillsData.fills}
