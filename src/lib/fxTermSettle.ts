@@ -20,6 +20,86 @@ import type { InvestmentRecord } from '../types'
 
 const EPS = 0.000001
 
+/** 계좌 대체 평가 방식 — 법인 정책(policy_params.fx_transfer_valuation) */
+export type FxValuationMethod = 'carryover' | 'revalue'
+
+export function parseValuationMethod(text: string | null | undefined): FxValuationMethod {
+  return text === 'revalue' ? 'revalue' : 'carryover'
+}
+
+export interface ValuationInput {
+  method: FxValuationMethod
+  /** 재평가 정책일 때 적용할 대체환율(재예치일 매매기준율). carryover 면 무시된다 */
+  transferRate?: number | null
+}
+
+/**
+ * 재평가(revalue) 정책이면 대체환율이 **반드시** 있어야 한다.
+ *
+ * ⚠ 서버 `transfer_fx_lots` 는 `v_method='revalue' and p_transfer_rate<=0` 이면 거부한다.
+ *   클라이언트가 이를 막지 않으면 사용자는 **운용자금 연장을 저장한 뒤에야** 원장 반영
+ *   실패를 보게 된다(운용자금·원장이 벌어진 상태로 남는다). 저장 전에 차단한다.
+ */
+function valuationError(v: ValuationInput | undefined): string | null {
+  if (!v || v.method !== 'revalue') return null
+  if (!(Number(v.transferRate) > 0)) {
+    return '재평가(revalue) 정책이므로 대체환율(재예치일 매매기준율)을 입력해야 원장에 반영할 수 있습니다.'
+  }
+  return null
+}
+
+export interface TermPrincipalRow {
+  lotId: string
+  acquiredDate: string
+  maturityDate: string | null
+  amount: number
+  acqRate: number
+}
+
+/**
+ * 해지 원금이 **어느 정기예금 로트에서 얼마씩** 빠지는지 미리 계산한다.
+ *
+ * ⚠ 서버 `transfer_fx_lots`(docs/db/fx_term_deposit_investment_link.sql)의 소진 순서와
+ *   **반드시 같아야** 한다 — `만기 도래분 우선 → 그 안에서 취득일 FIFO → id`.
+ *   순수 취득일 FIFO 로 미리 보여주면 중도해지(allowEarly)일 때 화면과 실제 결과가
+ *   갈라진다(2026-09-15 서버 교정 사유와 동일한 함정).
+ */
+export function previewTermPrincipalConsumption(
+  lots: FxLot[], principal: number, settleDate: string, allowEarly: boolean,
+): TermPrincipalRow[] {
+  const matured = (l: FxLot) => !!l.maturityDate && l.maturityDate <= settleDate
+  const ordered = lots
+    .filter(l => l.accountType === 'term_deposit' && l.remainingAmount > 0)
+    .filter(l => allowEarly || matured(l))
+    .sort((a, b) =>
+      (matured(a) ? 0 : 1) - (matured(b) ? 0 : 1)
+      || a.acquiredDate.localeCompare(b.acquiredDate)
+      || a.id.localeCompare(b.id))
+
+  let remaining = Math.max(0, principal)
+  const rows: TermPrincipalRow[] = []
+  for (const lot of ordered) {
+    if (remaining <= EPS) break
+    const amount = Math.min(remaining, lot.remainingAmount)
+    rows.push({
+      lotId: lot.id, acquiredDate: lot.acquiredDate,
+      maturityDate: lot.maturityDate ?? null, amount, acqRate: lot.acqRate,
+    })
+    remaining -= amount
+  }
+  return rows
+}
+
+/**
+ * 재평가 정책에서 이 해지로 확정되는 환차손익(원화).
+ *   실현손익 = Σ 소진액 × (대체환율 − 장부환율)
+ *
+ * 원가승계(carryover)는 장부환율을 그대로 물려받으므로 **항상 0** 이다.
+ */
+export function revaluePnlKRW(rows: TermPrincipalRow[], transferRate: number): number {
+  return rows.reduce((sum, r) => sum + r.amount * (transferRate - r.acqRate), 0)
+}
+
 export interface FxTermSettlePlan {
   /** 해지(대체)할 원금 — 기존 예금 금액 */
   principal: number
@@ -90,10 +170,13 @@ export function planRolloverLedger(
   record: InvestmentRecord,
   v: { closeDate: string; newMaturity: string; newAmount: number; newRate: number },
   st: LedgerTermState,
+  valuation?: ValuationInput,
 ): PlanResult {
   const principal = record.amount ?? 0
   if (!(principal > 0)) return { error: '기존 예금 금액이 없어 원장에 반영할 수 없습니다.' }
   if (!v.newMaturity) return { error: '새 만기일이 있어야 원장 재예치를 만들 수 있습니다.' }
+  const vErr = valuationError(valuation)
+  if (vErr) return { error: vErr }
 
   const interest = v.newAmount - principal
   if (interest < -EPS) {
@@ -125,9 +208,12 @@ export function planCloseLedger(
   record: InvestmentRecord,
   opts: { closeDate: string; toAccountType: FxAccountType; interest: number },
   st: LedgerTermState,
+  valuation?: ValuationInput,
 ): PlanResult {
   const principal = record.amount ?? 0
   if (!(principal > 0)) return { error: '기존 예금 금액이 없어 원장에 반영할 수 없습니다.' }
+  const vErr = valuationError(valuation)
+  if (vErr) return { error: vErr }
   if (opts.toAccountType === 'term_deposit') {
     return { error: '만기처리의 행선지는 정기예금이 될 수 없습니다. 재예치라면 연장을 사용하세요.' }
   }

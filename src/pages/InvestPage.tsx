@@ -20,7 +20,9 @@ import type { FxLot } from '../lib/fxLots'
 import { ACCOUNT_TYPE_LABEL } from '../lib/fxLots'
 import {
   isFxTermDeposit, planRolloverLedger, planCloseLedger, termStateAt, isPlanError,
+  parseValuationMethod, previewTermPrincipalConsumption, revaluePnlKRW,
 } from '../lib/fxTermSettle'
+import { usePolicyParams } from '../hooks/usePolicyParams'
 import type { InvestmentRecord } from '../types'
 
 // 상품유형은 lib/investProducts.ts 가 정본이다(연동 팝업과 공유)
@@ -187,6 +189,14 @@ export default function InvestPage() {
   const [ledgerLots, setLedgerLots] = useState<FxLot[] | null>(null)
   const [ledgerLoading, setLedgerLoading] = useState(false)
 
+  /**
+   * 계좌 대체 평가 방식은 **법인 정책**이다(자금정책 › FX 정책 › ② 정책 기준).
+   * 재평가(revalue)면 서버가 대체환율 없이는 거부하므로 화면에서 먼저 받아야 한다.
+   */
+  const policyParams = usePolicyParams(currentCompany)
+  const valuationMethod = parseValuationMethod(policyParams.getText('fx_transfer_valuation'))
+  const isRevalue = valuationMethod === 'revalue'
+
   // 모달을 열 때 그 통화의 로트를 1회 조회한다(통화가 행마다 달라 훅을 쓸 수 없다)
   async function loadLedgerLots(rec: InvestmentRecord) {
     setLedgerLots(null)
@@ -203,6 +213,7 @@ export default function InvestPage() {
     rec: InvestmentRecord,
     plan: ReturnType<typeof planCloseLedger>,
     settleDate: string, interestRate: number, linkInvestmentId: string | null,
+    transferRate: number | null,
   ): Promise<string | null> {
     if (isPlanError(plan)) return plan.error
     const err = await settleFxTermDeposit(currentCompany, rec.currency, {
@@ -214,7 +225,7 @@ export default function InvestPage() {
       interestAccountType: plan.plan.interestAccountType,
       maturityDate: plan.plan.maturityDate,
       annualInterestRate: plan.plan.annualInterestRate,
-      transferRate: null,
+      transferRate: isRevalue ? transferRate : null,
       allowEarly: plan.plan.allowEarly,
       investmentId: linkInvestmentId,
       memo: `${rec.bank} ${rec.currency} 정기예금 — 운용자금 연동`,
@@ -232,7 +243,8 @@ export default function InvestPage() {
 
   function handleSetActive(rec: InvestmentRecord, active: boolean) {
     setCloseDate(new Date().toISOString().slice(0, 10))
-    setCloseSync(true); setCloseInterest(''); setCloseRate(''); setCloseTo('demand_deposit')
+    setCloseSync(true); setCloseInterest(''); setCloseRate(''); setCloseXferRate('')
+    setCloseTo('demand_deposit')
     setCloseRecord(active ? null : rec)
     setLedgerLots(null)
     if (!active) void loadLedgerLots(rec)
@@ -248,15 +260,28 @@ export default function InvestPage() {
   const [closeTo,       setCloseTo]       = useState<'demand_deposit' | 'mmda'>('demand_deposit')
   const [closeInterest, setCloseInterest] = useState('')
   const [closeRate,     setCloseRate]     = useState('')
+  /** 재평가 정책일 때 해지일 매매기준율 — 원금 장부환율을 다시 잡는 환율 */
+  const [closeXferRate, setCloseXferRate] = useState('')
+  const closeTransferRate = Number(closeXferRate) || 0
 
   // 계산은 순수 함수 하나에만 둔다(lib/fxTermSettle.ts)
   const closeLedgerPlan = useMemo(() => {
     if (!closeRecord || !ledgerLots) return null
     return planCloseLedger(closeRecord,
       { closeDate, toAccountType: closeTo, interest: Number(closeInterest) || 0 },
-      termStateAt(ledgerLots, closeDate))
-  }, [closeRecord, ledgerLots, closeDate, closeTo, closeInterest])
+      termStateAt(ledgerLots, closeDate),
+      { method: valuationMethod, transferRate: closeTransferRate })
+  }, [closeRecord, ledgerLots, closeDate, closeTo, closeInterest, valuationMethod, closeTransferRate])
   const closeNeedsRate = !!closeLedgerPlan && !isPlanError(closeLedgerPlan) && closeLedgerPlan.plan.interest > 0
+
+  /** 재평가 — 만기처리로 확정되는 환차손익을 저장 전에 보여준다(회계 분개 대조용) */
+  const closeRevaluePreview = useMemo(() => {
+    if (!isRevalue || !ledgerLots || !closeLedgerPlan || isPlanError(closeLedgerPlan)) return null
+    if (!(closeTransferRate > 0)) return null
+    const rows = previewTermPrincipalConsumption(
+      ledgerLots, closeLedgerPlan.plan.principal, closeDate, closeLedgerPlan.plan.allowEarly)
+    return { rows, pnl: revaluePnlKRW(rows, closeTransferRate) }
+  }, [isRevalue, ledgerLots, closeLedgerPlan, closeTransferRate, closeDate])
 
   // 연장 — 기존 건을 수정하지 않고 종료 + 신규로 처리해 과거를 보존한다
   const [rolloverTarget, setRolloverTarget] = useState<InvestmentRecord | null>(null)
@@ -276,8 +301,10 @@ export default function InvestPage() {
       // 로트 조회가 실패한 상태 — 조용히 넘기면 두 장부가 벌어진 줄 모른다
       ledgerNote = ' · ⚠ 원장 잔액을 읽지 못해 반영하지 못했습니다'
     } else if (v.syncLedger && ledgerLots) {
-      const plan = planRolloverLedger(rec, v, termStateAt(ledgerLots, v.closeDate))
-      const lErr = await applyLedgerSettle(rec, plan, v.closeDate, v.interestRate ?? 0, newId)
+      const plan = planRolloverLedger(rec, v, termStateAt(ledgerLots, v.closeDate),
+        { method: valuationMethod, transferRate: v.transferRate })
+      const lErr = await applyLedgerSettle(rec, plan, v.closeDate, v.interestRate ?? 0, newId,
+        v.transferRate ?? null)
       if (lErr) {
         setRolloverBusy(false); setRolloverTarget(null)
         toast.error(`연장은 완료됐지만 외화 원장 반영에 실패했습니다: ${lErr} — 외화거래명세 › 데이터 등록에서 직접 해지하세요.`)
@@ -299,9 +326,11 @@ export default function InvestPage() {
     if (!closeTarget.active && closeSync && closeRecord && ledgerLots) {
       const plan = planCloseLedger(closeRecord,
         { closeDate, toAccountType: closeTo, interest: Number(closeInterest) || 0 },
-        termStateAt(ledgerLots, closeDate))
+        termStateAt(ledgerLots, closeDate),
+        { method: valuationMethod, transferRate: closeTransferRate })
       const lErr = await applyLedgerSettle(closeRecord, plan, closeDate,
-        Number(closeRate) || toKRWAmount(1, closeRecord.currency, fx.toKRW), null)
+        Number(closeRate) || toKRWAmount(1, closeRecord.currency, fx.toKRW), null,
+        closeTransferRate || null)
       setCloseBusy(false); setCloseTarget(null)
       if (lErr) toast.error(`만기처리는 완료됐지만 외화 원장 반영에 실패했습니다: ${lErr} — 외화거래명세 › 데이터 등록에서 직접 해지하세요.`)
       else toast.success('만기처리 · 외화 원장 반영 완료')
@@ -703,6 +732,7 @@ export default function InvestPage() {
           ledgerLots={ledgerLots}
           ledgerLoading={ledgerLoading}
           defaultRate={toKRWAmount(1, rolloverTarget.currency, fx.toKRW)}
+          valuationMethod={valuationMethod}
           onCancel={() => setRolloverTarget(null)}
           onConfirm={v => void confirmRollover(v)}
         />
@@ -717,7 +747,11 @@ export default function InvestPage() {
           onDateChange={setCloseDate}
           confirmLabel={closeTarget.active ? '복원' : '만기 처리'}
           busy={closeBusy}
-          confirmDisabled={closeSync && closeNeedsRate && !(Number(closeRate) > 0 || toKRWAmount(1, closeRecord?.currency, fx.toKRW) > 0)}
+          confirmDisabled={
+            (closeSync && closeNeedsRate && !(Number(closeRate) > 0 || toKRWAmount(1, closeRecord?.currency, fx.toKRW) > 0))
+            /* 계획이 막힌 채로 저장하면 운용자금만 처리되고 원장은 실패해 두 장부가 벌어진다 */
+            || (closeSync && !!closeLedgerPlan && isPlanError(closeLedgerPlan))
+          }
           extra={closeRecord && closeLedgerPlan ? (
             /* 외화 정기예금 만기처리 — 원장까지 한 번에. 끄면 외화거래명세에서 따로 해지해야 한다. */
             <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50/60 dark:bg-blue-900/20 p-3 space-y-2">
@@ -733,6 +767,20 @@ export default function InvestPage() {
               </label>
 
               {ledgerLoading && <p className="text-[11px] text-gray-400">원장 잔액 확인 중…</p>}
+
+              {/* 재평가 정책 — 이 환율이 없으면 계획 자체가 막히므로 항상 먼저 보여준다 */}
+              {closeSync && isRevalue && (
+                <label className="block text-[11px] text-gray-600 dark:text-slate-300">
+                  해지일 매매기준율 ({closeRecord.currency})
+                  <input type="text" inputMode="decimal" value={closeXferRate}
+                    onChange={e => setCloseXferRate(e.target.value)}
+                    placeholder={String(Math.round((toKRWAmount(1, closeRecord.currency, fx.toKRW)) * 100) / 100)}
+                    className="mt-0.5 w-full rounded border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-2 py-1 text-xs text-right" />
+                  <span className="mt-0.5 block text-[10px] text-gray-500 dark:text-slate-400">
+                    회사 정책이 재평가(revalue)입니다 — 이 환율로 원금 장부환율을 다시 잡고 차액이 환차손익으로 확정됩니다.
+                  </span>
+                </label>
+              )}
 
               {closeSync && isPlanError(closeLedgerPlan) && (
                 <p className="text-[11px] text-red-600 dark:text-red-400 break-keep">⚠ {closeLedgerPlan.error}</p>
@@ -763,11 +811,24 @@ export default function InvestPage() {
                     </label>
                   )}
                   <ul className="text-[11px] text-gray-600 dark:text-slate-300 space-y-0.5">
-                    <li>· 원금 {closeLedgerPlan.plan.principal.toLocaleString()} {closeRecord.currency} → {ACCOUNT_TYPE_LABEL[closeTo]} 대체 (손익 0)</li>
+                    <li>· 원금 {closeLedgerPlan.plan.principal.toLocaleString()} {closeRecord.currency} → {ACCOUNT_TYPE_LABEL[closeTo]} 대체{' '}
+                      {isRevalue
+                        ? `(장부환율 재평가 @${closeTransferRate ? closeTransferRate.toLocaleString() : '?'})`
+                        : '(손익 0)'}</li>
                     {closeLedgerPlan.plan.allowEarly && (
                       <li className="text-amber-600 dark:text-amber-400">· 만기 도래분이 부족해 <strong>중도해지</strong>로 처리됩니다</li>
                     )}
                   </ul>
+                  {closeRevaluePreview && (
+                    <p className="text-[11px] font-medium text-gray-700 dark:text-slate-200">
+                      확정 환차손익{' '}
+                      <span className={closeRevaluePreview.pnl >= 0
+                        ? 'text-red-600 dark:text-red-400' : 'text-blue-600 dark:text-blue-400'}>
+                        {closeRevaluePreview.pnl >= 0 ? '환차익 ' : '환차손 '}
+                        {Math.abs(Math.round(closeRevaluePreview.pnl)).toLocaleString()}원
+                      </span>
+                    </p>
+                  )}
                   {closeLedgerPlan.warning && (
                     <p className="text-[11px] text-amber-700 dark:text-amber-300 break-keep">⚠ {closeLedgerPlan.warning}</p>
                   )}

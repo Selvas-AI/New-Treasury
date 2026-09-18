@@ -131,10 +131,10 @@ export default function FxFifoPriorityCard({ company, params, canEdit, userLabel
       </p>
       <div className="mt-2 space-y-2">
         {([
-          { key: 'carryover' as const, label: '원가승계 (권장)',
-            hint: '장부환율·취득일을 그대로 물려받습니다. 실현손익 0, FIFO 순서 보존. 대체는 환전이 아니라는 회계 원칙에 부합합니다.' },
+          { key: 'carryover' as const, label: '원가승계 (시스템 기본값)',
+            hint: '장부환율·취득일을 그대로 물려받습니다. 실현손익 0, FIFO 순서 보존. 대체는 환전이 아니라고 보는 방식입니다.' },
           { key: 'revalue' as const, label: '재평가',
-            hint: '대체 시점 환율로 장부환율을 다시 잡습니다. 실현손익이 발생하고 취득일이 대체일로 리셋됩니다 — 사실상 매각+재매입입니다. 은행이 대체 시 환율을 새로 적용하는 실무일 때만 선택하세요.' },
+            hint: '대체 시점(재예치일) 매매기준율로 장부환율을 다시 잡습니다. 차액이 환차손익으로 확정되고 취득일이 대체일로 리셋됩니다. 회계에서 재예치를 신규 가입일의 매매기준율로 새로 계상한다면 이쪽입니다.' },
         ]).map(o => (
           <label key={o.key}
             className={`flex cursor-pointer items-start gap-2 rounded-lg border px-3 py-2 ${

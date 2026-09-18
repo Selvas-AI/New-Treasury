@@ -161,7 +161,7 @@ export default function FxLedgerPage() {
     </div>
 
     {activeTab === 'ledger' && (
-      <FxLedgerTab transferDates={ledger.transferDates}
+      <FxLedgerTab transferDates={ledger.transferDates} valuationMethod={valuationMethod}
         company={company}
         lots={ledger.lots} consumptionsByLotId={fillsData.consumptionsByLotId}
         fills={fillsData.fills}

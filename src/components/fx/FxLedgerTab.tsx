@@ -48,6 +48,7 @@ const SOURCE_LABEL: Record<string, string> = {
 export function FxLedgerTab({
   company, lots, fills, consumptionsByLotId, loading, currency, totalAmount, pendingOrders,
   transferDates,
+  valuationMethod = 'carryover',
   onUpdateLot, onDeleteLot, onReconcileInflow, onReconcileOutflow, onReverseConsumption,
   onGotoOrders, onChanged,
 }: {
@@ -55,6 +56,8 @@ export function FxLedgerTab({
   lots: FxLot[]
   /** transfer_id → 대체 실행일. 정기예금 이자 기산일 표기에 쓴다. */
   transferDates: Map<string, string>
+  /** 법인 회계정책 — 대체 배지 설명이 정책에 따라 정반대가 되므로 반드시 받아야 한다 */
+  valuationMethod?: 'carryover' | 'revalue'
   /** 로트별 소진 내역 — 매각 체결/자금일보/수동 유출을 모두 포함한다 */
   consumptionsByLotId: Record<string, FxLotConsumption[]>
   /** 소진 내역의 fill_id → 체결일 등 부가 표시용 */
@@ -343,12 +346,18 @@ export function FxLedgerTab({
                                 오늘 만든 것인지 알 수 없다 — 배지로 구분한다. */}
                             {lot.transferId && (
                               <span className="ml-1 rounded bg-blue-100 px-1 py-0.5 text-[10px] text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
-                                title={'계좌 대체(재예치·계좌이동)로 들어온 로트입니다.\n'
-                                     + '· 유입일과 장부환율은 원본에서 그대로 승계됩니다 — 원가승계(carryover) 정책이라\n'
-                                     + '  정상이며, 장부환율을 따로 바꾸실 필요가 없습니다.\n'
-                                     + '· 같은 외화가 회사에 계속 남아 있는 것이라 취득원가가 바뀔 사건이 아닙니다.\n'
-                                     + '  임의로 바꾸면 미실현 손익이 왜곡됩니다.\n'
-                                     + '· 이자 기산일은 유입일이 아니라 대체 실행일입니다(옆 괄호 표기 참고).'}>
+                                title={valuationMethod === 'revalue'
+                                  ? '계좌 대체(재예치·계좌이동)로 들어온 로트입니다.\n'
+                                    + '· 회사 정책이 재평가(revalue)라 장부환율은 대체일 매매기준율로 새로 잡혔고,\n'
+                                    + '  기존 장부환율과의 차액은 그때 환차손익으로 확정됐습니다.\n'
+                                    + '· 유입일도 대체일로 리셋되므로 FIFO 에서 후순위가 됩니다.\n'
+                                    + '· 따라서 장부환율을 따로 바꾸실 필요가 없습니다.'
+                                  : '계좌 대체(재예치·계좌이동)로 들어온 로트입니다.\n'
+                                    + '· 유입일과 장부환율은 원본에서 그대로 승계됩니다 — 원가승계(carryover) 정책이라\n'
+                                    + '  정상이며, 장부환율을 따로 바꾸실 필요가 없습니다.\n'
+                                    + '· 같은 외화가 회사에 계속 남아 있는 것이라 취득원가가 바뀔 사건이 아닙니다.\n'
+                                    + '  임의로 바꾸면 미실현 손익이 왜곡됩니다.\n'
+                                    + '· 이자 기산일은 유입일이 아니라 대체 실행일입니다(옆 괄호 표기 참고).'}>
                                 대체
                               </span>
                             )}

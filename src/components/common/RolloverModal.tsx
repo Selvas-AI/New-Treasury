@@ -11,7 +11,10 @@
 import { useMemo, useState } from 'react'
 import type { InvestmentRecord } from '../../types'
 import type { FxLot } from '../../lib/fxLots'
-import { isFxTermDeposit, planRolloverLedger, termStateAt, isPlanError } from '../../lib/fxTermSettle'
+import {
+  isFxTermDeposit, planRolloverLedger, termStateAt, isPlanError,
+  previewTermPrincipalConsumption, revaluePnlKRW, type FxValuationMethod,
+} from '../../lib/fxTermSettle'
 
 export interface RolloverValues {
   closeDate: string
@@ -26,9 +29,17 @@ export interface RolloverValues {
   syncLedger?: boolean
   /** 이자 재예치분의 장부환율(해지일 환율). syncLedger + 증액일 때만 쓰인다 */
   interestRate?: number
+  /**
+   * 재예치일 매매기준율. **재평가(revalue) 정책일 때만** 쓰인다.
+   * 이 환율로 원금의 장부환율이 새로 잡히고 그 차액이 환차손익으로 확정된다.
+   */
+  transferRate?: number | null
 }
 
-export default function RolloverModal({ record, busy, ledgerLots, ledgerLoading, defaultRate, onCancel, onConfirm }: {
+export default function RolloverModal({
+  record, busy, ledgerLots, ledgerLoading, defaultRate,
+  valuationMethod = 'carryover', onCancel, onConfirm,
+}: {
   record: InvestmentRecord
   busy?: boolean
   /** 이 법인·통화의 원장 로트. 외화 정기예금일 때만 전달된다 */
@@ -36,6 +47,8 @@ export default function RolloverModal({ record, busy, ledgerLots, ledgerLoading,
   ledgerLoading?: boolean
   /** 이자 장부환율 기본값 = 현재 시세 */
   defaultRate?: number
+  /** 법인 회계정책 — policy_params.fx_transfer_valuation */
+  valuationMethod?: FxValuationMethod
   onCancel: () => void
   onConfirm: (v: RolloverValues) => void
 }) {
@@ -56,12 +69,30 @@ export default function RolloverModal({ record, busy, ledgerLots, ledgerLoading,
   const [interestRateStr, setInterestRateStr] = useState('')
   const interestRate = Number(interestRateStr) || defaultRate || 0
 
+  // 재평가 정책일 때만 쓰는 재예치일 매매기준율.
+  const isRevalue = valuationMethod === 'revalue'
+  const [transferRateStr, setTransferRateStr] = useState('')
+  const transferRate = Number(transferRateStr) || 0
+
   // 계산은 순수 함수 하나에만 둔다(lib/fxTermSettle.ts) — 화면에서 다시 만들면 갈라진다.
   const ledgerPlan = useMemo(() => {
     if (!ledgerEligible || !ledgerLots) return null
     return planRolloverLedger(record, { closeDate, newMaturity, newAmount, newRate },
-      termStateAt(ledgerLots, closeDate))
-  }, [ledgerEligible, ledgerLots, record, closeDate, newMaturity, newAmount, newRate])
+      termStateAt(ledgerLots, closeDate),
+      { method: valuationMethod, transferRate })
+  }, [ledgerEligible, ledgerLots, record, closeDate, newMaturity, newAmount, newRate,
+    valuationMethod, transferRate])
+
+  /**
+   * 재평가일 때 이 연장으로 확정되는 환차손익 — **저장 전에** 보여준다.
+   * 회계팀의 분개(기타단기금융상품 재평가 + 환차손익)와 대조할 수 있어야 한다.
+   */
+  const revaluePreview = useMemo(() => {
+    if (!isRevalue || !ledgerLots || !ledgerPlan || isPlanError(ledgerPlan) || !(transferRate > 0)) return null
+    const rows = previewTermPrincipalConsumption(
+      ledgerLots, ledgerPlan.plan.principal, closeDate, ledgerPlan.plan.allowEarly)
+    return { rows, pnl: revaluePnlKRW(rows, transferRate) }
+  }, [isRevalue, ledgerLots, ledgerPlan, transferRate, closeDate])
 
   const ledgerBlocked = !!ledgerPlan && isPlanError(ledgerPlan)
   const needsRate = !!ledgerPlan && !isPlanError(ledgerPlan) && ledgerPlan.plan.interest > 0
@@ -144,6 +175,16 @@ export default function RolloverModal({ record, busy, ledgerLots, ledgerLoading,
 
             {ledgerLoading && <p className="text-[11px] text-gray-400">원장 잔액 확인 중…</p>}
 
+            {/* 재평가 정책 — 대체환율이 없으면 계획 자체가 막히므로 이 입력은 항상 먼저 보여준다 */}
+            {syncLedger && isRevalue && (
+              <Field label={`재예치일 매매기준율 (${record.currency})`}
+                hint="회사 정책이 재평가(revalue)입니다. 이 환율로 원금의 장부환율이 새로 잡히고, 기존 장부환율과의 차액이 환차손익으로 확정됩니다.">
+                <input type="text" inputMode="decimal"
+                  value={transferRateStr} placeholder={defaultRate ? String(Math.round(defaultRate * 100) / 100) : ''}
+                  onChange={e => setTransferRateStr(e.target.value)} className={inputCls} />
+              </Field>
+            )}
+
             {syncLedger && ledgerPlan && isPlanError(ledgerPlan) && (
               <p className="text-[11px] text-red-600 dark:text-red-400 break-keep">⚠ {ledgerPlan.error}</p>
             )}
@@ -159,7 +200,10 @@ export default function RolloverModal({ record, busy, ledgerLots, ledgerLoading,
                   </Field>
                 )}
                 <ul className="text-[11px] text-gray-600 dark:text-slate-300 space-y-0.5">
-                  <li>· 원금 {fmt(ledgerPlan.plan.principal)} → 정기예금 대체 (장부환율 승계, 손익 0)</li>
+                  <li>· 원금 {fmt(ledgerPlan.plan.principal)} → 정기예금 대체{' '}
+                    {isRevalue
+                      ? `(장부환율 재평가 @${transferRate ? transferRate.toLocaleString() : '?'})`
+                      : '(장부환율 승계, 손익 0)'}</li>
                   {ledgerPlan.plan.interest > 0 && (
                     <li>· 이자 {fmt(ledgerPlan.plan.interest)} → 정기예금 신규 로트 @{interestRate ? interestRate.toLocaleString() : '?'}</li>
                   )}
@@ -167,6 +211,27 @@ export default function RolloverModal({ record, busy, ledgerLots, ledgerLoading,
                     <li className="text-amber-600 dark:text-amber-400">· 만기 도래분이 부족해 <strong>중도해지</strong>로 처리됩니다</li>
                   )}
                 </ul>
+                {/* 재평가 — 확정될 환차손익을 저장 전에 회계 분개와 대조할 수 있게 한다 */}
+                {revaluePreview && (
+                  <div className="rounded-lg bg-white/70 dark:bg-slate-900/40 px-2 py-1.5">
+                    <p className="text-[11px] font-medium text-gray-700 dark:text-slate-200">
+                      확정 환차손익{' '}
+                      <span className={revaluePreview.pnl >= 0
+                        ? 'text-red-600 dark:text-red-400' : 'text-blue-600 dark:text-blue-400'}>
+                        {revaluePreview.pnl >= 0 ? '환차익 ' : '환차손 '}
+                        {Math.abs(Math.round(revaluePreview.pnl)).toLocaleString()}원
+                      </span>
+                    </p>
+                    <ul className="mt-0.5 text-[10px] text-gray-500 dark:text-slate-400 space-y-0.5">
+                      {revaluePreview.rows.map(r => (
+                        <li key={r.lotId}>
+                          · {r.acquiredDate} 취득분 {fmt(r.amount)} @{r.acqRate.toLocaleString()} →{' '}
+                          {transferRate.toLocaleString()}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
                 {ledgerPlan.warning && (
                   <p className="text-[11px] text-amber-700 dark:text-amber-300 break-keep">⚠ {ledgerPlan.warning}</p>
                 )}
@@ -182,7 +247,8 @@ export default function RolloverModal({ record, busy, ledgerLots, ledgerLoading,
           </button>
           <button
             onClick={() => onConfirm({ closeDate, newMaturity, newAmount, newRate,
-              syncLedger: ledgerEligible && syncLedger, interestRate })}
+              syncLedger: ledgerEligible && syncLedger, interestRate,
+              transferRate: isRevalue ? transferRate : null })}
             disabled={invalid || busy}
             className="flex-1 text-sm py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium disabled:opacity-50">
             {busy ? '처리 중…' : '연장 처리'}
