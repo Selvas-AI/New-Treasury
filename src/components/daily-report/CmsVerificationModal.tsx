@@ -15,6 +15,7 @@
  */
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react'
 import type { DailyRecord } from '../../types'
+import { isChunkLoadError, showUpdateBanner, UPDATE_MESSAGE } from '../../lib/appUpdate'
 
 // ── PDF.js 동적 임포트 ────────────────────────────────────────
 type PdfLib = typeof import('pdfjs-dist')
@@ -135,6 +136,7 @@ export default function CmsVerificationModal({
   const [activePdf,  setActivePdf]  = useState(Math.min(initialIndex, pdfs.length - 1))
   const [loadState,  setLoadState]  = useState<'loading' | 'ready' | 'error'>('loading')
   const [errorMsg,   setErrorMsg]   = useState('')
+  const [chunkStale, setChunkStale] = useState(false)  // 배포 갱신으로 청크가 사라진 경우
   const [page,       setPage]       = useState(1)
   const [scale,      setScale]      = useState(1.3)
   const [clicked,    setClicked]    = useState<number | null>(null)
@@ -196,7 +198,17 @@ export default function CmsVerificationModal({
         setLoadState('ready')
         setExtracted(true)
       } catch (e) {
-        if (!cancelled) { setErrorMsg(e instanceof Error ? e.message : 'PDF 로드 실패'); setLoadState('error') }
+        if (cancelled) return
+        // 새 버전 배포 후 남아 있는 옛 탭은 이미 지워진 청크(assets/pdf-*.js)를 요청해
+        // 404 를 받는다 — PDF 문제가 아니므로 영문 원문 대신 새로고침을 안내한다.
+        if (isChunkLoadError(e)) {
+          setChunkStale(true)
+          setErrorMsg(UPDATE_MESSAGE)
+          showUpdateBanner()
+        } else {
+          setErrorMsg(e instanceof Error ? e.message : 'PDF 로드 실패')
+        }
+        setLoadState('error')
       }
     })()
     return () => { cancelled = true }
@@ -333,7 +345,18 @@ export default function CmsVerificationModal({
             {/* 캔버스 */}
             <div className="flex-1 overflow-auto bg-gray-200 dark:bg-slate-800 p-4">
               {loadState === 'loading' && <div className="flex items-center justify-center h-full text-gray-500 text-sm">PDF 로딩 중…</div>}
-              {loadState === 'error' && <div className="flex items-center justify-center h-full text-red-500 text-sm">{errorMsg}</div>}
+              {loadState === 'error' && (
+                <div className="flex flex-col items-center justify-center gap-3 h-full px-6 text-center">
+                  <div className={`text-sm ${chunkStale ? 'text-amber-600 dark:text-amber-400' : 'text-red-500'}`}>{errorMsg}</div>
+                  {chunkStale && (
+                    <button
+                      type="button"
+                      onClick={() => window.location.reload()}
+                      className="px-3 py-1.5 rounded bg-blue-600 hover:bg-blue-700 text-white text-xs"
+                    >새로고침</button>
+                  )}
+                </div>
+              )}
               {loadState === 'ready' && (
                 <div className="relative inline-block shadow-lg">
                   <canvas ref={canvasRef} style={{ display: 'block' }} />

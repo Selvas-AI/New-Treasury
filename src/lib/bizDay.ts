@@ -138,6 +138,34 @@ function rebuildHolidays(): void {
   for (const d of BANK_HOLIDAYS) HOLIDAYS.add(d)
 }
 
+/**
+ * 캐시 레코드 — 옛 형식(순수 배열)도 그대로 읽는다.
+ * ⚠ 캐시에 만료가 없으면 **연중 지정되는 임시공휴일을 영원히 못 받는다.**
+ *   (2025-01-27 사례처럼 정부가 1~2주 전에 공고하는 경우가 있다)
+ *   지난 연도는 더 바뀌지 않으므로 갱신하지 않는다.
+ */
+interface HolidayCache { fetchedAt: number; dates: string[] }
+
+const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000  // 7일
+
+function parseCache(raw: string): HolidayCache | null {
+  try {
+    const v: unknown = JSON.parse(raw)
+    if (Array.isArray(v)) return v.length ? { fetchedAt: 0, dates: v as string[] } : null  // 옛 형식
+    const o = v as Partial<HolidayCache>
+    if (Array.isArray(o?.dates) && o.dates.length) {
+      return { fetchedAt: Number(o.fetchedAt) || 0, dates: o.dates }
+    }
+  } catch { /* 손상된 값 무시 */ }
+  return null
+}
+
+/** 이 연도 캐시를 다시 받아야 하는가 (지난 연도는 확정이라 재조회 안 함) */
+function isCacheStale(year: number, fetchedAt: number): boolean {
+  if (year < new Date().getFullYear()) return false
+  return Date.now() - fetchedAt > CACHE_TTL_MS
+}
+
 /** localStorage에 캐시된 공휴일 연도 목록을 적재 */
 function loadCached(): void {
   try {
@@ -145,9 +173,9 @@ function loadCached(): void {
       if (!key.startsWith(LS_PREFIX)) continue
       const raw = localStorage.getItem(key)
       if (!raw) continue
-      const dates: string[] = JSON.parse(raw)
-      if (!Array.isArray(dates) || !dates.length) continue
-      CACHED_BY_YEAR.set(key.slice(LS_PREFIX.length), dates)
+      const cache = parseCache(raw)
+      if (!cache) continue
+      CACHED_BY_YEAR.set(key.slice(LS_PREFIX.length), cache.dates)
     }
   } catch { /* localStorage 없는 환경(SSR 등) 무시 */ }
   rebuildHolidays()
@@ -155,11 +183,18 @@ function loadCached(): void {
 
 loadCached()
 
-/** GAS에서 특정 연도 공휴일을 가져와 캐시 (앱 시작 시 1회 호출 권장) */
+/**
+ * GAS에서 특정 연도 공휴일을 가져와 캐시 (앱 시작 시 1회 호출 권장)
+ *
+ * ⚠ 조회에 실패해도 기존 캐시는 그대로 둔다 — 지우면 그 순간 공휴일이 통째로
+ *   하드코딩으로 되돌아가 판정이 흔들린다.
+ */
 export async function fetchAndCacheHolidays(year: number): Promise<void> {
   const lsKey = LS_PREFIX + year
   try {
-    if (localStorage.getItem(lsKey)) return  // 이미 캐시됨
+    const raw = localStorage.getItem(lsKey)
+    const cache = raw ? parseCache(raw) : null
+    if (cache && !isCacheStale(year, cache.fetchedAt)) return  // 아직 신선함
   } catch { /* no-op */ }
 
   const gasUrl = import.meta.env.VITE_GAS_API_URL
@@ -175,8 +210,9 @@ export async function fetchAndCacheHolidays(year: number): Promise<void> {
     if (!json.success || !json.dates?.length) return
     CACHED_BY_YEAR.set(String(year), json.dates)
     rebuildHolidays()
-    try { localStorage.setItem(lsKey, JSON.stringify(json.dates)) } catch { /* no-op */ }
-  } catch { /* 네트워크 오류 — 하드코딩 fallback 유지 */ }
+    const rec: HolidayCache = { fetchedAt: Date.now(), dates: json.dates }
+    try { localStorage.setItem(lsKey, JSON.stringify(rec)) } catch { /* no-op */ }
+  } catch { /* 네트워크 오류 — 기존 캐시·하드코딩 fallback 유지 */ }
 }
 
 // ── 핵심 유틸 ────────────────────────────────────────────────────────
