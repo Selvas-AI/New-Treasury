@@ -49,8 +49,24 @@ describe('isBusinessDay', () => {
   it('토요일 → 비영업일', () => expect(isBusinessDay('2026-05-23')).toBe(false))
   it('대체공휴일(부처님오신날, 월) → 비영업일', () => expect(isBusinessDay('2026-05-25')).toBe(false))
   it('공휴일(삼일절) → 비영업일', () => expect(isBusinessDay('2026-03-01')).toBe(false))
-  it('2027 추석 → 비영업일', () => expect(isBusinessDay('2027-09-22')).toBe(false))
-  it('2028 신정 대체 → 비영업일', () => expect(isBusinessDay('2028-01-03')).toBe(false))
+  it('2027 추석(9/15) → 비영업일', () => expect(isBusinessDay('2027-09-15')).toBe(false))
+
+  // ⚠ 아래는 "대체공휴일이 없는" 케이스다 — 주말과 겹쳤다고 월요일을 쉬는 것이 아니다.
+  //   실사고(2026-09-29): 추석 다음날이 토요일(9/26)이라는 이유로 9/28 을 대체공휴일로
+  //   잘못 등록해 자금일보 달력에서 해당 날짜를 선택할 수 없었다.
+  it('2026-09-28(추석 다음날이 토요일) → 영업일', () => expect(isBusinessDay('2026-09-28')).toBe(true))
+  it('2026-06-08(현충일이 토요일) → 영업일', () => expect(isBusinessDay('2026-06-08')).toBe(true))
+  it('2028-01-03(신정이 토요일) → 영업일', () => expect(isBusinessDay('2028-01-03')).toBe(true))
+
+  // 설날·추석은 음력이라 추정 금지 — 연도별 실제 날짜 고정
+  it('2026 설날(2/17) → 비영업일', () => expect(isBusinessDay('2026-02-17')).toBe(false))
+  it('2026-01-28(구 오등록 설날) → 영업일', () => expect(isBusinessDay('2026-01-28')).toBe(true))
+  it('2027 설날 대체(2/9, 설날이 일요일) → 비영업일', () => expect(isBusinessDay('2027-02-09')).toBe(false))
+  it('2028 설날(1/27) → 비영업일', () => expect(isBusinessDay('2028-01-27')).toBe(false))
+
+  // 근로자의날 — 관공서 공휴일이 아니라 공휴일 API 에 없다. 은행 휴무라 비영업일로 본다.
+  it('근로자의날(2026-05-01) → 비영업일', () => expect(isBusinessDay('2026-05-01')).toBe(false))
+  it('근로자의날(2028-05-01) → 비영업일', () => expect(isBusinessDay('2028-05-01')).toBe(false))
 })
 
 // ─── calcDday ────────────────────────────────────────────
