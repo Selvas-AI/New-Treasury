@@ -1,10 +1,33 @@
 import { useMemo, useState } from 'react'
 import { useFxRegimeSnapshotHistory, type RegimeSnapshotHistoryRow } from '../../hooks/useFxRegimeSnapshotHistory'
 import { fmtKRW } from '../../lib/format'
+import { CLAMP_LABEL, LEVEL_LABEL, regimeLabel, type ClampReason, type LevelGrade, type RegimeCode } from '../../lib/fxRegime'
 import type { Company } from '../../types'
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
+}
+
+/**
+ * 판정 근거 한 줄 — "왜 이 목표가 나왔는가".
+ *
+ * ⚠ 라벨은 전부 fxRegime.ts 의 정본을 쓴다. 여기서 문자열을 새로 만들면
+ *   실시간 조치 카드와 이력의 용어가 갈라진다(§1-A SSOT).
+ */
+function reasonText(r: RegimeSnapshotHistoryRow): string | null {
+  if (!r.regime_code) return null   // 근거 기록 이전 행
+  const parts = [`${r.regime_code} ${regimeLabel(r.regime_code as RegimeCode)}`]
+  if (r.level_grade) {
+    parts.push(`수준 ${r.level_grade}(${LEVEL_LABEL[r.level_grade as LevelGrade] ?? r.level_grade})`)
+  }
+  return parts.join(' · ')
+}
+
+/** 원안 → 적용 변화. 제약에 걸리지 않았으면 null(원안이 곧 목표라 중복 표기 불필요) */
+function clampText(r: RegimeSnapshotHistoryRow): string | null {
+  if (!r.clamped_by || r.clamped_by === 'none') return null
+  const label = CLAMP_LABEL[r.clamped_by as ClampReason] ?? r.clamped_by
+  return r.raw_target_pct != null ? `원안 ${r.raw_target_pct}% → ${label}` : label
 }
 
 function fmtTime(iso: string) {
@@ -60,7 +83,7 @@ export default function RegimeHistoryCard({ company, currency }: { company: Comp
       <summary className="cursor-pointer select-none px-4 py-2.5 text-sm font-semibold text-gray-700 dark:text-slate-200">
         📜 조치 이력 조회 {open ? '접기' : '보기'}
         <span className="ml-2 text-[11px] font-normal text-gray-400 dark:text-slate-500">
-          판정일을 클릭하면 그날의 조치 카드(목표비중·현재비중·권고액) 변화를 봅니다
+          판정일을 클릭하면 그날의 조치 카드(판정 근거·목표비중·현재비중·권고액) 변화를 봅니다
         </span>
       </summary>
       <div className="px-4 pb-4">
@@ -96,6 +119,9 @@ export default function RegimeHistoryCard({ company, currency }: { company: Comp
                           🔴 이날 권고 발생
                         </span>
                       )}
+                      {reasonText(g.last) && (
+                        <span className="truncate text-gray-500 dark:text-slate-400">{reasonText(g.last)}</span>
+                      )}
                       <span className="ml-auto tabular-nums text-gray-500 dark:text-slate-400">
                         목표 {g.last.target_pct != null ? `${g.last.target_pct}%` : '—'} / 현재 {g.last.current_pct != null ? `${g.last.current_pct}%` : '—'}
                       </span>
@@ -115,6 +141,7 @@ export default function RegimeHistoryCard({ company, currency }: { company: Comp
                             <thead>
                               <tr className="border-b border-gray-100 text-[11px] text-gray-400 dark:border-slate-800 dark:text-slate-500">
                                 <th className="py-1 pr-3 text-left font-normal">기록 시각</th>
+                                <th className="py-1 pr-3 text-left font-normal">판정 근거 (국면 · 수준)</th>
                                 <th className="py-1 pr-3 text-right font-normal">목표 비중</th>
                                 <th className="py-1 pr-3 text-right font-normal">현재 비중</th>
                                 <th className="py-1 pr-3 text-right font-normal">권고 매도액</th>
@@ -126,7 +153,15 @@ export default function RegimeHistoryCard({ company, currency }: { company: Comp
                               {g.list.map(r => (
                                 <tr key={r.id} className="border-b border-gray-50 last:border-0 dark:border-slate-800/60">
                                   <td className="py-1.5 pr-3 tabular-nums text-gray-600 dark:text-slate-300">{fmtTime(r.captured_at)}</td>
-                                  <td className="py-1.5 pr-3 text-right tabular-nums">{r.target_pct != null ? `${r.target_pct}%` : '—'}</td>
+                                  <td className="py-1.5 pr-3 text-gray-600 dark:text-slate-300">
+                                    {reasonText(r) ?? <span className="text-gray-300 dark:text-slate-600">—</span>}
+                                  </td>
+                                  <td className="py-1.5 pr-3 text-right tabular-nums">
+                                    {r.target_pct != null ? `${r.target_pct}%` : '—'}
+                                    {clampText(r) && (
+                                      <span className="block text-[10px] font-normal text-amber-600 dark:text-amber-400">{clampText(r)}</span>
+                                    )}
+                                  </td>
                                   <td className="py-1.5 pr-3 text-right tabular-nums">{r.current_pct != null ? `${r.current_pct}%` : '—'}</td>
                                   <td className={`py-1.5 pr-3 text-right font-semibold tabular-nums ${
                                     r.suggest_krw > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-400'}`}>

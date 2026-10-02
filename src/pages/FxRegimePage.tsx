@@ -450,11 +450,24 @@ export default function FxRegimePage() {
   // 스냅샷이 실제로 바뀔 때만(=syncRegimeSnapshot 내부에서 write 가 일어날 때만) 이력 1건을
   // 남긴다 — "조치 카드 일자별 조회"(세션26차 7일차)의 데이터 소스.
   const recordRegimeHistory = useCallback(async (entry: RegimeSnapshotHistoryEntry) => {
-    await restInsert('fx_regime_snapshot_history', {
+    const base = {
       id: generateUUID(), company, currency: entry.currency,
       snapshot_date: entry.snapshotDate, target_pct: entry.targetPct, current_pct: entry.currentPct,
       suggest_krw: entry.suggestKRW, since_date: entry.sinceDate, captured_by: entry.capturedBy,
+    }
+    // 판정 근거 컬럼은 fx_regime_snapshot_history_reason.sql 로 추가된다.
+    // ⚠ 마이그레이션 전 환경에서는 PostgREST 가 모르는 컬럼을 스키마 오류로 거부하므로,
+    //   실패하면 근거를 빼고 1회 재시도한다 — 근거 기록보다 이력 자체가 남는 것이 우선이다.
+    //   (policy_params 감사 필드와 같은 패턴 — CLAUDE.md 세션26차 Phase 2)
+    const { error } = await restInsert('fx_regime_snapshot_history', {
+      ...base,
+      regime_code:    entry.regimeCode ?? null,
+      level_grade:    entry.levelGrade ?? null,
+      trend_group:    entry.trendGroup ?? null,
+      raw_target_pct: entry.rawTargetPct ?? null,
+      clamped_by:     entry.clampedBy ?? null,
     })
+    if (error) await restInsert('fx_regime_snapshot_history', base)
   }, [company])
   const snapWrittenRef = useRef<string>('')
   useEffect(() => {
@@ -471,6 +484,12 @@ export default function FxRegimePage() {
       currentPct: Math.round(signal.decision.currentRatio * 1000) / 10,
       suggestKRW: suggest,
       asOf:       signal.asOf,
+      // 판정 근거 — 목표가 왜 그 값이 됐는지(이력 조회에서 사용)
+      regimeCode:   signal.regime.code,
+      levelGrade:   signal.level?.grade ?? null,
+      trendGroup:   signal.level?.trendGroup ?? null,
+      rawTargetPct: Math.round(signal.decision.rawTargetRatio * 1000) / 10,
+      clampedBy:    signal.decision.clampedBy,
     }, todayStr(), user?.label ?? user?.code ?? 'system', recordRegimeHistory)
   }, [inputSource, signal, company, currency, params, canEdit, user, treasuryReady, recordRegimeHistory])
 

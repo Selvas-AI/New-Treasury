@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   REGIME_SNAPSHOT_KEYS, readRegimeSnapshot, syncRegimeSnapshot, pendingDays,
+  type RegimeSnapshotHistoryEntry,
 } from './fxRegimeSnapshot'
 
 /** policy_params 를 흉내내는 메모리 스토어 */
@@ -88,6 +89,37 @@ describe('fxRegimeSnapshot', () => {
       '2026-08-14', 'tester')
 
     expect(written).toBe(0)
+  })
+
+  it('판정 근거를 이력에 그대로 전달한다', async () => {
+    const store = makeStore({})
+    const entries: RegimeSnapshotHistoryEntry[] = []
+    await syncRegimeSnapshot(store, CUR,
+      {
+        targetPct: 26.7, currentPct: 29.8, suggestKRW: 2_760_000_000, asOf: '2026-09-29',
+        regimeCode: '5-B', levelGrade: 'H', trendGroup: 'down',
+        rawTargetPct: 15, clampedBy: 'policy_band',
+      },
+      '2026-09-29', 'tester', async e => { entries.push(e) })
+
+    expect(entries).toHaveLength(1)
+    expect(entries[0]).toMatchObject({
+      regimeCode: '5-B', levelGrade: 'H', trendGroup: 'down',
+      rawTargetPct: 15, clampedBy: 'policy_band',
+      targetPct: 26.7, sinceDate: '2026-09-29',
+    })
+  })
+
+  it('근거를 넘기지 않으면 null 로 기록한다 (앵커 미설정·구 호출부)', async () => {
+    const store = makeStore({})
+    const entries: RegimeSnapshotHistoryEntry[] = []
+    await syncRegimeSnapshot(store, CUR,
+      { targetPct: 30, currentPct: 29, suggestKRW: 0, asOf: '2026-09-29' },
+      '2026-09-29', 'tester', async e => { entries.push(e) })
+
+    expect(entries[0].regimeCode).toBeNull()
+    expect(entries[0].levelGrade).toBeNull()
+    expect(entries[0].clampedBy).toBeNull()
   })
 
   it('pendingDays — 권고가 없거나 기산점이 없으면 null', () => {

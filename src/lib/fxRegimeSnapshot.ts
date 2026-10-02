@@ -69,8 +69,31 @@ interface SnapshotWriter extends SnapshotReader {
   set: (key: string, value: number | null, text: string | null, updatedBy: string) => Promise<string | null>
 }
 
+/**
+ * 판정 근거 — "왜 이 목표가 나왔는가" (2026-10-02 추가).
+ *
+ * 값만 남기면 목표가 26.7% → 28.3% 로 움직인 이유를 아무도 설명할 수 없다.
+ * 엔진은 이미 전부 갖고 있으므로(evaluateRegime 의 regime / level / decision)
+ * 스냅샷에 함께 실어 이력에서 바로 읽히게 한다.
+ *
+ * ⚠ 전부 선택 항목이다 — 앵커 미설정이면 수준(level)이 없고,
+ *   DB 마이그레이션 전이면 호출부가 이 필드들을 빼고 저장한다.
+ */
+export interface RegimeSnapshotReason {
+  /** 국면 코드 (예: '5-B') */
+  regimeCode?: string | null
+  /** 수준 등급 VH/H/N/L/VL. 앵커 미설정이면 null */
+  levelGrade?: string | null
+  /** 추세 그룹 up/side/down */
+  trendGroup?: string | null
+  /** 제약 적용 전 매트릭스 원안 (%) */
+  rawTargetPct?: number | null
+  /** none|buffer|policy_band|exposure_cap|time_force */
+  clampedBy?: string | null
+}
+
 /** 히스토리 1건 — 실제 저장 방식(DB 테이블 등)은 호출부가 주입한다(테스트 가능성 유지). */
-export interface RegimeSnapshotHistoryEntry {
+export interface RegimeSnapshotHistoryEntry extends RegimeSnapshotReason {
   currency: string
   targetPct: number | null
   currentPct: number | null
@@ -98,7 +121,7 @@ export interface RegimeSnapshotHistoryEntry {
 export async function syncRegimeSnapshot(
   params: SnapshotWriter,
   currency: string,
-  next: { targetPct: number | null; currentPct: number | null; suggestKRW: number; asOf: string },
+  next: { targetPct: number | null; currentPct: number | null; suggestKRW: number; asOf: string } & RegimeSnapshotReason,
   today: string,
   updatedBy: string,
   recordHistory?: (entry: RegimeSnapshotHistoryEntry) => Promise<void>,
@@ -142,6 +165,13 @@ export async function syncRegimeSnapshot(
     await recordHistory({
       currency, targetPct: next.targetPct, currentPct: next.currentPct,
       suggestKRW: suggest, sinceDate: nextSince, snapshotDate: next.asOf, capturedBy: updatedBy,
+      // 판정 근거 — policy_params 스냅샷에는 넣지 않는다(이력 전용).
+      // 대시보드·자금일보는 "얼마를 팔아야 하나"만 알면 되고, 근거는 되돌아볼 때 필요하다.
+      regimeCode: next.regimeCode ?? null,
+      levelGrade: next.levelGrade ?? null,
+      trendGroup: next.trendGroup ?? null,
+      rawTargetPct: next.rawTargetPct ?? null,
+      clampedBy: next.clampedBy ?? null,
     })
   }
 

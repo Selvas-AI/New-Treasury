@@ -11,6 +11,13 @@ export interface RegimeSnapshotHistoryRow {
   since_date: string | null
   captured_by: string | null
   captured_at: string
+  // ── 판정 근거 (fx_regime_snapshot_history_reason.sql) ──
+  // ⚠ 마이그레이션 전 또는 그 이전에 쌓인 행은 전부 null 이다 — 화면에서 '—' 로 표시한다.
+  regime_code?: string | null
+  level_grade?: string | null
+  trend_group?: string | null
+  raw_target_pct?: number | null
+  clamped_by?: string | null
 }
 
 /**
