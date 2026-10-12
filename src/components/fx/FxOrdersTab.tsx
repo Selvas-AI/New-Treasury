@@ -92,6 +92,31 @@ function FillDetailRows({ trade, fetchTradeDetail, refreshKey, canReverse, onReq
  * 이 탭은 감사·오디트 목적의 자유 필터(법인/기간/통화/상태 전체)를 그대로 유지한다 —
  * 원장 탭·로트 설정 탭과 달리 선택된 법인+통화에 국한하지 않는다.
  */
+/** 헤더 툴팁 — 비슷한 이름의 환율 열이 나란히 있어 설명이 없으면 반드시 오독된다. */
+const COL_HINT: Record<string, string | undefined> = {
+  '매도발의일(집행일)': '매각 지시를 등록한 날(집행 기준일). 실제 체결일은 행을 펼쳐 체결 내역에서 확인합니다.',
+  '취득환율': '발의 시점에 FIFO 로 소진될 로트의 가중평균 장부환율(추정). 체결이 있으면 아래에 실제값을 함께 표시합니다.',
+  '매도예정환율': '발의 시점의 매도 예정 환율(시장환율 또는 입력값)입니다. 실제 체결가는 오른쪽 "실체결환율" 입니다.',
+  '예상 환차손익': '(매도예정환율 − 취득환율) × 수량. 체결 전 추정치입니다.',
+  '실체결환율': '실제 체결된 금액의 가중평균 환율입니다.',
+  '확정 환차손익': '서버가 FIFO 로트별 실제 장부환율로 계산한 확정 손익입니다.',
+}
+
+/**
+ * 체결분의 **실제** 취득환율(가중평균) 역산.
+ *
+ * 확정 손익은 서버가 로트별 장부환율로 계산하므로
+ *   completed_pnl = completed_rate × 체결수량 − Σ(로트 장부환율 × 수량)
+ * → 실제 가중평균 취득환율 = completed_rate − completed_pnl ÷ 체결수량.
+ * 발의 시 저장한 acq_rate(추정)와 다를 수 있어 **나란히 보여준다**.
+ * ⚠ acq_rate 자체는 고치지 않는다 — 그 시점의 판단 근거로 남겨야 감사 추적이 된다.
+ */
+function actualAcqRate(r: { completed_rate: number | null; completed_pnl: number | null; filled_amount?: number | null }): number | null {
+  const filled = r.filled_amount ?? 0
+  if (!filled || r.completed_rate == null || r.completed_pnl == null) return null
+  return r.completed_rate - r.completed_pnl / filled
+}
+
 export function FxOrdersTab({ company, currency, pendingOrders, initialOrderId, onChanged }: {
   company: Company
   currency: string
@@ -437,9 +462,11 @@ export function FxOrdersTab({ company, currency, pendingOrders, initialOrderId, 
                   {/* ⚠ trade_date 는 실제 체결일이 아니라 **발의(지시)일**이다.
                       실제 체결일은 체결(fill)마다 따로 있어 행을 펼쳐야 보인다 —
                       "집행일"이라고만 쓰면 체결일로 오독된다(2026-08-20 리포트). */}
-                  {['', '매도발의일(집행일)', '법인', '구분', '통화', '외화금액', '취득환율', '매도환율', '예상 환차손익',
+                  {/* ⚠ '매도환율' 은 **발의 시점의 매도 예정가**다. 바로 옆 '실체결환율'(completed_rate)
+                      과 이름이 비슷해 실제 체결가로 오독됐다(2026-10-12 리포트) → '매도예정환율'로 명시. */}
+                  {['', '매도발의일(집행일)', '법인', '구분', '통화', '외화금액', '취득환율', '매도예정환율', '예상 환차손익',
                     '실체결환율', '확정 환차손익', '잔여', '상태', '발의자', ''].map(h => (
-                    <th key={h} title={h === '매도발의일(집행일)' ? '매각 지시를 등록한 날(집행 기준일). 실제 체결일은 행을 펼쳐 체결 내역에서 확인합니다.' : undefined}
+                    <th key={h} title={COL_HINT[h]}
                       className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500 dark:text-sky-300 whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -477,6 +504,16 @@ export function FxOrdersTab({ company, currency, pendingOrders, initialOrderId, 
                         </td>
                         <td className="px-3 py-2.5 tabular-nums text-right text-gray-600 dark:text-slate-400 whitespace-nowrap">
                           {r.acq_rate != null ? fmtNumber(r.acq_rate, 2) : <span className="text-gray-300 dark:text-slate-600">—</span>}
+                          {(() => {
+                            const actual = actualAcqRate(r)
+                            if (actual == null || r.acq_rate == null || Math.abs(actual - r.acq_rate) < 0.005) return null
+                            return (
+                              <span className="block text-[10px] text-sky-600 dark:text-sky-400"
+                                title="체결된 FIFO 로트의 실제 가중평균 장부환율 — 확정 환차손익은 이 값 기준입니다.">
+                                실제 {fmtNumber(actual, 2)}
+                              </span>
+                            )
+                          })()}
                         </td>
                         <td className="px-3 py-2.5 tabular-nums text-right text-gray-600 dark:text-slate-400 whitespace-nowrap">
                           {r.trade_rate != null ? fmtNumber(r.trade_rate, 2) : <span className="text-gray-300 dark:text-slate-600">—</span>}

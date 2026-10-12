@@ -35,6 +35,7 @@ import { useFxLedgerReconciliation } from '../hooks/useFxLedgerReconciliation'
 import { useFxLedgerDayActivity } from '../hooks/useFxLedgerDayActivity'
 import { outflowTxnLabel } from '../lib/fxTxnType'
 import { bizDaysBetween } from '../lib/bizDay'
+import FxRateNotice from '../components/common/FxRateNotice'
 import { fmtKRW, fmtNumber } from '../lib/format'
 import { notifyApprovalTurn } from '../lib/approvalNotify'
 import type { Company, DailyRecord, FxCode } from '../types'
@@ -1239,6 +1240,7 @@ export default function DailyReportPage() {
       )}
 
       {/* ── 정책 이행 통제(세션20차 Phase 1/3): 미이행 의결사항·매각 지시 확인 배너 ─────── */}
+      <FxRateNotice />
       <PendingDecisionsBanner company={resolvedCompany} />
       <PendingRegimeBanner company={resolvedCompany} />
       <PendingSellOrdersBanner company={resolvedCompany} />

@@ -3,6 +3,8 @@ import { fmtKRW, fmtNumber } from '../../lib/format'
 import { addBizDays, todayStr } from '../../lib/bizDay'
 import { useFxLots } from '../../hooks/useFxLots'
 import { useFx } from '../../hooks/useFx'
+import { usePolicyParams } from '../../hooks/usePolicyParams'
+import { previewFifoConsumption, parseAccountPriority } from '../../lib/fxLots'
 import { ORDER_TYPE_LABEL, type FxOrderType } from '../../lib/fxOrderType'
 import type { Company, FxCode } from '../../types'
 
@@ -52,7 +54,31 @@ export default function FxOrderProposeModal({ company, defaultCurrency, onSubmit
   const amtNum = Number(amount) || 0
   const rateNum = Number(sellRate) || marketRate
   const shortfall = Math.max(0, amtNum - availableAmount)
-  const pnl = amtNum && rateNum && bookRate ? (rateNum - bookRate) * amtNum : null
+
+  // ⭐ 취득환율은 **이번에 실제로 소진될 로트**의 가중평균이어야 한다.
+  //   과거엔 보유 전체의 평균(bookRate)을 저장해, 정기예금처럼 이번에 팔지 않는 물량까지
+  //   섞인 값이 들어갔다. 그 결과 발의 시 '취득환율 1,386.20' 과 체결 후 확정 손익의
+  //   기준(FIFO 로트 실제 장부환율 ≈1,426) 이 어긋나 "어떤 데이터인가" 문의가 나왔다
+  //   (2026-10-12 리포트). 서버 RPC 와 같은 규칙의 순수함수로 미리 계산해 맞춘다.
+  // ⚠ 소진 순서(계좌유형 우선순위)는 정책이 정한다 — 서버와 같은 값을 읽어야 일치한다.
+  const params = usePolicyParams(company)
+  const accountPriorityText = params.getText('fx_fifo_account_priority')
+  const accountPriority = useMemo(() => parseAccountPriority(accountPriorityText), [accountPriorityText])
+  const fifoAcq = useMemo(() => {
+    if (!amtNum || lots.length === 0) return null
+    const rows = previewFifoConsumption(lots, amtNum, rateNum || 0, orderDate, accountPriority)
+    const covered = rows.reduce((sum, r) => sum + r.amount, 0)
+    if (covered <= 0) return null
+    return {
+      rate: rows.reduce((sum, r) => sum + r.amount * r.acqRate, 0) / covered,
+      covered,
+      lots: rows.length,
+    }
+  }, [lots, amtNum, rateNum, orderDate, accountPriority])
+
+  // 예상 환차손익도 같은 기준(이번 소진분)으로 계산한다 — 체결 후 확정값과 맞춰지도록.
+  const acqForPnl = fifoAcq?.rate ?? bookRate ?? null
+  const pnl = amtNum && rateNum && acqForPnl ? (rateNum - acqForPnl) * amtNum : null
 
   const dueBeforeOrder = dueDate < orderDate
   const canSubmit = amtNum > 0 && !dueBeforeOrder && !saving
@@ -70,7 +96,7 @@ export default function FxOrderProposeModal({ company, defaultCurrency, onSubmit
     if (!canSubmit) return
     setSaving(true); setErr(null)
     const rate = rateNum > 0 ? rateNum : null
-    const acq = bookRate ?? null
+    const acq = fifoAcq?.rate ?? bookRate ?? null
     const error = await onSubmit({
       company,
       trade_date: orderDate,
@@ -168,11 +194,16 @@ export default function FxOrderProposeModal({ company, defaultCurrency, onSubmit
               <div className="mt-1 space-y-0.5 tabular-nums text-gray-600 dark:text-slate-300">
                 <p>환전 가능 재고: {fmtNumber(availableAmount, currency === 'JPY' ? 0 : 2)} {currency}
                   <span className="ml-1 text-gray-400">(정기예금 만기 전 제외)</span></p>
-                <p>잔존 장부환율: {bookRate ? `${fmtNumber(bookRate, 2)}원` : '—'}</p>
+                <p>보유 전체 평균 장부환율: {bookRate ? `${fmtNumber(bookRate, 2)}원` : '—'}
+                  <span className="ml-1 text-gray-400">(참고 — 정기예금 등 이번에 팔지 않는 물량 포함)</span></p>
+                <p className="font-semibold text-gray-800 dark:text-slate-100">
+                  이번 매각분 취득환율: {fifoAcq ? `${fmtNumber(fifoAcq.rate, 2)}원` : '—'}
+                  {fifoAcq && <span className="ml-1 font-normal text-gray-400">(FIFO 로트 {fifoAcq.lots}건 가중평균 · 이 값이 저장됩니다)</span>}
+                </p>
                 {pnl != null && (
                   <p className={pnl >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}>
                     예상 환차{pnl >= 0 ? '익' : '손'}: {pnl >= 0 ? '▲' : '▼'} {fmtKRW(Math.abs(pnl))}
-                    <span className="ml-1 text-gray-400">(장부환율 기준 · 실제는 체결 시 확정)</span>
+                    <span className="ml-1 text-gray-400">(이번 소진분 취득환율 기준 · 실제는 체결 시 확정)</span>
                   </p>
                 )}
                 {shortfall > 0 && (

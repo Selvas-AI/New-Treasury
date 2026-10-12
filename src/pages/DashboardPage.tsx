@@ -16,6 +16,7 @@ import { bizDaysBetween, todayStr } from '../lib/bizDay'
 import { makeIssueKey } from '../hooks/useIssues'
 
 import { fmtKRW } from '../lib/format'
+import FxRateNotice from '../components/common/FxRateNotice'
 import KpiCard from '../components/dashboard/KpiCard'
 import WaterfallCard from '../components/dashboard/WaterfallCard'
 import AssetCompositionCard from '../components/dashboard/AssetCompositionCard'
@@ -248,6 +249,9 @@ export default function DashboardPage() {
           </button>
         </div>
       </div>
+
+      {/* 환율 환산 상태 — 외화가 합계에서 빠지거나 옛 환율로 계산될 때만 표시 */}
+      <FxRateNotice />
 
       {/* KPI 행 — 전체 너비: 불가용 자산 카드 우측이 페이지 끝에 닿음 */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
