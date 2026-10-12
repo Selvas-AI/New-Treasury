@@ -36,6 +36,75 @@ function pnlColor(v: number | null) {
 }
 
 // 체결 내역 펼쳐보기 — 체결(fill)마다 소진된 FIFO 로트 상세(장부환율)까지 표시
+/**
+ * 체결 합계 — 상단 행의 환율 두 개가 **어떻게 만들어진 값인지** 그 자리에서 보여준다.
+ *
+ * 2026-10-12 리포트: "실체결환율이 처분환율의 가중평균이 맞느냐"는 질문이 나왔다.
+ * 맞지만 화면 어디에도 그 정의가 없어 매번 확인이 필요했다 → 식과 분모를 함께 표시한다.
+ *
+ * ⚠ 두 환율의 분모는 **같다**(총 체결수량). 소진 수량 합계는 체결 수량 합계와 같아야
+ *   정상이며, 다르면 원장 소진이 누락된 것이므로 경고를 띄운다.
+ */
+function FillSummary({ currency, fills, consumptionsByFillId }: {
+  currency: string
+  fills: FxTradeFill[]
+  consumptionsByFillId: Record<string, FxLotConsumption[]>
+}) {
+  const dp = currency === 'JPY' ? 0 : 2
+  const filled = fills.reduce((s, f) => s + f.amount_fx, 0)
+  const saleSum = fills.reduce((s, f) => s + f.amount_fx * f.completed_rate, 0)
+  const cons = fills.flatMap(f => consumptionsByFillId[f.id] ?? [])
+  const consAmt = cons.reduce((s, c) => s + c.amount, 0)
+  const bookSum = cons.reduce((s, c) => s + c.amount * c.acq_rate, 0)
+  const pnl = fills.reduce((s, f) => s + f.realized_pnl, 0)
+  if (!filled) return null
+
+  const saleAvg = saleSum / filled
+  const bookAvg = consAmt > 0 ? bookSum / consAmt : null
+  const mismatch = Math.abs(consAmt - filled) > 0.01
+
+  return (
+    <div className="rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-xs dark:border-slate-700 dark:bg-slate-800">
+      <p className="font-semibold text-gray-700 dark:text-slate-200">🧮 체결 합계 — 상단 행 수치의 산출 근거</p>
+      <table className="mt-1.5 w-full tabular-nums">
+        <tbody className="text-gray-600 dark:text-slate-300">
+          <tr>
+            <td className="py-0.5 pr-3">총 체결수량</td>
+            <td className="py-0.5 pr-3 text-right font-medium">{fmtNumber(filled, dp)} {currency}</td>
+            <td className="py-0.5 text-gray-400">체결 {fills.length}건 합계</td>
+          </tr>
+          <tr>
+            <td className="py-0.5 pr-3">실체결환율</td>
+            <td className="py-0.5 pr-3 text-right font-medium">{fmtNumber(saleAvg, 2)}</td>
+            <td className="py-0.5 text-gray-400">Σ(체결수량 × 처분환율) ÷ 총 체결수량</td>
+          </tr>
+          <tr>
+            <td className="py-0.5 pr-3">실제 취득환율</td>
+            <td className="py-0.5 pr-3 text-right font-medium">{bookAvg != null ? fmtNumber(bookAvg, 2) : '—'}</td>
+            <td className="py-0.5 text-gray-400">Σ(소진수량 × 로트 장부환율) ÷ 총 소진수량</td>
+          </tr>
+          <tr>
+            <td className="py-0.5 pr-3">확정 환차손익</td>
+            <td className={`py-0.5 pr-3 text-right font-semibold ${pnlColor(pnl)}`}>
+              {pnl >= 0 ? '▲' : '▼'} {fmtKRW(Math.abs(pnl))}
+            </td>
+            <td className="py-0.5 text-gray-400">
+              Σ 로트별 (처분환율 − 장부환율) × 소진수량
+              {bookAvg != null && ` = (${fmtNumber(saleAvg, 2)} − ${fmtNumber(bookAvg, 2)}) × ${fmtNumber(filled, dp)}`}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      {mismatch && (
+        <p className="mt-1 text-amber-600 dark:text-amber-400">
+          ⚠ 소진 수량 합계({fmtNumber(consAmt, dp)})가 체결 수량({fmtNumber(filled, dp)})과 다릅니다 —
+          원장 소진이 누락된 체결이 있는지 확인하세요.
+        </p>
+      )}
+    </div>
+  )
+}
+
 function FillDetailRows({ trade, fetchTradeDetail, refreshKey, canReverse, onRequestReverse }: {
   trade: FxTradeRecord
   fetchTradeDetail: (tradeId: string) => Promise<{ fills: FxTradeFill[]; consumptionsByFillId: Record<string, FxLotConsumption[]> }>
@@ -46,6 +115,22 @@ function FillDetailRows({ trade, fetchTradeDetail, refreshKey, canReverse, onReq
   const [loading, setLoading] = useState(true)
   const [fills, setFills] = useState<FxTradeFill[]>([])
   const [consumptionsByFillId, setConsumptionsByFillId] = useState<Record<string, FxLotConsumption[]>>({})
+
+  /**
+   * 로트 번호를 **거래 전체 기준**으로 고정한다.
+   * 과거엔 체결 카드마다 `로트 {j+1}` 로 다시 매겨, 같은 로트가 2차에서는 '로트 2',
+   * 3차에서는 '로트 1' 로 보였다(2026-10-12 리포트 캡처에서 실제로 그렇게 나왔다).
+   * lot_id 가 처음 등장한 순서로 번호를 주면 체결을 가로질러 같은 번호가 유지된다.
+   */
+  const lotLabelOf = useMemo(() => {
+    const order = new Map<string, number>()
+    for (const f of fills) {
+      for (const c of consumptionsByFillId[f.id] ?? []) {
+        if (!order.has(c.lot_id)) order.set(c.lot_id, order.size + 1)
+      }
+    }
+    return (lotId: string) => `로트 ${order.get(lotId) ?? '?'}`
+  }, [fills, consumptionsByFillId])
 
   useEffect(() => {
     let cancelled = false
@@ -73,8 +158,10 @@ function FillDetailRows({ trade, fetchTradeDetail, refreshKey, canReverse, onReq
             {fills.map((f, i) => (
               <FillConsumptionCard key={f.id} fill={f} index={i}
                 consumptions={consumptionsByFillId[f.id] ?? []}
+                lotLabelOf={lotLabelOf}
                 canReverse={canReverse} onRequestReverse={onRequestReverse} />
             ))}
+            <FillSummary currency={trade.currency} fills={fills} consumptionsByFillId={consumptionsByFillId} />
           </div>
         )}
       </td>

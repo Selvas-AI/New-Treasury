@@ -12,12 +12,18 @@ function pnlColor(v: number | null) {
  * 외화 원장 통합 탭(원장/매각 지시 관리)이 공유하는 프레젠테이션 컴포넌트.
  * 세션26차 3~4일차에 FxTradeHistoryPage 안에서만 쓰이던 것을 분리했다 — 중복 방지.
  */
-export function FillConsumptionCard({ fill, index, label, consumptions, canReverse, onRequestReverse }: {
+export function FillConsumptionCard({ fill, index, label, consumptions, lotLabelOf, canReverse, onRequestReverse }: {
   fill: FxTradeFill
   index: number
   /** 기본 라벨("N차 체결") 대신 표시할 텍스트 — 원장 탭처럼 거래 그룹핑 없이 단독 표시할 때 사용 */
   label?: string
   consumptions: FxLotConsumption[]
+  /**
+   * 로트 번호를 거래 전체에서 일관되게 매기기 위한 라벨 함수.
+   * ⚠ 없으면 카드 안 순번(로트 1,2…)으로 떨어지는데, 그러면 **같은 로트가 체결마다 다른
+   *   번호로 보인다**(2026-10-12 리포트). 거래 단위로 묶어 보여줄 때는 반드시 넘길 것.
+   */
+  lotLabelOf?: (lotId: string) => string
   canReverse: boolean
   onRequestReverse: (fill: FxTradeFill) => void
 }) {
@@ -59,7 +65,9 @@ export function FillConsumptionCard({ fill, index, label, consumptions, canRever
           <tbody className="divide-y divide-gray-100 dark:divide-slate-700">
             {consumptions.map((c, j) => (
               <tr key={c.id}>
-                <td className="px-3 py-1.5 text-gray-500 dark:text-slate-400">로트 {j + 1}</td>
+                <td className="px-3 py-1.5 text-gray-500 dark:text-slate-400" title={`로트 ID ${c.lot_id}`}>
+                  {lotLabelOf ? lotLabelOf(c.lot_id) : `로트 ${j + 1}`}
+                </td>
                 <td className="px-3 py-1.5 text-right tabular-nums text-gray-700 dark:text-slate-300">
                   {fmtNumber(c.amount, fill.currency === 'JPY' ? 0 : 2)} {fill.currency}
                 </td>
