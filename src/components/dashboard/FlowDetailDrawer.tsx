@@ -450,6 +450,7 @@ function UnavailableDetail({ kpi, latestInvests, equities }: {
   const unavailInvests = latestInvests.filter(i => i.product !== '국채' && i.available === '불가용')
   const unavailBonds   = latestInvests.filter(i => i.product === '국채'  && i.available === '불가용')
   const unavailEquity  = equities.filter(e => e.available === '불가용')
+  const unavailEquityKrw = unavailEquity.reduce((sum, e) => sum + (e.total_value || 0), 0)
 
   const sections: { label: string; rows: { name: string; value: number; sub?: string }[] }[] = []
 
@@ -514,6 +515,16 @@ function UnavailableDetail({ kpi, latestInvests, equities }: {
         <span className="text-xs font-semibold text-gray-600 dark:text-slate-100">합계</span>
         <span className="text-sm font-bold text-amber-600 dark:text-amber-400 tabular-nums">{fmtKRW(kpi.unavailableAssets)}</span>
       </div>
+
+      {/* ⭐ 화면 간 정의 차이를 **먼저** 알린다 — 다른 화면에서 다른 숫자를 보고
+          "틀렸나?" 하고 멈추는 일이 없게(2026-10-22 리포트). */}
+      {unavailEquity.length > 0 && (
+        <p className="rounded bg-gray-50 px-2 py-1.5 text-[10px] leading-relaxed text-gray-500 dark:bg-slate-800/60 dark:text-slate-400">
+          <b className="text-gray-600 dark:text-slate-300">다른 화면과 비교하실 때</b> — 자금흐름 분석·자금일보는
+          운전·운용만 집계해 <b className="tabular-nums">{fmtKRW(unavailEquityKrw)}</b>(지분)을 빼고 보여줍니다.
+          거기서는 불가용이 <b className="tabular-nums">{fmtKRW(kpi.unavailableAssets - unavailEquityKrw)}</b>으로 표시됩니다.
+        </p>
+      )}
     </div>
   )
 }

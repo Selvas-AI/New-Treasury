@@ -86,7 +86,8 @@ export function useFlowBridge(
   const [dailies, setDailies] = useState<DailyRecord[]>([])
   const [openingDaily, setOpeningDaily] = useState<DailyRecord | null>(null)
   const [invests, setInvests] = useState<InvestmentRecord[]>([])
-  const [equities, setEquities] = useState<EquityRecord[]>([])
+  /** 지분 **전 이력** — 기준일별 as-of 를 뽑아야 하므로 최신본만 들고 있으면 안 된다 */
+  const [equityRows, setEquityRows] = useState<EquityRecord[]>([])
   const [loans, setLoans]     = useState<LoanRecord[]>([])
   // 감사 로그 — 연장 등으로 덮어써진 과거 상태를 복원하는 데 쓴다
   const [auditLogs, setAuditLogs] = useState<AuditLogRow[]>([])
@@ -184,7 +185,7 @@ export function useFlowBridge(
       setDailies(inRange.data ?? [])
       setOpeningDaily((before.data ?? [])[0] ?? null)
       setInvests((invRes.data ?? []).map(investFromDb))
-      setEquities(getLatestEquities((eqRes.data ?? []) as unknown as EquityRecord[]))
+      setEquityRows((eqRes.data ?? []) as unknown as EquityRecord[])
       setLoans(loanRes.data ?? [])
       setAuditLogs(auditRes.error ? [] : (auditRes.data ?? []))
       setReports(repRows)
@@ -304,6 +305,18 @@ export function useFlowBridge(
     const openSnap  = investsAsOf(openingDate)
     const closeSnap = investsAsOf(closingDaily.date)
 
+    // 지분 as-of — 그 기준일 이하 종목별 최신 1건.
+    // ⚠ 합계에는 넣지 않는다(자금 변동 이력·자금일보와 같은 정의를 지킨다).
+    //   통합 상황판은 지분을 포함하므로, **차이를 카드에서 바로 설명하려고** 가져온다.
+    const equitiesOn = (d: string) => getLatestEquities(equityRows.filter(e => (e.date ?? '') <= d))
+    const eqOpen  = equitiesOn(openingDate)
+    const eqClose = equitiesOn(closingDaily.date)
+    const eqSplit = (list: EquityRecord[]) => ({
+      availKrw:  list.filter(e => e.available === '가용').reduce((s, e) => s + (e.total_value || 0), 0),
+      lockedKrw: list.filter(e => e.available !== '가용').reduce((s, e) => s + (e.total_value || 0), 0),
+      count:     list.filter(e => e.available !== '가용').length,
+    })
+
     const bdOpen  = investBreakdownOn(openSnap.records,  openingDate,       fx.toKRW)
     const bdClose = investBreakdownOn(closeSnap.records, closingDaily.date, fx.toKRW)
 
@@ -313,11 +326,13 @@ export function useFlowBridge(
         date: openingDate, breakdown: bdOpen,
         scope: fundScopeOf(opening.operatingKrw, bdOpen),
         items: investItemsOn(openSnap.records, openingDate, fx.toKRW, openSnap.restoredIds),
+        equity: eqSplit(eqOpen),
       },
       scopeClosing: {
         date: closingDaily.date, breakdown: bdClose,
         scope: fundScopeOf(closing.operatingKrw, bdClose),
         items: investItemsOn(closeSnap.records, closingDaily.date, fx.toKRW, closeSnap.restoredIds),
+        equity: eqSplit(eqClose),
       },
       ledger: buildDailyLedger({ dailies, openingDaily, invests, toKRW: fx.toKRW, itemsByDate }),
       // ⭐ 교차검증 — 같은 기말을 세 경로로 계산해 어긋나는지 본다.
@@ -328,7 +343,7 @@ export function useFlowBridge(
         operatingKrw: closing.operatingKrw,
         date: closingDaily.date,
         toKRW: fx.toKRW,
-        equities,
+        equities: eqClose,
         // 기말이 가장 최근 운전자금 입력일일 때만 '현재 시점' 비교가 성립한다
         compareActiveNow: closingDaily.date === dailies[dailies.length - 1]?.date,
       }),
@@ -336,7 +351,7 @@ export function useFlowBridge(
       excludedClosing: excludedBalanceOn(invests, closingDaily.date, fx.toKRW),
       investFlows: flows,
     }
-  }, [company, dailies, openingDaily, invests, equities, loans, auditLogs, reports, items, fx, fxRates])
+  }, [company, dailies, openingDaily, invests, equityRows, loans, auditLogs, reports, items, fx, fxRates])
 
   return {
     loading, error, bridge, rows, ledger, fxEffect,

@@ -26,6 +26,12 @@ export interface FundScopeSnapshot {
   scope: FundScope
   breakdown: InvestBreakdown
   items: InvestItem[]
+  /**
+   * 지분·장기투자 — **합계에 넣지 않는다**(이 화면과 자금일보는 운전·운용만 본다).
+   * 통합 상황판은 지분을 가용자금·불가용 자산에 포함하므로, 그 차이를 카드에서
+   * 바로 설명하기 위해 금액만 들고 있는다(2026-10-22 리포트).
+   */
+  equity?: { availKrw: number; lockedKrw: number; count: number }
 }
 
 export default function FundScopeCards({ opening, closing }: {
@@ -61,7 +67,7 @@ export default function FundScopeCards({ opening, closing }: {
 }
 
 function BalancePanel({ title, snap }: { title: string; snap: FundScopeSnapshot }) {
-  const { scope, breakdown, items, date } = snap
+  const { scope, breakdown, items, date, equity } = snap
   const availItems  = items.filter(i => i.available === '가용')
   const lockedItems = items.filter(i => i.available !== '가용')
 
@@ -88,6 +94,28 @@ function BalancePanel({ title, snap }: { title: string; snap: FundScopeSnapshot 
         items={lockedItems} />
 
       <Total label="합계" value={scope.totalKrw} />
+
+      {/* ⭐ 통합 상황판에서 온 사람이 "왜 불가용이 다르지?" 하고 멈추지 않게,
+          펼치지 않아도 보이는 자리에 두 관점을 나란히 둔다.
+          ⚠ 합계(scope.totalKrw)에는 절대 더하지 않는다 — 자금 변동 이력·자금일보와의
+            대조가 깨진다. 여기서는 '참고' 로만 보여준다. */}
+      {equity && (equity.availKrw > 0 || equity.lockedKrw > 0) && (
+        <div className="mt-2 border-t border-dashed border-gray-200 pt-2 dark:border-slate-700">
+          <div className="flex items-baseline justify-between text-[11px] text-gray-500 dark:text-slate-400">
+            <span>지분·장기투자 <span className="text-gray-400">(합계 미포함)</span></span>
+            <span className="tabular-nums">{fmtKRW(equity.availKrw + equity.lockedKrw)}</span>
+          </div>
+          <div className="mt-1 rounded bg-gray-50 px-2 py-1.5 text-[10.5px] leading-relaxed text-gray-500 dark:bg-slate-800/60 dark:text-slate-400">
+            <span className="font-medium text-gray-600 dark:text-slate-300">통합 상황판 기준</span>
+            <span className="ml-1.5 tabular-nums">
+              가용 {fmtKRW(scope.availableKrw + equity.availKrw)} · 불가용 {fmtKRW(scope.lockedKrw + equity.lockedKrw)}
+            </span>
+            <span className="block text-gray-400">
+              지분을 포함한 값입니다. 이 화면은 운전·운용만 봅니다(자금 변동 이력과 같은 기준).
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
