@@ -21,7 +21,9 @@
 with b as (
   select *,
          coalesce(bond_ticker, bond_name, bank) as dedup_key,
-         coalesce(price_date, start_date)       as as_of
+         -- ⚠ price_date 컬럼은 없다. 국채 기준일은 start_date 하나로 저장되고,
+         --   코드가 이를 priceDate 로 노출할 뿐이다(useInvestments.fromDb).
+         start_date                             as as_of
   from public.investments
   where company = '메디아나' and product = '국채'
 ),
