@@ -6,8 +6,9 @@ import { useEquities } from './useEquities'
 import { useIssues, makeIssueKey } from './useIssues'
 import { useFx } from './useFx'
 import { calcReturn, calcBondValue, calcDday } from '../lib/format'
-import { opCashKRW, toKRWAmount, bondValueOf } from '../lib/treasuryCalc'
-import { isTodayBusinessDay } from '../lib/bizDay'
+import { opCashKRW, toKRWAmount } from '../lib/treasuryCalc'
+import { isTodayBusinessDay, todayStr } from '../lib/bizDay'
+import { fundBalanceOf } from '../lib/balanceSheet'
 
 export interface BondSummary {
   name:             string
@@ -82,23 +83,17 @@ export function useDashboard(companyOverride?: string) {
     // 운전자금 (SSOT: 저장값 fx_krw 기준)
     const operatingCash = opCashKRW(latestDaily)
 
-    // 운용자금 (외화 포함 KRW 환산)
-    const investAvail = latestInvests
-      .filter(i => i.product !== '국채' && i.available === '가용')
-      .reduce((s, i) => s + toKRWAmt(i.amount || 0, i.currency || 'KRW'), 0)
-
-    const investUnavail = latestInvests
-      .filter(i => i.product !== '국채' && i.available === '불가용')
-      .reduce((s, i) => s + toKRWAmt(i.amount || 0, i.currency || 'KRW'), 0)
-
-    // 국채 (SSOT: bondValueOf)
-    const bondAvail = latestInvests
-      .filter(i => i.product === '국채' && i.available === '가용')
-      .reduce((s, i) => s + bondValueOf(i), 0)
-
-    const bondUnavail = latestInvests
-      .filter(i => i.product === '국채' && i.available === '불가용')
-      .reduce((s, i) => s + bondValueOf(i), 0)
+    // ⭐ 운용자금·국채 구성 — SSOT 위임(balanceSheet.fundBalanceOf).
+    //   화면·훅에서 직접 합산하지 않는다. 과거엔 대시보드·자금일보·자금흐름 분석이
+    //   각자 더해 같은 날 잔액이 전부 달랐다(2026-10-22 실사고).
+    const balance = fundBalanceOf({
+      investments: invest.data, operatingKrw: operatingCash,
+      date: todayStr(), rule: 'active-now', toKRW: fx.toKRW,
+    })
+    const investAvail   = balance.investAvailKrw
+    const investUnavail = balance.investLockedKrw
+    const bondAvail     = balance.bondAvailKrw
+    const bondUnavail   = balance.bondLockedKrw
 
     // 차입금 (외화는 KRW 환산)
     const totalLoan = loans.data.reduce((s, l) => s + toKRWAmt(l.amount || 0, l.currency || 'KRW'), 0)
@@ -134,7 +129,7 @@ export function useDashboard(companyOverride?: string) {
       investFxKrw,
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [latestDaily, latestInvests, loans.data, equities.latest, fx.rates])
+  }, [latestDaily, latestInvests, invest.data, loans.data, equities.latest, fx.rates, fx.toKRW])
 
   const waterfall = useMemo<WaterfallItem[]>(() => [
     { label: '운전자금 (가용)',   value: kpi.operatingCash, sign: '+' },

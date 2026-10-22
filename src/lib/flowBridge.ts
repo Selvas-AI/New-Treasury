@@ -19,6 +19,7 @@
  *   `unexplained` 로 그대로 남긴다 — 그 숫자가 곧 "어느 날 일보가 비었는지"를 알려준다.
  */
 import { opCashKRW, investValueKRW, type ToKRWFn } from './treasuryCalc'
+import { fundBalanceOf, wasOpenOnAnalysis } from './balanceSheet'
 import { getLatestBonds } from '../hooks/useInvestments'
 import type { DailyRecord, InvestmentRecord } from '../types'
 
@@ -404,19 +405,9 @@ export function fundScopeOf(operatingKrw: number, bd: InvestBreakdown): FundScop
  *   "현재 잔액" 판정이라, 여기서 바꾸면 세션19차 과대산정 회귀가 재발한다.
  *   과거 재구성이 필요한 이 화면에서만 이 함수를 쓴다.
  */
-export interface OpenOnResult { open: boolean; inferred: boolean }
-
-export function wasOpenOnAnalysis(
-  rec: { start?: string | null; maturity?: string | null; active?: boolean | null; closed_date?: string | null },
-  date: string,
-): OpenOnResult {
-  if (rec.start && rec.start > date) return { open: false, inferred: false }
-  if (rec.closed_date) return { open: rec.closed_date > date, inferred: false }
-  if (rec.active !== false) return { open: true, inferred: false }
-  // 이미 닫혔는데 종료일 기록이 없다 → 만기일로 추정
-  if (rec.maturity) return { open: rec.maturity > date, inferred: rec.maturity > date }
-  return { open: false, inferred: false }
-}
+// ⚠ 보유 판정은 balanceSheet 로 옮겼다 — 화면마다 다른 규칙을 두지 않기 위해서다.
+//   기존 import 를 깨지 않도록 여기서 다시 내보낸다.
+export { wasOpenOnAnalysis, type OpenOnResult } from './balanceSheet'
 
 /** 그 시점의 운용자금 건별 목록 — 왜 불가용으로 잡혔는지 화면에서 확인하기 위한 것 */
 export interface InvestItem {
@@ -461,24 +452,17 @@ export function investBreakdownOn(
   date: string,
   toKRW: ToKRWFn,
 ): InvestBreakdown {
-  // 국채는 기준일마다 행이 쌓이므로 그 시점까지의 행 중 종목별 최신 1건만 센다
-  const bondsUpTo = invests.filter(i =>
-    i.product === '국채' && (i.priceDate || i.start || '') !== '' && (i.priceDate || i.start || '') <= date)
-  const bonds = getLatestBonds(bondsUpTo)
-  // ⚠ 국채도 가용/불가용이 나뉜다. 뭉뚱그리면 '실제 쓸 수 있는 돈'이 왜곡된다.
-  const sumOf = (arr: InvestmentRecord[]) =>
-    arr.reduce((sum, i) => sum + investValueKRW(i, toKRW), 0)
-  const bondAvailKrw  = sumOf(bonds.filter(i => i.available === '가용'))
-  const bondLockedKrw = sumOf(bonds.filter(i => i.available !== '가용'))
-
-  const nonBond = invests.filter(i => i.product !== '국채' && wasOpenOnAnalysis(i, date).open)
-  const availKrw  = sumOf(nonBond.filter(i => i.available === '가용'))
-  const lockedKrw = sumOf(nonBond.filter(i => i.available !== '가용'))
-
+  // ⭐ SSOT 위임 — 잔액 구성은 balanceSheet.fundBalanceOf 한 곳에서만 계산한다.
+  //   과거엔 이 함수가 직접 합산했고, 통합 상황판·자금일보도 각자 합산해
+  //   같은 날 잔액이 세 화면에서 전부 달랐다(2026-10-22 실사고).
+  const b = fundBalanceOf({ investments: invests, operatingKrw: 0, date, rule: 'analysis', toKRW })
   return {
-    availKrw, bondAvailKrw, bondLockedKrw, lockedKrw,
-    bondKrw: bondAvailKrw + bondLockedKrw,
-    allKrw:  availKrw + bondAvailKrw + bondLockedKrw + lockedKrw,
+    availKrw:      b.investAvailKrw,
+    bondAvailKrw:  b.bondAvailKrw,
+    bondLockedKrw: b.bondLockedKrw,
+    lockedKrw:     b.investLockedKrw,
+    bondKrw:       b.bondAvailKrw + b.bondLockedKrw,
+    allKrw:        b.totalKrw,
   }
 }
 

@@ -17,6 +17,7 @@ import { restSelect } from '../lib/supabase'
 import { toKRWAmount } from '../lib/treasuryCalc'
 import { useFx } from './useFx'
 import { investFromDb } from './useInvestments'
+import { crossCheckBalance, type BalanceCrossCheck } from '../lib/balanceSheet'
 import { fetchRatesOnOrBefore } from './useFxHistory'
 import { buildAsOfSnapshots, applyAsOf, type AuditLogRow } from '../lib/recordAsOf'
 import {
@@ -62,6 +63,11 @@ export interface UseFlowBridgeResult {
   /** 가용/불가용 구분 — 실제 쓸 수 있는 돈 (기초·기말) */
   scopeOpening: FundScopeSnapshot | null
   scopeClosing: FundScopeSnapshot | null
+  /**
+   * 기말 잔액 교차검증 — 같은 날짜를 세 경로로 계산해 비교한다.
+   * ⚠ 이 값이 mismatch 면 화면이 **반드시** 경고해야 한다. 숨기면 아무도 모른다.
+   */
+  crossCheck: BalanceCrossCheck | null
   /** 기간 내 daily 행 수 / 항목이 있는 일보 수 — 설명률 해석용 */
   dailyDays: number
   reportDays: number
@@ -200,7 +206,7 @@ export function useFlowBridge(
 
   const {
     bridge, rows, excludedOpening, excludedClosing, investFlows, ledger, fxEffect,
-    scopeOpening, scopeClosing,
+    scopeOpening, scopeClosing, crossCheck,
   } = useMemo(() => {
     if (!company || !dailies.length) {
       return {
@@ -208,6 +214,7 @@ export function useFlowBridge(
         excludedOpening: null, excludedClosing: null, investFlows: null,
         ledger: [] as DailyLedgerRow[], fxEffect: null,
         scopeOpening: null, scopeClosing: null,
+        crossCheck: null as BalanceCrossCheck | null,
       }
     }
 
@@ -302,6 +309,17 @@ export function useFlowBridge(
         items: investItemsOn(closeSnap.records, closingDaily.date, fx.toKRW, closeSnap.restoredIds),
       },
       ledger: buildDailyLedger({ dailies, openingDaily, invests, toKRW: fx.toKRW, itemsByDate }),
+      // ⭐ 교차검증 — 같은 기말을 세 경로로 계산해 어긋나는지 본다.
+      //   2026-10-22 사고는 팀장이 **육안으로** 발견했다. 그런 일이 없게 한다.
+      crossCheck: crossCheckBalance({
+        restoredInvestments: closeSnap.records,
+        currentInvestments:  invests,
+        operatingKrw: closing.operatingKrw,
+        date: closingDaily.date,
+        toKRW: fx.toKRW,
+        // 기말이 가장 최근 운전자금 입력일일 때만 '현재 시점' 비교가 성립한다
+        compareActiveNow: closingDaily.date === dailies[dailies.length - 1]?.date,
+      }),
       excludedOpening: excludedBalanceOn(invests, openingDate, fx.toKRW),
       excludedClosing: excludedBalanceOn(invests, closingDaily.date, fx.toKRW),
       investFlows: flows,
@@ -312,6 +330,7 @@ export function useFlowBridge(
     loading, error, bridge, rows, ledger, fxEffect,
     scopeOpening, scopeClosing,
     excludedOpening, excludedClosing, investFlows,
+    crossCheck,
     dailyDays: dailies.length,
     reportDays: new Set(items.map(i => i.report_id)).size,
     refetch: fetchAll,

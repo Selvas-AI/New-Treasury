@@ -14,6 +14,7 @@ import { fmtKRW } from '../lib/format'
 import { NotionTable, type ColumnDef } from '../components/common/NotionTable'
 import DailyLedgerView from '../components/flow/DailyLedgerView'
 import FxEffectView from '../components/flow/FxEffectView'
+import BalanceCrossCheckBar from '../components/flow/BalanceCrossCheckBar'
 import FundScopeCards from '../components/flow/FundScopeCards'
 import FlowMapView from '../components/flow/FlowMapView'
 import { exportFlowAnalysis } from '../lib/flowExcel'
@@ -59,7 +60,7 @@ export default function FlowAnalysisPage() {
 
   const {
     loading, error, bridge, rows, dailyDays, reportDays,
-    investFlows, ledger, fxEffect, scopeOpening, scopeClosing,
+    investFlows, ledger, fxEffect, scopeOpening, scopeClosing, crossCheck,
   } = useFlowBridge(company, from, to)
 
   return (
@@ -198,6 +199,11 @@ export default function FlowAnalysisPage() {
       </details>
 
       {/* ── 가용 / 불가용 / 총액 — 모든 탭에서 항상 보인다 ── */}
+      {/* 잔액 교차검증 — 세 화면이 어긋나면 사람이 찾기 전에 여기서 먼저 뜬다 */}
+      {!loading && crossCheck && scopeClosing && (
+        <BalanceCrossCheckBar check={crossCheck} date={scopeClosing.date} />
+      )}
+
       {!loading && <FundScopeCards opening={scopeOpening} closing={scopeClosing} />}
 
       {/* ── 탭 ────────────────────────────────────────────── */}
