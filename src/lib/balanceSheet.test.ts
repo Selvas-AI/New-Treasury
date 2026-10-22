@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { fundBalanceOf, crossCheckBalance, isBondRecord, isBondHeldOn } from './balanceSheet'
-import type { InvestmentRecord } from '../types'
+import type { EquityRecord, InvestmentRecord } from '../types'
 
 const toKRW = (amt: number, code: string) => amt * (code === 'USD' ? 1300 : 1)
 
@@ -74,6 +74,29 @@ describe('fundBalanceOf — 구성 합산', () => {
       investments: [bond({ id: 'future', priceDate: '2026-12-01' })],
       operatingKrw: 0, date: '2026-10-21', rule: 'active-now', toKRW })
     expect(b.bondAvailKrw).toBe(0)
+  })
+})
+
+describe('지분 — 총액에는 넣지 않고 통합 상황판 관점만 따로 돌려준다', () => {
+  const eq = [
+    { id: 'e1', available: '불가용', total_value: 1_300_000_000 },
+    { id: 'e2', available: '불가용', total_value: 1_000_000_000 },
+    { id: 'e3', available: '가용',   total_value:   500_000_000 },
+  ] as unknown as EquityRecord[]
+
+  it('[회귀] 운전·운용 총액은 지분에 영향받지 않는다', () => {
+    const base = { investments: [rec({ amount: 100 })], operatingKrw: 1000, date: '2026-10-21', rule: 'active-now' as const, toKRW }
+    expect(fundBalanceOf({ ...base, equities: eq }).totalKrw)
+      .toBe(fundBalanceOf(base).totalKrw)
+  })
+
+  it('통합 상황판 관점은 지분을 포함한다 — 두 화면의 불가용 차이를 설명한다', () => {
+    const b = fundBalanceOf({
+      investments: [rec({ amount: 2_000_000_000, available: '불가용' })],
+      operatingKrw: 0, date: '2026-10-21', rule: 'active-now', toKRW, equities: eq })
+    expect(b.lockedKrw).toBe(2_000_000_000)                 // 자금흐름 분석·자금일보
+    expect(b.lockedWithEquityKrw).toBe(4_300_000_000)       // 통합 상황판
+    expect(b.availableWithEquityKrw - b.availableKrw).toBe(500_000_000)
   })
 })
 

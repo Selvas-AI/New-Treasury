@@ -89,28 +89,22 @@ export function useDashboard(companyOverride?: string) {
     const balance = fundBalanceOf({
       investments: invest.data, operatingKrw: operatingCash,
       date: todayStr(), rule: 'active-now', toKRW: fx.toKRW,
+      equities: equities.latest,
     })
-    const investAvail   = balance.investAvailKrw
-    const investUnavail = balance.investLockedKrw
-    const bondAvail     = balance.bondAvailKrw
-    const bondUnavail   = balance.bondLockedKrw
+    const investAvail = balance.investAvailKrw
+    const bondAvail   = balance.bondAvailKrw
 
     // 차입금 (외화는 KRW 환산)
     const totalLoan = loans.data.reduce((s, l) => s + toKRWAmt(l.amount || 0, l.currency || 'KRW'), 0)
 
-    // 지분 불가용 (평가액 기준)
-    const equityUnavail = equities.latest
-      .filter(e => e.available === '불가용')
-      .reduce((s, e) => s + (e.total_value || 0), 0)
+    // 지분도 같은 SSOT 에서 받는다 — 통합 상황판은 지분까지 포함한 관점을 쓴다.
+    // ⚠ 자금흐름 분석·자금일보는 지분을 범위 밖으로 둔다(자금 변동 이력과 같은 정의).
+    //   그래서 두 화면의 '불가용'이 다르게 보인다 — 정의 차이지 오류가 아니다.
+    const equityAvail = balance.equityAvailKrw
 
-    // 지분 가용 (상장·가용) — 가용자금 합계에 포함
-    const equityAvail = equities.latest
-      .filter(e => e.available === '가용')
-      .reduce((s, e) => s + (e.total_value || 0), 0)
-
-    const availableCash   = operatingCash + investAvail + bondAvail + equityAvail
+    const availableCash   = balance.availableWithEquityKrw
     const netCashPosition = availableCash - totalLoan
-    const unavailableAssets = investUnavail + bondUnavail + equityUnavail
+    const unavailableAssets = balance.lockedWithEquityKrw
 
     // 가용 운용자금 중 외화 KRW 환산 합계 (대시보드 외화비율 표시용)
     const investFxKrw = latestInvests

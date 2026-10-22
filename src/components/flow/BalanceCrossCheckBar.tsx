@@ -77,6 +77,24 @@ export default function BalanceCrossCheckBar({ check, date }: {
           셋은 <b>같은 산식</b>(balanceSheet)을 쓰고 보유 판정만 다릅니다 — 차이가 나면 데이터나 복원 경로에 문제가 있다는 뜻입니다.
           {!activeNow && ' · 기말이 최신 입력일이 아니라 «현재 보유 기준»은 비교에서 제외했습니다.'}
         </p>
+
+        {/* ⚠ 정의 차이는 오류가 아니다 — 다만 화면이 설명하지 않으면 오류로 보인다.
+            2026-10-22 리포트: "통합상황판 불가용은 2건 더 나오는데 여기는 1건" */}
+        {(analysis.equityLockedKrw > 0 || analysis.equityAvailKrw > 0) && (
+          <div className="mt-2 rounded border border-gray-200 bg-white/70 px-2.5 py-2 text-[11px] text-gray-500 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-400">
+            <b className="text-gray-600 dark:text-slate-300">통합 상황판과의 정의 차이 — 지분·장기투자</b>
+            <div className="mt-1 space-y-0.5 tabular-nums">
+              <div>이 화면 불가용 {fmtKRW(analysis.lockedKrw)} + 지분(불가용) {fmtKRW(analysis.equityLockedKrw)}
+                {' = '}<b>통합 상황판 불가용 자산 {fmtKRW(analysis.lockedWithEquityKrw)}</b></div>
+              <div>이 화면 가용 {fmtKRW(analysis.availableKrw)} + 지분(가용) {fmtKRW(analysis.equityAvailKrw)}
+                {' = '}<b>통합 상황판 가용자금 {fmtKRW(analysis.availableWithEquityKrw)}</b></div>
+            </div>
+            <p className="mt-1">
+              이 화면과 자금일보는 <b>운전·운용만</b> 합산합니다(자금 변동 이력과 같은 정의).
+              지분·장기투자는 현금화 경로가 달라 범위 밖에 둡니다 — 오류가 아니라 보는 범위의 차이입니다.
+            </p>
+          </div>
+        )}
         {bondGroupDrift && (
           <p className="mt-1 text-[11px] text-amber-600 dark:text-amber-400">
             ⚠ 국채 묶음 수가 다릅니다(이 화면 {analysis.bondGroupCount} · 현재 {activeNow?.bondGroupCount}) — 같은 종목이 두 번 세어질 수 있습니다.

@@ -23,7 +23,7 @@
  */
 import { investValueKRW, isOpenOn, type ToKRWFn } from './treasuryCalc'
 import { getLatestBonds } from '../hooks/useInvestments'
-import type { InvestmentRecord } from '../types'
+import type { EquityRecord, InvestmentRecord } from '../types'
 
 export type OpenRule = 'active-now' | 'point-in-time' | 'analysis'
 
@@ -102,6 +102,20 @@ export interface FundBalance {
 
   /** 집계에 쓰인 국채 묶음 수 — 2 이상인데 종목이 하나면 중복 신호다 */
   bondGroupCount:   number
+
+  // ── 지분·장기투자 ─────────────────────────────────────────────────
+  /**
+   * ⚠ 지분은 **운전·운용 총액에 넣지 않는다**(자금일보 '자금 총합계', 자금 변동 이력과
+   *   같은 정의를 지켜야 하기 때문). 그런데 통합 상황판은 가용자금·불가용 자산에
+   *   지분을 포함해 보여준다 — 그래서 두 화면의 '불가용'이 달라 보인다
+   *   (2026-10-22 리포트: 통합 43.0억 vs 자금흐름 20.0억, 차이 23.0억 = 지분).
+   *   정의를 바꾸지 않고, **양쪽 관점을 모두 돌려줘** 화면이 차이를 설명하게 한다.
+   */
+  equityAvailKrw:   number
+  equityLockedKrw:  number
+  /** 통합 상황판 관점 — 지분까지 포함한 가용/불가용 */
+  availableWithEquityKrw: number
+  lockedWithEquityKrw:    number
 }
 
 export interface FundBalanceInput {
@@ -111,6 +125,8 @@ export interface FundBalanceInput {
   date:         string
   rule:         OpenRule
   toKRW:        ToKRWFn
+  /** 지분·장기투자(종목별 최신 1건). 없으면 0 으로 둔다 */
+  equities?:    EquityRecord[]
 }
 
 /**
@@ -146,10 +162,18 @@ export function fundBalanceOf(input: FundBalanceInput): FundBalance {
   const availableKrw = operatingKrw + investAvailKrw + bondAvailKrw
   const lockedKrw    = investLockedKrw + bondLockedKrw
 
+  const eq = input.equities ?? []
+  const eqSum = (list: EquityRecord[]) => list.reduce((s, e) => s + (e.total_value || 0), 0)
+  const equityAvailKrw  = eqSum(eq.filter(e => e.available === '가용'))
+  const equityLockedKrw = eqSum(eq.filter(e => e.available !== '가용'))
+
   return {
     operatingKrw, investAvailKrw, bondAvailKrw, investLockedKrw, bondLockedKrw,
     availableKrw, lockedKrw, totalKrw: availableKrw + lockedKrw,
     bondGroupCount: bonds.length,
+    equityAvailKrw, equityLockedKrw,
+    availableWithEquityKrw: availableKrw + equityAvailKrw,
+    lockedWithEquityKrw:    lockedKrw + equityLockedKrw,
   }
 }
 
@@ -183,14 +207,16 @@ export function crossCheckBalance(params: {
   operatingKrw: number
   date: string
   toKRW: ToKRWFn
+  /** 지분·장기투자 — 총액에는 안 들어가지만 통합 상황판과의 차이를 설명하는 데 쓴다 */
+  equities?: EquityRecord[]
   /** 기말이 최신 영업일일 때만 activeNow 비교가 의미 있다 */
   compareActiveNow: boolean
 }): BalanceCrossCheck {
-  const { restoredInvestments, currentInvestments, operatingKrw, date, toKRW } = params
-  const analysis    = fundBalanceOf({ investments: restoredInvestments, operatingKrw, date, rule: 'analysis',      toKRW })
-  const pointInTime = fundBalanceOf({ investments: currentInvestments,  operatingKrw, date, rule: 'point-in-time', toKRW })
+  const { restoredInvestments, currentInvestments, operatingKrw, date, toKRW, equities } = params
+  const analysis    = fundBalanceOf({ investments: restoredInvestments, operatingKrw, date, rule: 'analysis',      toKRW, equities })
+  const pointInTime = fundBalanceOf({ investments: currentInvestments,  operatingKrw, date, rule: 'point-in-time', toKRW, equities })
   const activeNow   = params.compareActiveNow
-    ? fundBalanceOf({ investments: currentInvestments, operatingKrw, date, rule: 'active-now', toKRW })
+    ? fundBalanceOf({ investments: currentInvestments, operatingKrw, date, rule: 'active-now', toKRW, equities })
     : null
 
   const totals = [analysis.totalKrw, pointInTime.totalKrw, ...(activeNow ? [activeNow.totalKrw] : [])]

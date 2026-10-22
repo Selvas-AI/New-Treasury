@@ -17,6 +17,7 @@ import { restSelect } from '../lib/supabase'
 import { toKRWAmount } from '../lib/treasuryCalc'
 import { useFx } from './useFx'
 import { investFromDb } from './useInvestments'
+import { getLatestEquities } from './useEquities'
 import { crossCheckBalance, type BalanceCrossCheck } from '../lib/balanceSheet'
 import { fetchRatesOnOrBefore } from './useFxHistory'
 import { buildAsOfSnapshots, applyAsOf, type AuditLogRow } from '../lib/recordAsOf'
@@ -31,7 +32,7 @@ import {
   type ExcludedBalance, type InvestDelta, type DailyLedgerRow,
 } from '../lib/flowBridge'
 import type { FundScopeSnapshot } from '../components/flow/FundScopeCards'
-import type { DailyRecord, InvestmentRecord, LoanRecord } from '../types'
+import type { DailyRecord, EquityRecord, InvestmentRecord, LoanRecord } from '../types'
 
 interface ReportRow { id: string; company: string; report_date: string; status: string }
 interface ItemRow {
@@ -85,6 +86,7 @@ export function useFlowBridge(
   const [dailies, setDailies] = useState<DailyRecord[]>([])
   const [openingDaily, setOpeningDaily] = useState<DailyRecord | null>(null)
   const [invests, setInvests] = useState<InvestmentRecord[]>([])
+  const [equities, setEquities] = useState<EquityRecord[]>([])
   const [loans, setLoans]     = useState<LoanRecord[]>([])
   // 감사 로그 — 연장 등으로 덮어써진 과거 상태를 복원하는 데 쓴다
   const [auditLogs, setAuditLogs] = useState<AuditLogRow[]>([])
@@ -123,6 +125,14 @@ export function useFlowBridge(
       })
       if (fetchIdRef.current !== myId) return
       if (invRes.error) throw new Error(invRes.error.message)
+
+      // ③-1 지분·장기투자 — 이 화면 합계에는 넣지 않는다(자금 변동 이력과 같은 정의).
+      //   다만 통합 상황판은 지분을 불가용 자산에 포함하므로, **차이를 설명하기 위해**
+      //   금액만 가져온다(2026-10-22 리포트: 통합 43.0억 vs 이 화면 20.0억).
+      const eqRes = await restSelect<Record<string, unknown>>('equities', {
+        match: { company }, order: 'date.asc', limit: 3000,
+      })
+      if (fetchIdRef.current !== myId) return
 
       // ③-2 차입금
       const loanRes = await restSelect<LoanRecord>('loans', {
@@ -174,6 +184,7 @@ export function useFlowBridge(
       setDailies(inRange.data ?? [])
       setOpeningDaily((before.data ?? [])[0] ?? null)
       setInvests((invRes.data ?? []).map(investFromDb))
+      setEquities(getLatestEquities((eqRes.data ?? []) as unknown as EquityRecord[]))
       setLoans(loanRes.data ?? [])
       setAuditLogs(auditRes.error ? [] : (auditRes.data ?? []))
       setReports(repRows)
@@ -317,6 +328,7 @@ export function useFlowBridge(
         operatingKrw: closing.operatingKrw,
         date: closingDaily.date,
         toKRW: fx.toKRW,
+        equities,
         // 기말이 가장 최근 운전자금 입력일일 때만 '현재 시점' 비교가 성립한다
         compareActiveNow: closingDaily.date === dailies[dailies.length - 1]?.date,
       }),
@@ -324,7 +336,7 @@ export function useFlowBridge(
       excludedClosing: excludedBalanceOn(invests, closingDaily.date, fx.toKRW),
       investFlows: flows,
     }
-  }, [company, dailies, openingDaily, invests, loans, auditLogs, reports, items, fx, fxRates])
+  }, [company, dailies, openingDaily, invests, equities, loans, auditLogs, reports, items, fx, fxRates])
 
   return {
     loading, error, bridge, rows, ledger, fxEffect,
