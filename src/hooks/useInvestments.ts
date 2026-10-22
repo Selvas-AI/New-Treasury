@@ -26,13 +26,22 @@ function fromDb(row: DbRow): InvestmentRecord {
     maturity:         (row.maturity         as string)  ?? '',
     active:           row.active            as boolean,
     closed_date:      (row.closed_date      as string | null) ?? null,
-    bondName:         row.bond_name         as string  | undefined,
-    bondTicker:       row.bond_ticker       as string  | undefined,
-    bondQty:          row.bond_qty          as number  | undefined,
-    bondPrice:        row.bond_price        as number  | undefined,
+    // ⚠ [CRITICAL] 감사 로그 스냅샷(audit_logs.before/after_data)에는 **camelCase 로 저장된
+    //   레코드**가 섞여 있다(setActive·remove 가 InvestmentRecord 를 그대로 넘겼다).
+    //   그걸 그대로 읽으면 bond_* 가 전부 undefined 가 되어
+    //     ① getLatestBonds 의 dedup 키가 bondTicker → bank 로 떨어져 **같은 국채가 두 묶음**이 되고
+    //     ② bondQty/bondPrice 소실로 평가액이 취득원금으로 바뀐다
+    //   → 자금흐름 분석에서 국채가 2줄로 중복 집계됐다(2026-10-22 실사고, 53.9억).
+    //   과거 로그는 감사 기록이라 고칠 수 없다 — **읽는 쪽이 두 형태를 모두 받아들인다.**
+    //   금지: 아래 폴백을 제거하지 말 것. 제거하면 과거 구간 복원이 다시 깨진다.
+    bondName:         (row.bond_name   ?? row.bondName)   as string  | undefined,
+    bondTicker:       (row.bond_ticker ?? row.bondTicker) as string  | undefined,
+    bondQty:          (row.bond_qty    ?? row.bondQty)    as number  | undefined,
+    bondPrice:        (row.bond_price  ?? row.bondPrice)  as number  | undefined,
     // start_date 를 priceDate 로도 노출 (채권 기준일)
     priceDate:        (row.start_date       as string)
-                      ?? (row.start        as string)  ?? undefined,
+                      ?? (row.priceDate     as string)
+                      ?? (row.start         as string)  ?? undefined,
     acquisition_cost: (row.acquisition_cost as number)  ?? 0,
   }
 }
@@ -68,12 +77,33 @@ function toDb(record: Partial<InvestmentRecord>): DbRow {
   return row
 }
 
-/** 국채 종목별 최신 날짜 1건만 반환 */
+/**
+ * 국채 종목별 최신 날짜 1건만 반환.
+ *
+ * ⚠ 키를 `bondTicker ?? bondName ?? bank` 로만 잡으면, **일부 행만 티커를 잃은 경우**
+ *   같은 국채가 두 묶음으로 갈려 잔액이 두 번 더해진다(2026-10-22 실사고).
+ *   그래서 먼저 종목명·은행명 → 티커 사전을 만들어 **식별자를 하나로 정규화**한다.
+ *   한 행이라도 티커를 갖고 있으면 나머지 행이 그 티커로 모인다.
+ */
 export function getLatestBonds(investments: InvestmentRecord[]): InvestmentRecord[] {
   const bonds = investments.filter(i => i.product === '국채')
+
+  // 종목명·은행명 → 티커 사전 (티커를 가진 행에서 수집)
+  const tickerBy = new Map<string, string>()
+  for (const b of bonds) {
+    if (!b.bondTicker) continue
+    if (b.bondName) tickerBy.set(b.bondName, b.bondTicker)
+    if (b.bank)     tickerBy.set(b.bank,     b.bondTicker)
+  }
+  const keyOf = (b: InvestmentRecord) =>
+    b.bondTicker
+    ?? (b.bondName && tickerBy.get(b.bondName))
+    ?? (b.bank && tickerBy.get(b.bank))
+    ?? b.bondName ?? b.bank
+
   const latest = new Map<string, InvestmentRecord>()
   for (const b of bonds) {
-    const key = b.bondTicker ?? b.bondName ?? b.bank
+    const key = keyOf(b)
     const cur = latest.get(key)
     if (!cur || (b.priceDate ?? '') > (cur.priceDate ?? '')) latest.set(key, b)
   }
@@ -174,7 +204,7 @@ export function useInvestments(activeOnly = false, companyOverride?: string): Us
     if (err) return err.message
     if (target) {
       const label = `${target.product ?? ''} ${target.bank ?? ''}`.trim()
-      void logAction({ table: 'investments', action: 'DELETE', company: target.company, recordId: id, summary: `${label} 삭제`, before: target as unknown as Record<string, unknown> })
+      void logAction({ table: 'investments', action: 'DELETE', company: target.company, recordId: id, summary: `${label} 삭제`, before: toDb(target) as Record<string, unknown> })
     }
     setData(prev => prev.filter(r => r.id !== id))
     return null
@@ -244,8 +274,11 @@ export function useInvestments(activeOnly = false, companyOverride?: string): Us
       void logAction({
         table: 'investments', action: 'SETACTIVE', company: target.company, recordId: id,
         summary: active ? `${label} 재활성화` : `${label} 만기처리`,
-        before: target as unknown as Record<string, unknown>,
-        after: { ...target, active, closed_date } as unknown as Record<string, unknown>,
+        // ⚠ 감사 스냅샷은 **반드시 toDb 를 거친 DB 행 형태(snake_case)** 로 남긴다.
+        //   레코드를 그대로 넘기면 복원 시 bond_* 가 사라져 국채가 중복 집계된다
+        //   (2026-10-22 실사고). 읽는 쪽에도 폴백을 뒀지만 원천을 바르게 둔다.
+        before: toDb(target) as Record<string, unknown>,
+        after: toDb({ ...target, active, closed_date }) as Record<string, unknown>,
       })
     }
     setData(prev => prev.map(r => r.id === id ? { ...r, active, closed_date } : r))

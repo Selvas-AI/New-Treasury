@@ -110,8 +110,10 @@ export function useFlowBridge(
       if (inRange.error) throw new Error(inRange.error.message)
 
       // ③ 운용자금 — 시점 판정을 해야 하므로 활성 여부로 거르지 않고 전부 가져온다
+      // ⚠ 국채는 기준일마다 행이 쌓인다 — 메디아나 한 종목이 이미 113행이다(2026-10-22).
+      //   limit 이 낮으면 **오래된 행부터 잘려** 과거 잔액이 조용히 비어 보인다.
       const invRes = await restSelect<Record<string, unknown>>('investments', {
-        match: { company }, order: 'start_date.asc', limit: 500,
+        match: { company }, order: 'start_date.asc', limit: 3000,
       })
       if (fetchIdRef.current !== myId) return
       if (invRes.error) throw new Error(invRes.error.message)
