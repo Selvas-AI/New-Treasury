@@ -170,6 +170,37 @@ const syncedToday = new Set<string>()
  * 마지막 저장일 이후 ~ 전영업일 구간만 보충. 없으면 아무것도 하지 않는다.
  * @returns 저장 건수 (0 = 이미 최신이거나 skip)
  */
+/**
+ * 통화별 이력 보유 현황 — "어떤 통화가 비어 있나"를 탭을 옮기지 않고 한눈에 본다.
+ *
+ * ⚠ 백필이 통화 단위로 돌기 때문에, 한 통화만 받아 놓고 나머지가 빈 줄 모르는 일이
+ *   실제로 발생했다(EUR 이 2022-12-30 에서 멈춰 4년 전 데이터로 판정됨, 2026-11-02).
+ *   화면이 먼저 알려주도록 이 조회를 둔다.
+ */
+export interface FxHistoryCoverage {
+  currency: string
+  lastDate: string | null
+  count: number
+}
+
+export async function fetchFxHistoryCoverage(currencies: readonly string[]): Promise<FxHistoryCoverage[]> {
+  return Promise.all(currencies.map(async currency => {
+    const last = await restSelect<FxRateRow>('fx_rate_history', {
+      match: { currency }, order: 'rate_date.desc', limit: 1,
+    })
+    // ⚠ 건수는 정확한 총계가 아니라 **상한까지의 표본**이다(PostgREST count 헤더 미사용).
+    //   여기서 필요한 건 "있나/없나"와 마지막 날짜뿐이라 과한 조회를 피한다.
+    const rows = await restSelect<FxRateRow>('fx_rate_history', {
+      match: { currency }, order: 'rate_date.desc', limit: 2000,
+    })
+    return {
+      currency,
+      lastDate: last.data?.[0]?.rate_date ?? null,
+      count: rows.data?.length ?? 0,
+    }
+  }))
+}
+
 export async function syncLatestFxHistory(currency: string): Promise<number> {
   const todayKey = `${currency}_${todayStr()}`
   if (syncedToday.has(todayKey)) return 0

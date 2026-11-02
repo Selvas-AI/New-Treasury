@@ -27,7 +27,7 @@ import { usePageCompany } from '../hooks/usePageCompany'
 import { useFxTradeHistory } from '../hooks/useFxTradeHistory'
 import { useFxRegime } from '../hooks/useFxRegime'
 import {
-  backfillFxHistory, syncLatestFxHistory,
+  backfillFxHistory, syncLatestFxHistory, fetchFxHistoryCoverage, type FxHistoryCoverage,
   type BackfillProgress,
 } from '../hooks/useFxHistory'
 import {
@@ -501,24 +501,49 @@ export default function FxRegimePage() {
   const thisYear = new Date().getFullYear()
   const [fromYear, setFromYear] = useState(thisYear - 4)
 
-  async function runBackfill() {
+  // 통화별 이력 보유 현황 — 탭을 옮기지 않고도 비어 있는 통화를 알 수 있게 한다.
+  const [coverageRows, setCoverageRows] = useState<FxHistoryCoverage[]>([])
+  const loadCoverage = useCallback(async () => {
+    try { setCoverageRows(await fetchFxHistoryCoverage(CURRENCIES)) } catch { /* 표시 전용 */ }
+  }, [])
+  useEffect(() => { void loadCoverage() }, [loadCoverage])
+  const coverage = useMemo(() => ({ rows: coverageRows, reload: loadCoverage }), [coverageRows, loadCoverage])
+
+  /**
+   * ECOS 백필.
+   *
+   * ⚠ 과거엔 **선택된 통화 탭 하나만** 수집했다. 그래서 USD 탭에서 실행한 뒤
+   *   EUR·JPY 가 비어 있는 줄 모르고 지나갔고, EUR 은 2022-12-30 기준으로
+   *   4년 전 데이터로 판정되고 있었다(2026-11-02 발견).
+   *   → 기본을 **전 통화**로 바꾸고, 통화 1건만 받는 경로는 따로 남긴다.
+   */
+  async function runBackfill(codes: readonly string[]) {
     setBusy(true); setErr(null); setProgress('시작…')
+    const failedAll: string[] = []
+    let savedAll = 0
     try {
-      const res = await backfillFxHistory(currency, fromYear, thisYear, (p: BackfillProgress) => {
-        setProgress(p.error
-          ? `${p.year}년 — ${p.error}`
-          : `${p.year}년 ${p.fetched}건 수집 (누적 ${p.saved}건)`)
-      })
-      if (res.failed.length) {
+      for (const code of codes) {
+        const tag = codes.length > 1 ? `[${code}] ` : ''
+        const res = await backfillFxHistory(code, fromYear, thisYear, (p: BackfillProgress) => {
+          setProgress(p.error
+            ? `${tag}${p.year}년 — ${p.error}`
+            : `${tag}${p.year}년 ${p.fetched}건 수집 (누적 ${p.saved}건)`)
+        })
+        savedAll += res.saved
         // 부분 성공 — 실패한 연도만 다시 돌리면 된다(upsert 라 중복 없음)
-        setErr(`총 ${res.saved.toLocaleString()}건 저장. 실패한 연도: ` +
-          res.failed.map(f => `${f.year}(${f.error.slice(0, 40)})`).join(', ') +
-          ' — 버튼을 다시 눌러 재시도하세요.')
+        if (res.failed.length) {
+          failedAll.push(`${code}: ${res.failed.map(f => `${f.year}(${f.error.slice(0, 30)})`).join(', ')}`)
+        }
+      }
+      if (failedAll.length) {
+        setErr(`총 ${savedAll.toLocaleString()}건 저장. 실패: ${failedAll.join(' / ')}` +
+          ' — 버튼을 다시 눌러 재시도하세요(이미 받은 구간은 중복 저장되지 않습니다).')
         setProgress('')
       } else {
-        setProgress(`완료 — 총 ${res.saved.toLocaleString()}건 저장`)
+        setProgress(`완료 — ${codes.join('·')} 총 ${savedAll.toLocaleString()}건 저장`)
       }
       await hist.reload()
+      await coverage.reload()
     } catch (e) {
       setErr(e instanceof Error ? e.message : '백필 실패')
     } finally { setBusy(false) }
@@ -832,10 +857,16 @@ export default function FxRegimePage() {
                 ))}
               </select>
               <button
-                onClick={() => void runBackfill()}
+                onClick={() => void runBackfill(CURRENCIES)}
                 disabled={busy}
+                title="USD·EUR·JPY·GBP 를 순서대로 모두 수집합니다"
                 className="rounded bg-blue-600 px-3 py-1 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
-              >{busy ? '수집 중…' : 'ECOS 백필'}</button>
+              >{busy ? '수집 중…' : `ECOS 백필 (전 통화 ${CURRENCIES.length}종)`}</button>
+              <button
+                onClick={() => void runBackfill([currency])}
+                disabled={busy}
+                className="rounded border border-gray-300 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+              >{currency} 만</button>
               <button
                 onClick={() => void runSync()}
                 disabled={busy}
@@ -844,6 +875,28 @@ export default function FxRegimePage() {
             </div>
           )}
         </div>
+        {/* 통화별 보유 현황 — 비어 있거나 오래된 통화를 즉시 드러낸다 */}
+        {coverage.rows.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {coverage.rows.map(c => {
+              const stale = !c.lastDate || bizDaysBetween(c.lastDate, todayStr()) > 10
+              return (
+                <span key={c.currency}
+                  title={c.lastDate ? `마지막 데이터 ${c.lastDate}` : '이력 없음'}
+                  className={`rounded px-2 py-0.5 text-[11px] tabular-nums ${
+                    stale
+                      ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
+                      : 'bg-gray-100 text-gray-600 dark:bg-slate-800 dark:text-slate-300'}`}>
+                  {stale && '⚠ '}{c.currency} {c.lastDate ?? '없음'}
+                </span>
+              )
+            })}
+            <span className="text-[11px] text-gray-400 self-center">
+              ⚠ 표시는 10영업일 이상 뒤처진 통화입니다 — 백필이 필요합니다.
+            </span>
+          </div>
+        )}
+
         {(progress || collectErr) && (
           <div className={`mt-2 text-xs ${collectErr ? 'text-red-600 dark:text-red-400' : 'text-gray-600 dark:text-slate-300'}`}>
             {collectErr ?? progress}
