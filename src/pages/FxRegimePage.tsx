@@ -52,7 +52,7 @@ import RegimeHistoryCard from '../components/fxRegime/RegimeHistoryCard'
 import FxBandExceedCard from '../components/fx/FxBandExceedCard'
 import { computeFxBandExceed, buildThresholdOrderPayload } from '../lib/fxBandExceed'
 import { useFx } from '../hooks/useFx'
-import { addBizDays, todayStr } from '../lib/bizDay'
+import { addBizDays, bizDaysBetween, todayStr } from '../lib/bizDay'
 import {
   REGIME_CURRENCIES as CURRENCIES,
   type FieldOwner,
@@ -644,6 +644,20 @@ export default function FxRegimePage() {
       treasuryInputs.realizedLossThisQuarterKRW, treasuryInputs.fxHoldingFx,
       treasuryInputs.avgAcquisitionRate])
 
+  // 선택한 통화의 정책 상한 초과 안분분 — 조치 카드와 초과 카드가 같은 값을 쓰게 한다.
+  const bandExcess = useMemo(() => {
+    const row = bandExceed.over ? bandExceed.rows.find(r => r.code === currency) : undefined
+    return { excessKRW: row?.excessKRW ?? 0, maxPct: bandExceed.max }
+  }, [bandExceed, currency])
+
+  // 판정 기준일이 얼마나 뒤처졌는지 — 환율 이력 백필이 끊긴 통화 감지
+  // ⚠ EUR 이 2022-12-30 기준으로 판정되고 있었다(2026-11-02 발견). 4년 전 데이터다.
+  const staleDays = useMemo(() => {
+    if (!signal?.asOf) return null
+    const today = todayStr()
+    return signal.asOf >= today ? 0 : bizDaysBetween(signal.asOf, today)
+  }, [signal?.asOf])
+
   // ⭐ 오늘의 결론 — 화면 최상단. 이 카드 하나만 보고 나가도 업무가 되도록 한다.
   const verdict = useMemo(() => {
     if (!signal || !decisionBudget) return null
@@ -657,8 +671,14 @@ export default function FxRegimePage() {
       allowedFx:   decisionBudget.budget.allowedFx,
       requestedFx: decisionBudget.requestedFx,
       pctDaysAboveBep: bep?.pctDaysAbove ?? null,
+      // ⭐ 같은 화면의 '정책 상한 초과' 카드와 **같은 숫자**를 쓴다.
+      //   과거엔 조치 카드가 이 값을 몰라 "아무것도 하지 않습니다"와 "5.3억 초과"가
+      //   동시에 떴다(2026-11-02 리포트). 통화별 안분분을 그대로 넘긴다.
+      bandExcessKRW: bandExcess.excessKRW,
+      bandMaxPct:    bandExcess.maxPct,
+      asOfStaleDays: staleDays,
     })
-  }, [signal, currency, series, decisionBudget,
+  }, [signal, currency, series, decisionBudget, bandExcess, staleDays,
       treasuryInputs.fxHoldingFx, treasuryInputs.avgAcquisitionRate])
 
   // 차트 자동 해석 — 지표값을 평이한 문장으로 변환 (fxChartNarrative)

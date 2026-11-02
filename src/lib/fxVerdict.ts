@@ -50,7 +50,29 @@ export interface VerdictInput {
   requestedFx: number
   /** 손익분기 이상이었던 날의 비율 (0~1). null = 계산 불가 */
   pctDaysAboveBep: number | null
+
+  /**
+   * ⭐ 정책 밴드 상한 초과분 — 이 통화 몫 (KRW, 양수). 0 = 초과 없음.
+   *
+   * ⚠ 리짐 권고와 **성격이 다르다.** 리짐은 "지금이 팔 타이밍인가"(재량)이고,
+   *   밴드 상한 복귀는 "의결된 한도를 지키고 있는가"(의무)다.
+   *   과거엔 이 값을 verdict 가 몰라, 상한을 넘었는데도 리밸런싱 밴드(3%p) 안이면
+   *   "오늘은 아무것도 하지 않습니다"라고 표시했다 — 바로 아래 '정책 상한 초과'
+   *   경고와 정면으로 모순됐다(2026-11-02 사용자 리포트).
+   */
+  bandExcessKRW: number
+  /** 밴드 상한 (%, 0~100). 문구 표기용. null = 밴드 미설정 */
+  bandMaxPct: number | null
+  /**
+   * 판정 기준일이 오늘보다 며칠(영업일) 뒤처졌는지. null = 산출 불가.
+   * ⚠ 환율 이력 백필이 끊긴 통화는 수년 전 데이터로 판정된다(EUR 2022-12-30 실사례).
+   *   그 판정을 '실행 필요'로 단정하면 안 된다 — 보류하고 사실을 밝힌다.
+   */
+  asOfStaleDays: number | null
 }
+
+/** 이 영업일 수를 넘게 뒤처지면 리짐 판정을 신뢰하지 않는다 */
+export const STALE_LIMIT_BIZDAYS = 10
 
 const num = (v: number) => Math.round(v).toLocaleString()
 
@@ -66,6 +88,7 @@ export function buildVerdict(input: VerdictInput): Verdict {
   const {
     signal, currency, holdingFx, avgCostRate,
     allowedFx, requestedFx, pctDaysAboveBep,
+    bandExcessKRW, bandMaxPct, asOfStaleDays,
   } = input
 
   const rate = signal.indicators.close
@@ -73,6 +96,39 @@ export function buildVerdict(input: VerdictInput): Verdict {
   const levelLabel = signal.level?.label ?? null
   const dev = signal.level?.dev ?? null
   const trendLabel = signal.regime.label.split(' / ')[0]
+
+  // 밴드 상한 복귀 — 환율 타이밍과 무관한 **의무**
+  const bandFx = rate > 0 ? bandExcessKRW / rate : 0
+  const bandOver = bandExcessKRW > 0 && bandFx > 0
+  const bandOrder = () =>
+    `${currency} ${num(bandFx)} 환전 (약 ${eok(bandExcessKRW)})` +
+    (bandMaxPct != null ? ` — 정책 상한 ${bandMaxPct.toFixed(0)}% 복귀분` : '')
+  const bandReason = () =>
+    `외화 보유가 **정책 상한${bandMaxPct != null ? ` ${bandMaxPct.toFixed(0)}%` : ''}을 ` +
+    `${eok(bandExcessKRW)} 초과**했습니다. 상한 복귀는 환율과 무관한 이행 의무입니다.`
+
+  // ── 환율 이력이 끊긴 통화 — 리짐 판정을 신뢰하지 않는다 ───────────
+  // ⚠ 다만 **밴드 초과는 여전히 유효하다**(보유액·정책값만으로 산출되므로).
+  //   그래서 "판정 보류"와 "상한 복귀 의무"를 함께 말한다.
+  if (asOfStaleDays != null && asOfStaleDays > STALE_LIMIT_BIZDAYS) {
+    const staleNote =
+      `환율 이력이 **${signal.asOf}** 까지만 있어(약 ${asOfStaleDays}영업일 전) ` +
+      `국면·수준 판정을 신뢰할 수 없습니다. 자금정책에서 ${currency} 환율 이력을 보강해야 합니다.`
+    return {
+      kind: bandOver ? 'sell' : 'blocked',
+      headline: bandOver
+        ? '환율 판정은 보류합니다. 다만 정책 상한 복귀분은 지금 집행합니다.'
+        : '환율 이력이 오래돼 오늘 판정을 내릴 수 없습니다.',
+      order: bandOver ? bandOrder() : '환율 이력 보강 전까지 이 통화는 리짐 판정 대상이 아닙니다.',
+      reasons: bandOver ? [bandReason(), staleNote] : [staleNote],
+      caveat: bandOver
+        ? '상한 복귀분은 보유액·정책값만으로 산출되므로 환율 이력과 무관하게 유효합니다.'
+        : '보유 비중이 정책 밴드 안에 있어 당장 이행할 의무는 없습니다.',
+      tone: bandOver ? 'act' : 'warn',
+      expectedRatioAfter: null,
+      currentRatio: d.currentRatio,
+    }
+  }
 
   // 근거는 항상 같은 순서로 만든다 — 수준 → 추세 → 제약
   const reasons: string[] = []
@@ -89,7 +145,13 @@ export function buildVerdict(input: VerdictInput): Verdict {
   // ── 매도 권고 ─────────────────────────────────────────────
   if (d.actionRequired && d.suggestedTradeKRW < 0) {
     const cappedByBudget = allowedFx + 1e-6 < requestedFx
-    const execFx = cappedByBudget ? allowedFx : requestedFx
+    // ⚠ 리짐 권고가 밴드 복귀분보다 적을 수 있다(리밸런싱 밴드 3%p 완충 때문).
+    //   그때는 **의무가 더 크므로 의무를 따른다.** 리짐이 더 크면 밴드도 자동 충족된다.
+    const regimeExecFx = cappedByBudget ? allowedFx : requestedFx
+    const execFx = Math.max(regimeExecFx, bandOver ? bandFx : 0)
+    const bandDrivesAmount = bandOver && bandFx > regimeExecFx + 1e-6
+    // 손실 한도보다 의무가 크면 임의로 한도를 뚫지 않는다 — 한도는 회의체 의결 사항이다.
+    const bandShortFx = bandOver ? Math.max(0, bandFx - allowedFx) : 0
     const execKRW = execFx * rate
 
     // suggestedTradeKRW = (목표비중 − 현재비중) × 총자금 이므로 역산하면 총자금을 구할 수 있다
@@ -111,6 +173,7 @@ export function buildVerdict(input: VerdictInput): Verdict {
       `목표 보유 비중 **${(d.appliedTargetRatio * 100).toFixed(0)}%** 대비 ` +
       `현재 **${(d.currentRatio * 100).toFixed(0)}%** 로 초과 보유 상태입니다.`,
     )
+    if (bandOver) reasons.push(bandReason())
 
     if (execFx <= 0) {
       return {
@@ -118,24 +181,33 @@ export function buildVerdict(input: VerdictInput): Verdict {
         headline: '팔아야 할 구간이지만, 이번 분기 손실 한도가 모두 소진됐습니다.',
         order: '이번 분기 추가 환전 불가 — 한도 조정은 회의체 승인이 필요합니다.',
         reasons,
-        caveat: '한도를 늘리지 않으면 다음 분기까지 환율 변동 위험을 그대로 안고 갑니다.',
+        caveat: bandOver
+          ? `⚠ 정책 상한을 ${eok(bandExcessKRW)} 초과한 상태라 한도 소진과 무관하게 복귀 의무가 남습니다 — 회의체 한도 조정이 필요합니다.`
+          : '한도를 늘리지 않으면 다음 분기까지 환율 변동 위험을 그대로 안고 갑니다.',
         tone: 'warn',
         expectedRatioAfter: null,
         currentRatio: d.currentRatio,
       }
     }
 
+    const partial = cappedByBudget && !bandDrivesAmount
     return {
-      kind: cappedByBudget ? 'sell_partial' : 'sell',
-      headline: cappedByBudget
-        ? '지금은 파는 구간입니다. 다만 분기 손실 한도까지만 집행합니다.'
-        : '지금은 파는 구간입니다.',
+      kind: partial ? 'sell_partial' : 'sell',
+      headline: bandDrivesAmount
+        ? '정책 상한을 넘었습니다. 상한 복귀분을 환전합니다.'
+        : partial
+          ? '지금은 파는 구간입니다. 다만 분기 손실 한도까지만 집행합니다.'
+          : '지금은 파는 구간입니다.',
       order: `${currency} ${num(execFx)} 환전 (약 ${eok(execKRW)})` +
-             (cappedByBudget ? ` — 권고 ${num(requestedFx)} 중 한도 내 집행분` : ''),
+             (bandDrivesAmount
+               ? (bandMaxPct != null ? ` — 정책 상한 ${bandMaxPct.toFixed(0)}% 복귀분` : ' — 정책 상한 복귀분')
+               : partial ? ` — 권고 ${num(requestedFx)} 중 한도 내 집행분` : ''),
       reasons: pnlNote ? [...reasons, pnlNote] : reasons,
-      caveat: cappedByBudget
-        ? `나머지 ${currency} ${num(requestedFx - execFx)} 는 다음 분기로 이월됩니다.`
-        : null,
+      caveat: bandShortFx > 0
+        ? `⚠ 분기 손실 한도 때문에 상한 복귀에 ${currency} ${num(bandShortFx)} 가 부족합니다 — 회의체 한도 조정이 필요합니다.`
+        : partial
+          ? `나머지 ${currency} ${num(requestedFx - execFx)} 는 다음 분기로 이월됩니다.`
+          : null,
       tone: 'act',
       expectedRatioAfter,
       currentRatio: d.currentRatio,
@@ -152,6 +224,19 @@ export function buildVerdict(input: VerdictInput): Verdict {
       ? `다만 최근 3년 중 평단(${num(avgCostRate)}원)을 넘긴 날은 ` +
         `${(pctDaysAboveBep * 100).toFixed(0)}% 뿐입니다. 무기한 기다리지 않도록 보유 한도를 함께 확인하세요.`
       : null
+    // ⚠ 밴드 상한을 넘은 상태라면 "미룬다"가 될 수 없다 — 의무가 재량을 이긴다.
+    if (bandOver) {
+      return {
+        kind: 'sell',
+        headline: '파는 구간은 아니지만, 정책 상한을 넘어 복귀분은 집행합니다.',
+        order: bandOrder(),
+        reasons: [...reasons, bandReason()],
+        caveat: '상한 복귀는 환율 판단과 무관한 이행 의무입니다. 그 이상은 팔지 않습니다.',
+        tone: 'act',
+        expectedRatioAfter: null,
+        currentRatio: d.currentRatio,
+      }
+    }
     return {
       kind: 'wait',
       headline: '지금은 파는 구간이 아닙니다. 환전을 미룹니다.',
@@ -167,6 +252,23 @@ export function buildVerdict(input: VerdictInput): Verdict {
     `목표 **${(d.appliedTargetRatio * 100).toFixed(0)}%** 와 현재 ` +
     `**${(d.currentRatio * 100).toFixed(0)}%** 의 차이가 작아, 거래 비용을 쓸 만큼이 아닙니다.`,
   )
+
+  // ⚠ [핵심] 리밸런싱 밴드(3%p)는 소액매매를 막는 장치이지 **정책 위반을 묵인하는 장치가 아니다.**
+  //   과거엔 상한을 넘었는데도 여기로 떨어져 "오늘은 아무것도 하지 않습니다"가 표시됐다
+  //   — 바로 아래 '정책 상한 초과' 경고와 모순(2026-11-02 USD 실사례, 5.3억 초과).
+  if (bandOver) {
+    return {
+      kind: 'sell',
+      headline: '정책 상한을 넘었습니다. 상한 복귀분을 환전합니다.',
+      order: bandOrder(),
+      reasons: [...reasons, bandReason()],
+      caveat: '리밸런싱 밴드 이내라 추가 매도 권고는 없지만, 상한 복귀는 이행 의무입니다.',
+      tone: 'act',
+      expectedRatioAfter: null,
+      currentRatio: d.currentRatio,
+    }
+  }
+
   return {
     kind: 'hold',
     headline: '오늘은 아무것도 하지 않습니다.',
