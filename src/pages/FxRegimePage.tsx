@@ -723,6 +723,105 @@ export default function FxRegimePage() {
   const hasData = hist.data.length > 0
   const range = hasData ? `${hist.data[0].date} ~ ${hist.data[hist.data.length - 1].date}` : '—'
 
+  /**
+   * 📥 환율 이력 수집 패널.
+   *
+   * ⚠ 배치가 중요하다. 이 패널은 **모든 판정의 전제**인데 '판단 근거와 설정' 안에
+   *   접혀 있어 찾지 못했다(2026-11-03 리포트). 그렇다고 상시 노출하면 평상시
+   *   조용해야 할 화면에 관리 UI 가 끼어든다.
+   *   → **비어 있거나 뒤처진 통화가 있을 때만 최상단**, 정상이면 근거 영역 안에 둔다.
+   */
+  const historyPanel = (
+        <div className={CARD}>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="text-sm font-semibold text-gray-800 dark:text-slate-100">
+              📥 환율 이력
+              <InfoTip text={[
+                '한국은행 ECOS의 공식 매매기준율 일별 데이터입니다. 회계·세무 기준과 동일한 출처라 사후 정산에도 그대로 씁니다.',
+                '판정에는 최소 30영업일, 변동성 Z-Score까지 쓰려면 약 272영업일(약 1년 3개월)이 필요합니다.',
+                '"최신 보충"은 마지막 저장일 이후 빠진 구간만 하루 1회 채웁니다.',
+              ]} />
+            </div>
+            <div className="text-xs text-gray-500 dark:text-slate-400">
+              {hist.loading ? '불러오는 중…' : `${hist.data.length.toLocaleString()}건 · ${range}`}
+            </div>
+            {canEdit() && (
+              <div className="ml-auto flex flex-wrap items-center gap-2">
+                <select
+                  value={fromYear}
+                  onChange={e => setFromYear(Number(e.target.value))}
+                  disabled={busy}
+                  className="rounded border border-gray-300 bg-white px-2 py-1 text-xs dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                >
+                  {[1, 2, 3, 5, 10].map(y => (
+                    <option key={y} value={thisYear - y + 1}>최근 {y}년</option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => void runBackfill(CURRENCIES)}
+                  disabled={busy}
+                  title="USD·EUR·JPY·GBP 를 순서대로 모두 수집합니다"
+                  className="rounded bg-blue-600 px-3 py-1 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                >{busy ? '수집 중…' : `ECOS 백필 (전 통화 ${CURRENCIES.length}종)`}</button>
+                <button
+                  onClick={() => void runBackfill([currency])}
+                  disabled={busy}
+                  className="rounded border border-gray-300 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+                >{currency} 만</button>
+                <button
+                  onClick={() => void runSync()}
+                  disabled={busy}
+                  className="rounded border border-gray-300 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+                >최신 보충</button>
+              </div>
+            )}
+          </div>
+          {/* 통화별 보유 현황 — 비어 있거나 오래된 통화를 즉시 드러낸다 */}
+          {coverage.rows.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {coverage.rows.map(c => {
+                const stale = !c.lastDate || bizDaysBetween(c.lastDate, todayStr()) > 10
+                return (
+                  <span key={c.currency}
+                    title={c.lastDate ? `마지막 데이터 ${c.lastDate}` : '이력 없음'}
+                    className={`rounded px-2 py-0.5 text-[11px] tabular-nums ${
+                      stale
+                        ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
+                        : 'bg-gray-100 text-gray-600 dark:bg-slate-800 dark:text-slate-300'}`}>
+                    {stale && '⚠ '}{c.currency} {c.lastDate ?? '없음'}
+                  </span>
+                )
+              })}
+              <span className="text-[11px] text-gray-400 self-center">
+                ⚠ 표시는 10영업일 이상 뒤처진 통화입니다 — 백필이 필요합니다.
+              </span>
+            </div>
+          )}
+
+          {(progress || collectErr) && (
+            <div className={`mt-2 text-xs ${collectErr ? 'text-red-600 dark:text-red-400' : 'text-gray-600 dark:text-slate-300'}`}>
+              {collectErr ?? progress}
+            </div>
+          )}
+          {busy && (
+            <div className="mt-1 text-[11px] text-gray-500 dark:text-slate-400">
+              ECOS 응답이 연도당 20~30초 걸립니다. 창을 닫지 마세요.
+            </div>
+          )}
+          {!hasData && !hist.loading && (
+            <div className="mt-3 rounded bg-amber-50 p-3 text-xs text-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+              환율 이력이 없습니다. 국면 판정에는 최소 30영업일(변동성 Z-Score까지 쓰려면 약 272영업일)이
+              필요하므로 <strong>ECOS 백필</strong>을 먼저 실행하세요.
+            </div>
+          )}
+        </div>
+  )
+
+  /** 하나라도 10영업일 이상 뒤처졌거나 비어 있으면 수집 패널을 전면에 올린다 */
+  const coverageStale = useMemo(
+    () => coverageRows.some(c => !c.lastDate || bizDaysBetween(c.lastDate, todayStr()) > 10),
+    [coverageRows])
+
   return (
     <div className="space-y-4 p-4">
       {/* 헤더 */}
@@ -799,6 +898,9 @@ export default function FxRegimePage() {
         }
       />
 
+      {/* 이력이 비었거나 뒤처졌으면 수집 패널을 먼저 보여준다 — 판정의 전제이기 때문 */}
+      {coverageStale && historyPanel}
+
       {/* 조치 이력 — 과거 특정 날짜의 조치 카드 재조회(세션26차 7일차) */}
       <RegimeHistoryCard company={company} currency={currency} />
 
@@ -814,6 +916,8 @@ export default function FxRegimePage() {
         </summary>
 
         <div className="mt-3 space-y-4">
+      {!coverageStale && historyPanel}
+
       {/* 탭 */}
       <div className="flex flex-wrap gap-1 border-b border-gray-200 dark:border-slate-700">
         {TABS.map(t => (
@@ -830,90 +934,6 @@ export default function FxRegimePage() {
         ))}
       </div>
 
-      {/* ① 데이터 수집 — 모든 탭의 전제라 항상 노출 */}
-      <div className={CARD}>
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="text-sm font-semibold text-gray-800 dark:text-slate-100">
-            📥 환율 이력
-            <InfoTip text={[
-              '한국은행 ECOS의 공식 매매기준율 일별 데이터입니다. 회계·세무 기준과 동일한 출처라 사후 정산에도 그대로 씁니다.',
-              '판정에는 최소 30영업일, 변동성 Z-Score까지 쓰려면 약 272영업일(약 1년 3개월)이 필요합니다.',
-              '"최신 보충"은 마지막 저장일 이후 빠진 구간만 하루 1회 채웁니다.',
-            ]} />
-          </div>
-          <div className="text-xs text-gray-500 dark:text-slate-400">
-            {hist.loading ? '불러오는 중…' : `${hist.data.length.toLocaleString()}건 · ${range}`}
-          </div>
-          {canEdit() && (
-            <div className="ml-auto flex flex-wrap items-center gap-2">
-              <select
-                value={fromYear}
-                onChange={e => setFromYear(Number(e.target.value))}
-                disabled={busy}
-                className="rounded border border-gray-300 bg-white px-2 py-1 text-xs dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-              >
-                {[1, 2, 3, 5, 10].map(y => (
-                  <option key={y} value={thisYear - y + 1}>최근 {y}년</option>
-                ))}
-              </select>
-              <button
-                onClick={() => void runBackfill(CURRENCIES)}
-                disabled={busy}
-                title="USD·EUR·JPY·GBP 를 순서대로 모두 수집합니다"
-                className="rounded bg-blue-600 px-3 py-1 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
-              >{busy ? '수집 중…' : `ECOS 백필 (전 통화 ${CURRENCIES.length}종)`}</button>
-              <button
-                onClick={() => void runBackfill([currency])}
-                disabled={busy}
-                className="rounded border border-gray-300 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
-              >{currency} 만</button>
-              <button
-                onClick={() => void runSync()}
-                disabled={busy}
-                className="rounded border border-gray-300 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
-              >최신 보충</button>
-            </div>
-          )}
-        </div>
-        {/* 통화별 보유 현황 — 비어 있거나 오래된 통화를 즉시 드러낸다 */}
-        {coverage.rows.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {coverage.rows.map(c => {
-              const stale = !c.lastDate || bizDaysBetween(c.lastDate, todayStr()) > 10
-              return (
-                <span key={c.currency}
-                  title={c.lastDate ? `마지막 데이터 ${c.lastDate}` : '이력 없음'}
-                  className={`rounded px-2 py-0.5 text-[11px] tabular-nums ${
-                    stale
-                      ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
-                      : 'bg-gray-100 text-gray-600 dark:bg-slate-800 dark:text-slate-300'}`}>
-                  {stale && '⚠ '}{c.currency} {c.lastDate ?? '없음'}
-                </span>
-              )
-            })}
-            <span className="text-[11px] text-gray-400 self-center">
-              ⚠ 표시는 10영업일 이상 뒤처진 통화입니다 — 백필이 필요합니다.
-            </span>
-          </div>
-        )}
-
-        {(progress || collectErr) && (
-          <div className={`mt-2 text-xs ${collectErr ? 'text-red-600 dark:text-red-400' : 'text-gray-600 dark:text-slate-300'}`}>
-            {collectErr ?? progress}
-          </div>
-        )}
-        {busy && (
-          <div className="mt-1 text-[11px] text-gray-500 dark:text-slate-400">
-            ECOS 응답이 연도당 20~30초 걸립니다. 창을 닫지 마세요.
-          </div>
-        )}
-        {!hasData && !hist.loading && (
-          <div className="mt-3 rounded bg-amber-50 p-3 text-xs text-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
-            환율 이력이 없습니다. 국면 판정에는 최소 30영업일(변동성 Z-Score까지 쓰려면 약 272영업일)이
-            필요하므로 <strong>ECOS 백필</strong>을 먼저 실행하세요.
-          </div>
-        )}
-      </div>
 
       <TreasuryInputPanel
         key={`${company}_${currency}`}
