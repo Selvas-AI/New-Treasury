@@ -1101,7 +1101,12 @@ export default function FxRegimePage() {
             ) : (
               <div className="mt-2 rounded bg-amber-50 px-2 py-1.5 text-[11px] text-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
                 ⚠ 앵커 미설정 — 수준(비싼가/싼가)을 판단하지 못해 <strong>구 국면 로직</strong>으로 동작 중입니다.
-                정책 프로토콜 탭에서 앵커를 지정하세요.
+                <Link
+                  to={`/policy?tab=fx&company=${encodeURIComponent(company)}`}
+                  className="font-semibold underline underline-offset-2 hover:text-amber-900 dark:hover:text-amber-200"
+                >자금정책 › FX 정책 › ② 정책 기준 › 📐 기준 수준(앵커) →</Link>
+                {' '}에서 <strong>횡보 구간 후보 찾기</strong> 버튼으로 1~3순위 후보를 다시 불러올 수 있습니다
+                (통화 탭을 {currency} 로 맞춘 뒤 진행하세요).
               </div>
             )}
             <div className="mt-3 border-t border-gray-100 pt-2 text-xs text-gray-600 dark:border-slate-700 dark:text-slate-300">
