@@ -382,14 +382,39 @@ function AnchorPanel({ protocol, series, currency, canEdit, onSave, onSaved, set
             <button
               onClick={() => setShowCands(v => !v)}
               disabled={busy || series.length < 90}
+              title={series.length < 90
+                ? `환율 이력이 ${series.length}건뿐입니다 (90건 이상 필요). FX 리짐 전략 화면에서 ECOS 백필을 먼저 돌리세요.`
+                : '이미 불러온 환율 이력으로 즉시 계산합니다 (네트워크 호출 없음)'}
               className="rounded bg-blue-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
             >{showCands ? '닫기' : '횡보 구간 후보 찾기'}</button>
           </div>
         )}
       </div>
 
+      {series.length < 90 && (
+        <div className="mt-2 rounded bg-gray-50 px-2 py-1.5 text-[11px] text-gray-600 dark:bg-slate-800 dark:text-slate-300">
+          📉 {currency} 환율 이력 <strong className="tabular-nums">{series.length}건</strong> — 후보 탐색에는 90건 이상이 필요합니다.
+          <strong> FX 리짐 전략</strong> 화면에서 <strong>ECOS 백필</strong>을 먼저 돌린 뒤 이 화면을 새로고침하세요.
+        </div>
+      )}
+
       {showCands && (
         <div className="mt-3">
+          {/* ⚠ 어떤 데이터로 계산했는지 반드시 보여준다 — 이 계산은 네트워크 호출 없이
+              **이미 불러온 series** 로만 돈다. ECOS 백필을 돌려도 이 화면이 열려 있던
+              동안에는 반영되지 않으므로(페이지마다 useFxHistory 인스턴스가 따로다),
+              "백필했는데 후보가 그대로"인지 "원래 그 후보가 맞는지"를 구분할 수 없었다. */}
+          <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded bg-blue-50 px-2 py-1.5 text-[11px] text-blue-800 dark:bg-blue-900/20 dark:text-blue-300">
+            <span>
+              탐색 대상 <strong className="tabular-nums">{series.length.toLocaleString()}건</strong>
+              {series.length > 0 && (
+                <span className="ml-1 tabular-nums">({series[0].date} ~ {series[series.length - 1].date})</span>
+              )}
+            </span>
+            <span className="text-blue-600/70 dark:text-blue-400/70">
+              이미 불러온 이력으로 즉시 계산합니다 — ECOS 백필 직후라면 <strong>새로고침(F5)</strong> 후 다시 누르세요.
+            </span>
+          </div>
           <div className="mb-2 text-[11px] leading-relaxed text-gray-500 dark:text-slate-400">
             최근 3년에서 <strong>밴드 폭이 좁고 제자리로 돌아온</strong> 60영업일 구간 상위 3개입니다.
             시장이 실제로 합의했던 가격대이므로 기준점으로 적합합니다. 선택하면 <strong>고정</strong>되며,
