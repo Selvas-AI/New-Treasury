@@ -106,8 +106,10 @@ export function buildVerdict(input: VerdictInput): Verdict {
   // 밴드 상한 복귀 — 환율 타이밍과 무관한 **의무**
   const bandFx = rate > 0 ? bandExcessKRW / rate : 0
   const bandOver = bandExcessKRW > 0 && bandFx > 0
+  // ⚠ 바구니 전체 결정이므로 **원화 총액**을 먼저 말한다. 통화별 수량은 카드의
+  //   권장 배분표가 보여준다 — 지시 문구에 한 통화 수량만 쓰면 "그 통화만 팔라"로 읽힌다.
   const bandOrder = () =>
-    `${currency} ${num(bandFx)} 환전 (약 ${eok(bandExcessKRW)})` +
+    `총 ${eok(bandExcessKRW)} 환전` +
     (bandMaxPct != null ? ` — 정책 상한 ${bandMaxPct.toFixed(0)}% 복귀분` : '')
   const bandReason = () =>
     `외화 보유가 **정책 상한${bandMaxPct != null ? ` ${bandMaxPct.toFixed(0)}%` : ''}을 ` +
@@ -206,15 +208,15 @@ export function buildVerdict(input: VerdictInput): Verdict {
         : partial
           ? '지금은 파는 구간입니다. 다만 분기 손실 한도까지만 집행합니다.'
           : '지금은 파는 구간입니다.',
-      order: `${currency} ${num(execFx)} 환전 (약 ${eok(execKRW)})` +
+      order: `총 ${eok(execKRW)} 환전` +
              (bandDrivesAmount
                ? (bandMaxPct != null ? ` — 정책 상한 ${bandMaxPct.toFixed(0)}% 복귀분` : ' — 정책 상한 복귀분')
-               : partial ? ` — 권고 ${num(requestedFx)} 중 한도 내 집행분` : ''),
+               : partial ? ` — 권고 ${eok(requestedFx * rate)} 중 한도 내 집행분` : ''),
       reasons: pnlNote ? [...reasons, pnlNote] : reasons,
       caveat: bandShortFx > 0
-        ? `⚠ 분기 손실 한도 때문에 상한 복귀에 ${currency} ${num(bandShortFx)} 가 부족합니다 — 회의체 한도 조정이 필요합니다.`
+        ? `⚠ 분기 손실 한도 때문에 상한 복귀에 ${eok(bandShortFx * rate)} 가 부족합니다 — 회의체 한도 조정이 필요합니다.`
         : partial
-          ? `나머지 ${currency} ${num(requestedFx - execFx)} 는 다음 분기로 이월됩니다.`
+          ? `나머지 ${eok((requestedFx - execFx) * rate)} 는 다음 분기로 이월됩니다.`
           : null,
       tone: 'act',
       orderKRW: execKRW,

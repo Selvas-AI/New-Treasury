@@ -36,6 +36,12 @@ export interface VerdictCardProps {
   allocation?: FxAllocationRow[]
   /** 이 통화 탭에서 강조할 코드 */
   currentCode?: string
+  /**
+   * 바구니 판정의 기준이 된 대표 통화와 그 비중.
+   * ⚠ 조치 카드는 **바구니 하나의 결정**이라 통화 탭을 바꿔도 같아야 한다.
+   *   그 사실을 밝히지 않으면 "왜 EUR 탭인데 USD 기준이지?" 라는 의문이 남는다.
+   */
+  basis?: { code: string; sharePct: number } | null
 }
 
 const TONE = {
@@ -66,7 +72,7 @@ const TONE = {
 } as const
 
 export default function VerdictCard({
-  verdict, asOf, currency, renderBold, onOpenDetail, onOpenNarrative, allocation, currentCode,
+  verdict, asOf, currency, renderBold, onOpenDetail, onOpenNarrative, allocation, currentCode, basis,
 }: VerdictCardProps) {
   const [showWhy, setShowWhy] = useState(false)
   const t = TONE[verdict.tone]
@@ -79,7 +85,9 @@ export default function VerdictCard({
           {t.icon} {t.label}
         </span>
         <span className="text-[11px] text-gray-500 dark:text-slate-400">
-          {asOf} 기준 · {currency}
+          {asOf} 기준 · {basis
+            ? `바구니 전체 · 판정 기준 ${basis.code}(비중 ${basis.sharePct.toFixed(1)}%)`
+            : currency}
         </span>
       </div>
 

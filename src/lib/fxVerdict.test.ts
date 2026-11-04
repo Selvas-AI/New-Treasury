@@ -46,9 +46,8 @@ describe('정책 상한 초과는 리밸런싱 밴드로 묵인되지 않는다'
     expect(v.tone).toBe('act')
     expect(v.headline).toContain('정책 상한')
     expect(v.headline).not.toContain('아무것도')
-    // 약 300,123 USD = 4.0억 ÷ 1,332.79
-    expect(v.order).toMatch(/USD 300,1\d\d/)
-    expect(v.order).toContain('4.0억원')
+    expect(v.order).toContain('총 4.0억원 환전')
+    expect(v.order).toContain('정책 상한 30% 복귀분')
   })
 
   it('상한 이내면 종전대로 조치 없음', () => {
@@ -77,7 +76,8 @@ describe('리짐 권고와 상한 복귀분 중 큰 쪽을 따른다', () => {
       bandExcessKRW: 120_000_000,                      // 1.2억 < 8.3억
     }))
     expect(v.kind).toBe('sell_partial')
-    expect(v.order).toContain('EUR 614,384')
+    expect(v.order).toContain('환전')
+    expect(v.order).toContain('한도 내 집행분')
     expect(v.headline).toContain('분기 손실 한도')
   })
 
@@ -89,7 +89,7 @@ describe('리짐 권고와 상한 복귀분 중 큰 쪽을 따른다', () => {
     }))
     expect(v.kind).toBe('sell')
     expect(v.headline).toContain('정책 상한을 넘었습니다')
-    expect(v.order).toMatch(/USD 300,1\d\d/)
+    expect(v.order).toContain('총 4.0억원 환전')
   })
 
   it('손실 한도 때문에 상한 복귀가 모자라면 부족분을 밝힌다', () => {

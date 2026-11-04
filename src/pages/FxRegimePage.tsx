@@ -25,15 +25,16 @@ import {
 import { useAuth } from '../hooks/useAuth'
 import { usePageCompany } from '../hooks/usePageCompany'
 import { useFxTradeHistory } from '../hooks/useFxTradeHistory'
-import { useFxRegime } from '../hooks/useFxRegime'
+import { useFxRegime, MIN_SERIES_LENGTH } from '../hooks/useFxRegime'
+import { useFxLots } from '../hooks/useFxLots'
 import {
-  backfillFxHistory, syncLatestFxHistory, fetchFxHistoryCoverage, type FxHistoryCoverage,
+  useFxHistory, backfillFxHistory, syncLatestFxHistory, fetchFxHistoryCoverage, type FxHistoryCoverage,
   type BackfillProgress,
 } from '../hooks/useFxHistory'
 import {
-  kalmanSmooth, bollinger,
+  kalmanSmooth, bollinger, evaluateRegime, protocolFromParams,
   TREND_LABEL, VOL_LABEL, CLAMP_LABEL,
-  type TrendCode, type VolCode,
+  type TrendCode, type VolCode, type RegimeSeriesPoint,
 } from '../lib/fxRegime'
 import { buildChartNarrative } from '../lib/fxChartNarrative'
 import InfoTip from '../components/common/InfoTip'
@@ -616,6 +617,42 @@ export default function FxRegimePage() {
     return null
   }, [company, currency, actualTradeHistory, treasuryInputs.avgAcquisitionRate, user])
 
+  /**
+   * ⭐ 바구니 대표 통화 — **조치 카드를 통화 탭과 무관하게 하나로 만든다.**
+   *
+   * 배경(2026-11-04): 판정은 통화별로 돌아가는데 그 결과를 **바구니 전체 목표 비중**에
+   *   적용하고 있었다. 그래서 USD 탭 35.9억 / EUR 탭 17.2억 / JPY 탭 51.2억 처럼
+   *   같은 바구니에 대해 탭마다 다른 지시가 나왔다. 바구니 비중은 하나뿐이므로
+   *   목표도 하나여야 한다.
+   * → 바구니에서 비중이 가장 큰 통화의 판정을 **바구니 결정**으로 삼는다.
+   *   (실측 USD 76% — 바구니 성격을 사실상 지배한다)
+   * ⚠ 통화별 앵커가 모두 설정되면 '비중 가중평균'으로 올리는 것이 더 정확하다.
+   *   지금은 앵커가 USD 에만 있어 가중평균이 오히려 왜곡된다.
+   */
+  const leadCode = useMemo(() => {
+    const rows = Object.entries(policyData.fxByCurrency)
+      .filter(([, v]) => v.krwAmount > 0)
+      .sort((a, b) => b[1].krwAmount - a[1].krwAmount)
+    return (rows[0]?.[0] ?? 'USD') as FxCode
+  }, [policyData.fxByCurrency])
+  const isLead = leadCode === currency
+  const leadShare = useMemo(() => {
+    const total = Object.values(policyData.fxByCurrency).reduce((a, v) => a + v.krwAmount, 0)
+    const lead = policyData.fxByCurrency[leadCode]?.krwAmount ?? 0
+    return total > 0 ? (lead / total) * 100 : null
+  }, [policyData.fxByCurrency, leadCode])
+
+  // 대표 통화가 현재 탭과 다를 때만 추가로 읽는다(같으면 위 번들을 그대로 쓴다).
+  const leadHist = useFxHistory(leadCode)
+  const leadLots = useFxLots(company, leadCode)
+  const leadSignal = useMemo(() => {
+    if (isLead) return signal
+    const s: RegimeSeriesPoint[] = leadHist.data.map((p: { date: string; rate: number }) => ({ date: p.date, rate: p.rate }))
+    if (s.length < MIN_SERIES_LENGTH) return null
+    // ctx(바구니 분모·보유액·정책밴드)는 통화와 무관하게 동일하다. 앵커만 대표 통화 것을 쓴다.
+    return evaluateRegime(s, ctx, protocolFromParams((k: string) => params.get(k), leadCode), leadCode)
+  }, [isLead, signal, leadHist.data, ctx, params, leadCode])
+
   // 정책 밴드 상한 대비 전사 외화 보유 — 분자·분모는 usePolicyDashboard(SSOT) 그대로.
   const bandExceed = useMemo(() => computeFxBandExceed(policyData, params), [policyData, params])
   const marketRates = useMemo(() => Object.fromEntries(
@@ -650,49 +687,56 @@ export default function FxRegimePage() {
 
   // 분기 손실한도 기준 집행 가능액 — 조치 카드(VerdictCard)와 매각 지시 등록 패널이
   // 공유한다(둘 다 상단에 붙어 있으므로 계산을 한 곳에만 둔다).
+  // ⚠ 대표 통화 기준으로 계산한다 — 탭을 바꿔도 같은 금액이 나와야 하기 때문.
+  //   손실 한도(분기 캡·기실현 손실)는 법인 단위라 통화와 무관하고,
+  //   한도를 외화 수량으로 환산할 때 쓰는 장부환율·보유량만 대표 통화 것을 쓴다.
   const decisionBudget = useMemo(() => {
-    if (!signal) return null
-    const rate = signal.indicators.close
-    const suggestedKRW = signal.decision.actionRequired && signal.decision.suggestedTradeKRW < 0
-      ? -signal.decision.suggestedTradeKRW : 0
-    const requestedFx = rate > 0 ? Math.min(suggestedKRW / rate, availableFx) : 0
+    if (!leadSignal) return null
+    const rate = leadSignal.indicators.close
+    const avail = isLead ? availableFx : leadLots.availableAmount
+    const holdFx = isLead ? treasuryInputs.fxHoldingFx : leadLots.totalAmount
+    // bookRate 는 로트가 없으면 null 이다 — 0 으로 내려 손익 계산을 건너뛴다(한도 미적용).
+    const costRate = (isLead ? treasuryInputs.avgAcquisitionRate : leadLots.bookRate) ?? 0
+    const suggestedKRW = leadSignal.decision.actionRequired && leadSignal.decision.suggestedTradeKRW < 0
+      ? -leadSignal.decision.suggestedTradeKRW : 0
+    const requestedFx = rate > 0 ? Math.min(suggestedKRW / rate, avail) : 0
     const budget = lossBudget(
       treasuryInputs.quarterLossCapKRW,
       treasuryInputs.realizedLossThisQuarterKRW,
-      requestedFx,
-      treasuryInputs.fxHoldingFx,
-      treasuryInputs.avgAcquisitionRate,
-      rate,
+      requestedFx, holdFx, costRate, rate,
     )
-    return { rate, requestedFx, budget }
-  }, [signal, availableFx, treasuryInputs.quarterLossCapKRW,
-      treasuryInputs.realizedLossThisQuarterKRW, treasuryInputs.fxHoldingFx,
-      treasuryInputs.avgAcquisitionRate])
+    return { rate, requestedFx, budget, costRate, holdFx }
+  }, [leadSignal, isLead, availableFx, leadLots.availableAmount, leadLots.totalAmount, leadLots.bookRate,
+      treasuryInputs.quarterLossCapKRW, treasuryInputs.realizedLossThisQuarterKRW,
+      treasuryInputs.fxHoldingFx, treasuryInputs.avgAcquisitionRate])
 
   // 선택한 통화의 정책 상한 초과 안분분 — 조치 카드와 초과 카드가 같은 값을 쓰게 한다.
-  const bandExcess = useMemo(() => {
-    const row = bandExceed.over ? bandExceed.rows.find(r => r.code === currency) : undefined
-    return { excessKRW: row?.excessKRW ?? 0, maxPct: bandExceed.max }
-  }, [bandExceed, currency])
+  // ⚠ 조치 카드가 대표 통화 기준이므로 밴드 초과분도 **바구니 전체**를 쓴다.
+  //   통화별 안분은 카드 안 배분표가 담당한다 — 여기서 통화 몫만 넘기면 총액이 또 갈라진다.
+  const bandExcess = useMemo(
+    () => ({ excessKRW: bandExceed.over ? bandExceed.excessKRW : 0, maxPct: bandExceed.max }),
+    [bandExceed])
 
   // 판정 기준일이 얼마나 뒤처졌는지 — 환율 이력 백필이 끊긴 통화 감지
   // ⚠ EUR 이 2022-12-30 기준으로 판정되고 있었다(2026-11-02 발견). 4년 전 데이터다.
   const staleDays = useMemo(() => {
-    if (!signal?.asOf) return null
+    if (!leadSignal?.asOf) return null
     const today = todayStr()
-    return signal.asOf >= today ? 0 : bizDaysBetween(signal.asOf, today)
-  }, [signal?.asOf])
+    return leadSignal.asOf >= today ? 0 : bizDaysBetween(leadSignal.asOf, today)
+  }, [leadSignal?.asOf])
 
   // ⭐ 오늘의 결론 — 화면 최상단. 이 카드 하나만 보고 나가도 업무가 되도록 한다.
   const verdict = useMemo(() => {
-    if (!signal || !decisionBudget) return null
-    const bep = treasuryInputs.avgAcquisitionRate > 0
-      ? bepStats(series, treasuryInputs.avgAcquisitionRate, 750)
+    if (!leadSignal || !decisionBudget) return null
+    const bep = decisionBudget.costRate > 0
+      ? bepStats(isLead ? series : leadHist.data.map((p: { date: string; rate: number }) => ({ date: p.date, rate: p.rate })),
+                 decisionBudget.costRate, 750)
       : null
+    // ⚠ 바구니 결정이므로 **대표 통화** 기준으로 만든다 — 탭을 바꿔도 같은 결론이어야 한다.
     return buildVerdict({
-      signal, currency,
-      holdingFx:   treasuryInputs.fxHoldingFx,
-      avgCostRate: treasuryInputs.avgAcquisitionRate,
+      signal: leadSignal, currency: leadCode,
+      holdingFx:   decisionBudget.holdFx,
+      avgCostRate: decisionBudget.costRate,
       allowedFx:   decisionBudget.budget.allowedFx,
       requestedFx: decisionBudget.requestedFx,
       pctDaysAboveBep: bep?.pctDaysAbove ?? null,
@@ -703,8 +747,7 @@ export default function FxRegimePage() {
       bandMaxPct:    bandExcess.maxPct,
       asOfStaleDays: staleDays,
     })
-  }, [signal, currency, series, decisionBudget, bandExcess, staleDays,
-      treasuryInputs.fxHoldingFx, treasuryInputs.avgAcquisitionRate])
+  }, [leadSignal, leadCode, isLead, series, leadHist.data, decisionBudget, bandExcess, staleDays])
 
   /**
    * 조치 금액의 통화별 권장 배분.
@@ -871,6 +914,7 @@ export default function FxRegimePage() {
           onOpenNarrative={() => setShowNarrative(true)}
           allocation={orderAllocation}
           currentCode={currency}
+          basis={leadShare != null ? { code: leadCode, sharePct: leadShare } : null}
         />
       )}
 
