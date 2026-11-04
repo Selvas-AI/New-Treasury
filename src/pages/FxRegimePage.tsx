@@ -50,7 +50,7 @@ import { syncRegimeSnapshot, type RegimeSnapshotHistoryEntry } from '../lib/fxRe
 import { restInsert } from '../lib/supabase'
 import RegimeHistoryCard from '../components/fxRegime/RegimeHistoryCard'
 import FxBandExceedCard from '../components/fx/FxBandExceedCard'
-import { computeFxBandExceed, buildThresholdOrderPayload } from '../lib/fxBandExceed'
+import { computeFxBandExceed, buildThresholdOrderPayload, allocateAcrossBasket } from '../lib/fxBandExceed'
 import { useFx } from '../hooks/useFx'
 import { addBizDays, bizDaysBetween, todayStr } from '../lib/bizDay'
 import {
@@ -706,6 +706,19 @@ export default function FxRegimePage() {
   }, [signal, currency, series, decisionBudget, bandExcess, staleDays,
       treasuryInputs.fxHoldingFx, treasuryInputs.avgAcquisitionRate])
 
+  /**
+   * 조치 금액의 통화별 권장 배분.
+   *
+   * ⚠ 조치 카드의 금액은 **바구니 전체**를 목표 비중까지 내리는 총액이다. 과거엔 그걸
+   *   선택한 통화 하나로 전량 파는 것처럼 보여줘, 탭마다 금액이 달라 보이고 사용자가
+   *   두 금액을 더해야 하나 고민했다(2026-11-04 리포트).
+   *   상한 초과 카드와 **같은 안분 규칙**(보유 구성비)을 써서 한 화면에서 말이 맞게 한다.
+   */
+  const orderAllocation = useMemo(() => {
+    if (!verdict?.orderKRW) return []
+    return allocateAcrossBasket(verdict.orderKRW, policyData.fxByCurrency)
+  }, [verdict?.orderKRW, policyData.fxByCurrency])
+
   // 차트 자동 해석 — 지표값을 평이한 문장으로 변환 (fxChartNarrative)
   const narrative = useMemo(() => {
     if (!signal || chart.length === 0) return []
@@ -856,6 +869,8 @@ export default function FxRegimePage() {
           renderBold={renderBold}
           onOpenDetail={() => { setTab('decision'); setDetailsOpen(true) }}
           onOpenNarrative={() => setShowNarrative(true)}
+          allocation={orderAllocation}
+          currentCode={currency}
         />
       )}
 
@@ -888,6 +903,16 @@ export default function FxRegimePage() {
         canPropose={inputSource === 'live' && canEdit()}
         onPropose={registerThresholdOrder}
         footer={
+          <>
+          {/* 두 카드의 관계를 명시한다 — 금액이 다른 이유를 사람이 추측하지 않게 한다 */}
+          {verdict?.orderKRW ? (
+            <p className="mt-3 rounded bg-gray-50 px-2.5 py-2 text-[11px] leading-relaxed text-gray-600 dark:bg-slate-800/60 dark:text-slate-300">
+              위 표는 <b>상한({bandExceed.max ?? '—'}%)까지만</b> 되돌리는 최소 금액
+              ({fmtKRW(bandExceed.excessKRW)})이고, 맨 위 조치 카드는 <b>리짐 목표까지</b> 내리는 금액
+              ({fmtKRW(verdict.orderKRW)})입니다. <b>같은 한 건의 매각</b>을 두 기준으로 본 것이며,
+              큰 쪽을 집행하면 작은 쪽은 자동으로 충족됩니다 — 두 금액을 더하지 마세요.
+            </p>
+          ) : null}
           <p className="mt-3 text-[11px] text-gray-400">
             상한은 정책회의가 의결한 밴드(fx_target_max)입니다. 승인·체결은{' '}
             <Link to={`/fx-ledger/${company}?tab=orders`} className="text-blue-600 underline dark:text-blue-400">
@@ -895,6 +920,7 @@ export default function FxRegimePage() {
             </Link>
             에서 진행합니다.
           </p>
+          </>
         }
       />
 

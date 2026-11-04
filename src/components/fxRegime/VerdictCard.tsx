@@ -13,6 +13,8 @@
  */
 import { useState, type ReactNode } from 'react'
 import type { Verdict } from '../../lib/fxVerdict'
+import type { FxAllocationRow } from '../../lib/fxBandExceed'
+import { fmtKRW } from '../../lib/format'
 
 export interface VerdictCardProps {
   verdict: Verdict
@@ -24,6 +26,16 @@ export interface VerdictCardProps {
   onOpenDetail: () => void
   /** 그래프 해석 팝업 */
   onOpenNarrative: () => void
+  /**
+   * 바구니 기준 권장 배분 — 이 금액을 통화별로 어떻게 나눠 파는지.
+   *
+   * ⚠ 과거엔 "선택한 통화 하나로 전량 판다"는 금액만 보여줬다. 그러면 탭마다 금액이
+   *   달라 보이고, 사용자가 USD 금액과 EUR 금액을 **더해야 하나** 고민하게 된다
+   *   (2026-11-04 리포트). 바구니 총액과 통화별 몫을 함께 보여줘 그 의문을 없앤다.
+   */
+  allocation?: FxAllocationRow[]
+  /** 이 통화 탭에서 강조할 코드 */
+  currentCode?: string
 }
 
 const TONE = {
@@ -54,7 +66,7 @@ const TONE = {
 } as const
 
 export default function VerdictCard({
-  verdict, asOf, currency, renderBold, onOpenDetail, onOpenNarrative,
+  verdict, asOf, currency, renderBold, onOpenDetail, onOpenNarrative, allocation, currentCode,
 }: VerdictCardProps) {
   const [showWhy, setShowWhy] = useState(false)
   const t = TONE[verdict.tone]
@@ -89,6 +101,36 @@ export default function VerdictCard({
               <span>{(verdict.currentRatio * 100).toFixed(1)}%</span>
               <span className="text-gray-400 dark:text-slate-500">→</span>
               <span className="font-bold text-blue-700 dark:text-blue-400">{(verdict.expectedRatioAfter * 100).toFixed(1)}%</span>
+            </div>
+          )}
+
+          {/* 통화별 권장 배분 — "다른 통화도 팔아야 하나?" 를 카드 안에서 끝낸다 */}
+          {allocation && allocation.length > 0 && (
+            <div className="mt-2.5 border-t border-gray-100 pt-2 dark:border-slate-700">
+              <div className="text-[11px] font-medium text-gray-500 dark:text-slate-400">
+                통화별 권장 배분 <span className="font-normal text-gray-400">(보유 구성비 기준)</span>
+              </div>
+              <table className="mt-1 w-full text-xs tabular-nums">
+                <tbody>
+                  {allocation.map(a => {
+                    const on = a.code === currentCode
+                    return (
+                      <tr key={a.code} className={on ? 'font-semibold text-gray-900 dark:text-slate-50' : 'text-gray-500 dark:text-slate-400'}>
+                        <td className="py-0.5 pr-2 whitespace-nowrap">{on && '▸ '}{a.code}</td>
+                        <td className="py-0.5 pr-2 text-right">{a.sharePct.toFixed(1)}%</td>
+                        <td className="py-0.5 pr-2 text-right">{fmtKRW(a.krwAmount)}</td>
+                        <td className="py-0.5 text-right">
+                          {a.nativeAmount != null ? `${Math.round(a.nativeAmount).toLocaleString()} ${a.code}` : '—'}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+              <p className="mt-1.5 text-[11px] leading-relaxed text-amber-700 dark:text-amber-400">
+                ⚠ 위 금액은 <b>바구니 전체를 목표 비중까지 내리는 총액</b>을 통화별로 나눈 것입니다.
+                통화 탭을 바꿔도 <b>같은 한 건의 지시</b>이며, 탭마다 나온 금액을 <b>더하지 마세요.</b>
+              </p>
             </div>
           )}
         </div>

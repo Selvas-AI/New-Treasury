@@ -35,6 +35,12 @@ export interface Verdict {
   expectedRatioAfter: number | null
   /** 현재 외화 보유 비중 (0~1) — expectedRatioAfter 와 나란히 비교 표시용 */
   currentRatio: number
+  /**
+   * 오늘 집행할 **바구니 기준 총액**(KRW, 양수). 조치가 없으면 null.
+   * ⚠ 화면은 이 값을 통화별로 안분해 보여준다(allocateAcrossBasket).
+   *   order 문자열에서 숫자를 다시 파싱하지 말 것.
+   */
+  orderKRW: number | null
 }
 
 export interface VerdictInput {
@@ -125,6 +131,7 @@ export function buildVerdict(input: VerdictInput): Verdict {
         ? '상한 복귀분은 보유액·정책값만으로 산출되므로 환율 이력과 무관하게 유효합니다.'
         : '보유 비중이 정책 밴드 안에 있어 당장 이행할 의무는 없습니다.',
       tone: bandOver ? 'act' : 'warn',
+      orderKRW: bandOver ? bandExcessKRW : null,
       expectedRatioAfter: null,
       currentRatio: d.currentRatio,
     }
@@ -185,6 +192,7 @@ export function buildVerdict(input: VerdictInput): Verdict {
           ? `⚠ 정책 상한을 ${eok(bandExcessKRW)} 초과한 상태라 한도 소진과 무관하게 복귀 의무가 남습니다 — 회의체 한도 조정이 필요합니다.`
           : '한도를 늘리지 않으면 다음 분기까지 환율 변동 위험을 그대로 안고 갑니다.',
         tone: 'warn',
+        orderKRW: null,
         expectedRatioAfter: null,
         currentRatio: d.currentRatio,
       }
@@ -209,6 +217,7 @@ export function buildVerdict(input: VerdictInput): Verdict {
           ? `나머지 ${currency} ${num(requestedFx - execFx)} 는 다음 분기로 이월됩니다.`
           : null,
       tone: 'act',
+      orderKRW: execKRW,
       expectedRatioAfter,
       currentRatio: d.currentRatio,
     }
@@ -233,6 +242,7 @@ export function buildVerdict(input: VerdictInput): Verdict {
         reasons: [...reasons, bandReason()],
         caveat: '상한 복귀는 환율 판단과 무관한 이행 의무입니다. 그 이상은 팔지 않습니다.',
         tone: 'act',
+        orderKRW: bandExcessKRW,
         expectedRatioAfter: null,
         currentRatio: d.currentRatio,
       }
@@ -242,6 +252,7 @@ export function buildVerdict(input: VerdictInput): Verdict {
       headline: '지금은 파는 구간이 아닙니다. 환전을 미룹니다.',
       order: '이번 유입분은 환전하지 않고 보유합니다.',
       reasons, caveat, tone: 'hold',
+      orderKRW: null,
       expectedRatioAfter: null,
       currentRatio: d.currentRatio,
     }
@@ -264,6 +275,7 @@ export function buildVerdict(input: VerdictInput): Verdict {
       reasons: [...reasons, bandReason()],
       caveat: '리밸런싱 밴드 이내라 추가 매도 권고는 없지만, 상한 복귀는 이행 의무입니다.',
       tone: 'act',
+      orderKRW: bandExcessKRW,
       expectedRatioAfter: null,
       currentRatio: d.currentRatio,
     }
@@ -276,6 +288,7 @@ export function buildVerdict(input: VerdictInput): Verdict {
     reasons,
     caveat: '국면이 바뀌면 이 화면의 결론도 바뀝니다. 매일 한 번만 확인하시면 됩니다.',
     tone: 'hold',
+    orderKRW: null,
     expectedRatioAfter: null,
     currentRatio: d.currentRatio,
   }

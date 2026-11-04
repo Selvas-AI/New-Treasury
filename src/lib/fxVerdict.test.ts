@@ -125,3 +125,21 @@ describe('환율 이력이 끊긴 통화 — 판정을 단정하지 않는다', 
     expect(v.kind).toBe('hold')
   })
 })
+
+describe('orderKRW — 화면이 안분할 바구니 총액', () => {
+  it('매도 권고는 집행 원화액을 돌려준다', () => {
+    const v = buildVerdict(input({
+      signal: signalOf({ current: 0.307, target: 0.267, actionRequired: true, tradeKRW: -3_590_000_000 }),
+      allowedFx: 2_676_655, requestedFx: 2_676_655,
+    }))
+    expect(v.orderKRW).toBeCloseTo(2_676_655 * RATE, 0)
+  })
+
+  it('조치 없음이면 null — 배분표를 그리지 않는다', () => {
+    expect(buildVerdict(input()).orderKRW).toBeNull()
+  })
+
+  it('상한 복귀만 집행하는 경우 그 금액을 돌려준다', () => {
+    expect(buildVerdict(input({ bandExcessKRW: 470_000_000 })).orderKRW).toBe(470_000_000)
+  })
+})

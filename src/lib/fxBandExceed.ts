@@ -40,6 +40,51 @@ export interface FxBandExceedResult {
   rows: FxBandExceedRow[]
 }
 
+
+/**
+ * 바구니 금액을 통화별로 안분한다 — **조치 카드와 상한 초과 카드가 같은 규칙을 쓰게 하는 SSOT.**
+ *
+ * ⭐ 왜 공용으로 뽑았나 (2026-11-04 리포트)
+ *   조치 카드는 "바구니 비중을 목표까지 내리는 총액"을 **선택한 통화 하나로 전량** 파는
+ *   금액으로 표시했다. 그래서 USD 탭은 35.9억, EUR 탭은 17.2억 처럼 탭마다 달랐고,
+ *   사용자가 "USD 도 팔고 EUR 도 팔아야 하나?" 하고 두 금액을 더할 위험이 있었다.
+ *   상한 초과 카드는 이미 바구니 구성비로 안분하고 있었으므로, **그 규칙을 공유**한다.
+ *
+ * ⚠ 통화별 목표 비중이 의결돼 있지 않다 — 그래서 "현재 보유 구성비대로" 나눈다.
+ *   특정 통화를 지목하는 지시가 아니라 **배분 참고치**다.
+ */
+export interface FxAllocationRow {
+  code: FxCode
+  /** 이 통화에 배분된 원화 금액 */
+  krwAmount: number
+  /** 바구니 안에서의 구성비(%) */
+  sharePct: number
+  /** 적용 환율로 환산한 외화 수량. rate 가 없으면 null */
+  nativeAmount: number | null
+}
+
+export function allocateAcrossBasket(
+  totalKRW: number,
+  basket: Record<string, { nativeAmount: number; krwAmount: number }>,
+): FxAllocationRow[] {
+  const holdings = Object.values(basket).reduce((s, v) => s + v.krwAmount, 0)
+  if (holdings <= 0 || totalKRW <= 0) return []
+  return Object.entries(basket)
+    .filter(([, v]) => v.krwAmount > 0)
+    .map(([code, v]) => {
+      const sharePct = (v.krwAmount / holdings) * 100
+      const krwAmount = totalKRW * (sharePct / 100)
+      // 보유 외화 ÷ 보유 원화환산 = 이 통화의 적용 환율. 별도 환율 주입이 필요 없다.
+      const rate = v.nativeAmount > 0 ? v.krwAmount / v.nativeAmount : 0
+      return {
+        code: code as FxCode,
+        krwAmount, sharePct,
+        nativeAmount: rate > 0 ? krwAmount / rate : null,
+      }
+    })
+    .sort((a, b) => b.krwAmount - a.krwAmount)
+}
+
 export function computeFxBandExceed(
   data: {
     fxRatio: number
