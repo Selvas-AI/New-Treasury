@@ -13,7 +13,7 @@
 import { useMemo, useState } from 'react'
 import InfoTip from '../common/InfoTip'
 import {
-  ALL_REGIME_CODES, targetParamKey, PROTOCOL_PARAM_KEYS,
+  ALL_REGIME_CODES, targetParamKey, PROTOCOL_PARAM_KEYS, anchorParamKey,
   regimeLabel, DEFAULT_TARGETS, DEFAULT_PROTOCOL,
   findConsolidationZones, levelTargetParamKey, classifyLevel,
   ALL_LEVEL_GRADES, ALL_TREND_GROUPS, LEVEL_LABEL, DEFAULT_LEVEL_TARGETS,
@@ -295,10 +295,11 @@ function ScalarGroup({ group, fields, canEdit, draft, setD }: {
  *   앵커가 점프하고, 목표 비중이 점프해 불필요한 매매가 발생한다.
  *   담당자가 선택해 policy_params 에 고정하고, 분기 1회 재검토한다.
  */
-function AnchorPanel({ protocol, series, canEdit, onSave, onSaved, setErr }: {
+function AnchorPanel({ protocol, series, currency, canEdit, onSave, onSaved, setErr }: {
   protocol: PolicyProtocol
   series:   RegimeSeriesPoint[]
   canEdit:  boolean
+  currency: string
   onSave:   (key: string, value: number) => Promise<string | null>
   onSaved:  () => void
   setErr:   (m: string | null) => void
@@ -318,7 +319,8 @@ function AnchorPanel({ protocol, series, canEdit, onSave, onSaved, setErr }: {
 
   async function pick(value: number) {
     setBusy(true); setErr(null)
-    const e1 = await onSave(PROTOCOL_PARAM_KEYS.anchorRate, Math.round(value * 10) / 10)
+    // ⚠ 통화별 키로 저장한다. 구 키(fx_level_anchor_krw)는 USD 폴백으로만 읽고 쓰지 않는다.
+    const e1 = await onSave(anchorParamKey(currency), Math.round(value * 10) / 10)
     const e2 = e1 ? null : await onSave(PROTOCOL_PARAM_KEYS.useLevelAxis, 1)
     setBusy(false)
     if (e1 || e2) setErr(`앵커 저장 실패: ${e1 ?? e2}`)
@@ -336,9 +338,10 @@ function AnchorPanel({ protocol, series, canEdit, onSave, onSaved, setErr }: {
     <div className={CARD}>
       <div className="flex flex-wrap items-center gap-3">
         <div className="text-sm font-semibold text-gray-800 dark:text-slate-100">
-          📐 기준 수준 (앵커)
+          📐 기준 수준 (앵커) · {currency}
           <InfoTip text={[
             '"지금 환율이 비싼가 싼가"를 판단하는 기준점입니다. 이 값이 없으면 높다·낮다를 말할 수 없습니다.',
+            '⚠ 앵커는 통화마다 따로 정합니다. USD 앵커로 EUR 환율을 비교하면 수준 판정이 무의미해지기 때문입니다 — 통화 탭을 바꿔 각각 설정하세요.',
             '최근 3년 중 시장이 좁은 범위에서 오래 머물렀던 구간(박스권)의 평균을 씁니다. 그 가격대가 시장이 실제로 합의했던 수준이기 때문입니다.',
             '⚠ 자동으로 바뀌지 않습니다. 담당자가 고른 값이 고정되며, 분기 1회 재검토가 필요합니다. 앵커 변경은 정책회의 의결 대상입니다.',
           ]} />
@@ -363,7 +366,8 @@ function AnchorPanel({ protocol, series, canEdit, onSave, onSaved, setErr }: {
           </>
         ) : (
           <span className="text-xs text-amber-700 dark:text-amber-400">
-            ⚠ 미설정 — 앵커가 없으면 &ldquo;높다/낮다&rdquo;를 판단할 수 없어 대조군 로직으로 동작합니다.
+            ⚠ {currency} 앵커 미설정 — 수준(높다/낮다) 판단 없이 <b>추세만</b>으로 판정합니다.
+            통화마다 따로 정해야 하며, 다른 통화의 앵커를 빌려 쓰지 않습니다.
           </span>
         )}
         {canEdit && (
@@ -910,6 +914,7 @@ export default function ProtocolTab({
       <AnchorPanel
         protocol={protocol}
         series={series}
+        currency={currency}
         canEdit={canEdit}
         onSave={onSave}
         onSaved={onSaved}

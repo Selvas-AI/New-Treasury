@@ -694,7 +694,14 @@ export const PROTOCOL_PARAM_KEYS = {
   rebalanceBandPct: 'fx_regime_rebalance_band', // % 단위로 저장 (3 = 3%p)
   // ── Level 축 ──
   useLevelAxis:     'fx_level_use',             // 1=사용 0=미사용
-  anchorRate:       'fx_level_anchor_krw',      // 앵커 환율 (원)
+  /**
+   * @deprecated 통화 구분이 없던 **구 키**. USD 앵커로만 읽는다(하위호환).
+   * ⚠ 이 키 하나를 모든 통화에 공유했던 탓에, USD 앵커(약 1,378원)에 EUR 환율(1,487원)을
+   *   비교해 "+7.9% 고평가 → 매우 높음" 으로 판정하고 있었다(2026-11-04 발견).
+   *   통화마다 환율 수준 자체가 달라 **같은 앵커로는 비교 자체가 성립하지 않는다.**
+   *   신규 저장은 전부 anchorParamKey(currency) 로 한다.
+   */
+  anchorRate:       'fx_level_anchor_krw',      // 앵커 환율 (원) — USD 전용 레거시
   anchorSetAt:      'fx_level_anchor_set_at',   // 설정일 — param_text 에 저장(노후화 경보용)
   levelWindowDays:  'fx_level_window_days',     // 박스 판정 창
   levelLookbackDays:'fx_level_lookback_days',   // 후보 탐색 범위
@@ -704,6 +711,32 @@ export const PROTOCOL_PARAM_KEYS = {
   levelVlPct:       'fx_level_vl_pct',
   forceConvertDays: 'fx_force_convert_days',
 } as const
+
+/**
+ * 통화별 앵커 환율 키.
+ *
+ * ⚠ 앵커는 "이 통화가 비싼가 싼가"의 기준점이므로 **반드시 통화별**이어야 한다.
+ *   구 키(fx_level_anchor_krw)는 USD 앵커로만 승계하고, 나머지 통화는 미설정으로 둔다.
+ *   미설정이면 수준(Level) 축이 꺼지고 **추세만으로** 판정한다 —
+ *   틀린 기준으로 '매우 높음'을 말하느니 수준 판단을 하지 않는 편이 안전하다.
+ */
+export function anchorParamKey(currency: string): string {
+  return `fx_level_anchor_krw_${currency.toLowerCase()}`
+}
+export function anchorSetAtParamKey(currency: string): string {
+  return `fx_level_anchor_set_at_${currency.toLowerCase()}`
+}
+
+/** 통화별 앵커를 읽는다 — USD 는 구 키를 폴백으로 승계 */
+export function readAnchor(get: (key: string) => number | null, currency: string): number | null {
+  const v = get(anchorParamKey(currency))
+  if (v != null && v > 0) return v
+  if (currency.toUpperCase() === 'USD') {
+    const legacy = get(PROTOCOL_PARAM_KEYS.anchorRate)
+    if (legacy != null && legacy > 0) return legacy
+  }
+  return null
+}
 
 export const ALL_LEVEL_GRADES: LevelGrade[] = ['VH', 'H', 'N', 'L', 'VL']
 export const ALL_TREND_GROUPS: TrendGroup[] = ['up', 'side', 'down']
@@ -721,7 +754,11 @@ export function levelTargetParamKey(grade: LevelGrade, group: TrendGroup): strin
  *
  * @param get policy_params 조회 함수 (usePolicyParams().get)
  */
-export function protocolFromParams(get: (key: string) => number | null): PolicyProtocol {
+export function protocolFromParams(
+  get: (key: string) => number | null,
+  /** 앵커를 고를 통화. 생략하면 수준 축을 켜지 않는다(틀린 기준 사용 방지) */
+  currency?: string,
+): PolicyProtocol {
   const pick = (key: string, fallback: number) => {
     const v = get(key)
     return v == null || !Number.isFinite(v) ? fallback : v
@@ -745,7 +782,7 @@ export function protocolFromParams(get: (key: string) => number | null): PolicyP
     }
   }
 
-  const anchor = get(PROTOCOL_PARAM_KEYS.anchorRate)
+  const anchor = currency ? readAnchor(get, currency) : null
 
   return {
     targets,

@@ -123,7 +123,8 @@ export function useFxRegime(
        inputs.avgAcquisitionRate])
 
   // 프로토콜은 policy_params 에서 조립 — 값이 없으면 코드 기본값
-  const protocol = useMemo(() => protocolFromParams(k => params.get(k)), [params])
+  // ⚠ 앵커는 통화별이다 — currency 를 넘기지 않으면 수준 축이 꺼진다(의도된 안전 기본값).
+  const protocol = useMemo(() => protocolFromParams(k => params.get(k), currency), [params, currency])
 
   const signal = useMemo(
     () => (series.length >= MIN_SERIES_LENGTH ? evaluateRegime(series, ctx, protocol, currency) : null),
