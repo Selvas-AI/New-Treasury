@@ -6,7 +6,7 @@
  */
 import { useState, useEffect } from 'react'
 import { useAuth } from '../../hooks/useAuth'
-import { useApprovalConfig } from '../../hooks/useDailyReport'
+import { useApprovalConfig, type ApprovalConfig } from '../../hooks/useDailyReport'
 import { useCompanies } from '../../hooks/useCompanies'
 import { supabase } from '../../lib/supabase'
 import UserPicker from '../../components/common/UserPicker'
@@ -69,7 +69,7 @@ export default function OrgChartPage() {
 function ApprovalConfigPanel({ company }: { company: Company }) {
   const ac = useApprovalConfig(company)
 
-  const [form, setForm] = useState({ step: '', role_label: '', approver_code: '' })
+  const [form, setForm] = useState({ step: '', stage: '', role_label: '', approver_code: '' })
   const [busy, setBusy] = useState(false)
   const [editTarget, setEditTarget] = useState<number | null>(null)
   const [nameByCode, setNameByCode] = useState<Record<string, string>>({})
@@ -100,8 +100,11 @@ function ApprovalConfigPanel({ company }: { company: Company }) {
     const step = Number(form.step)
     if (!step || !form.role_label.trim() || !form.approver_code.trim()) return
     setBusy(true)
-    await ac.upsert(step, form.role_label.trim(), form.approver_code.trim())
-    setForm({ step: '', role_label: '', approver_code: '' })
+    // 차수 미입력 = step 과 동일 = 순차 결재(기존 동작). null 로 넘긴다.
+    const stage = form.stage.trim() ? Number(form.stage) : null
+    await ac.upsert(step, form.role_label.trim(), form.approver_code.trim(),
+      stage && !isNaN(stage) ? stage : null)
+    setForm({ step: '', stage: '', role_label: '', approver_code: '' })
     setEditTarget(null)
     setBusy(false)
   }
@@ -111,12 +114,23 @@ function ApprovalConfigPanel({ company }: { company: Company }) {
     await ac.remove(step)
   }
 
-  function startEdit(step: number, role_label: string, approver_code: string) {
-    setEditTarget(step)
-    setForm({ step: String(step), role_label, approver_code })
+  function startEdit(cfg: ApprovalConfig) {
+    setEditTarget(cfg.step)
+    setForm({
+      step: String(cfg.step),
+      stage: cfg.stage != null ? String(cfg.stage) : '',
+      role_label: cfg.role_label,
+      approver_code: cfg.approver_code,
+    })
   }
 
   const sorted = [...ac.config].sort((a, b) => a.step - b.step)
+  // 차수가 같은 슬롯이 둘 이상이면 병렬 — 화면에 그 사실을 분명히 적는다.
+  const stageCount = new Map<number, number>()
+  for (const c of sorted) {
+    const g = c.stage ?? c.step
+    stageCount.set(g, (stageCount.get(g) ?? 0) + 1)
+  }
 
   return (
     <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-100 dark:border-slate-700 overflow-hidden">
@@ -141,6 +155,10 @@ function ApprovalConfigPanel({ company }: { company: Company }) {
           <thead>
             <tr className="bg-gray-50 dark:bg-slate-700/50 border-b border-gray-100 dark:border-slate-700">
               <th className="px-4 py-2.5 text-left font-medium text-gray-500 w-16">단계</th>
+              <th
+                className="px-4 py-2.5 text-left font-medium text-gray-500 w-28"
+                title="같은 차수끼리 동시(병렬) 결재합니다. 차수가 다르면 앞 차수가 전원 승인된 뒤에 다음 차수 차례가 됩니다."
+              >차수</th>
               <th className="px-4 py-2.5 text-left font-medium text-gray-500">이름</th>
               <th className="px-4 py-2.5 text-left font-medium text-gray-500">직책</th>
               <th className="px-4 py-2.5 text-left font-medium text-gray-500">결재자 코드</th>
@@ -151,6 +169,12 @@ function ApprovalConfigPanel({ company }: { company: Company }) {
             {sorted.map(cfg => (
               <tr key={cfg.step} className="hover:bg-gray-50 dark:hover:bg-slate-700/30">
                 <td className="px-4 py-3 font-semibold text-blue-600 dark:text-blue-400">{cfg.step}단계</td>
+                <td className="px-4 py-3 text-gray-600 dark:text-slate-300 whitespace-nowrap">
+                  {cfg.stage ?? cfg.step}차
+                  {(stageCount.get(cfg.stage ?? cfg.step) ?? 0) > 1 && (
+                    <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-700">병렬</span>
+                  )}
+                </td>
                 <td className="px-4 py-3 text-gray-700 dark:text-gray-200">
                   {nameByCode[cfg.approver_code] ?? '—'}
                   {canApproveByCode[cfg.approver_code] === false && (
@@ -164,7 +188,7 @@ function ApprovalConfigPanel({ company }: { company: Company }) {
                 <td className="px-4 py-3 font-mono text-gray-500 dark:text-slate-300">{cfg.approver_code}</td>
                 <td className="px-4 py-3 text-right space-x-2">
                   <button
-                    onClick={() => startEdit(cfg.step, cfg.role_label, cfg.approver_code)}
+                    onClick={() => startEdit(cfg)}
                     className="text-blue-500 hover:text-blue-700 dark:text-blue-400"
                   >수정</button>
                   <button
@@ -196,6 +220,14 @@ function ApprovalConfigPanel({ company }: { company: Company }) {
             className="w-24 text-xs border border-gray-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-200 placeholder-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:opacity-50"
           />
           <input
+            type="number" min="1" max="9"
+            placeholder={form.step ? `차수(${form.step})` : '차수'}
+            title="같은 차수를 가진 결재자들은 동시에 결재합니다. 비우면 단계와 같아져 순차가 됩니다."
+            value={form.stage}
+            onChange={e => setForm(f => ({ ...f, stage: e.target.value }))}
+            className="w-24 text-xs border border-gray-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-200 placeholder-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-400"
+          />
+          <input
             type="text" placeholder="직책 (예: 팀장)"
             value={form.role_label}
             onChange={e => setForm(f => ({ ...f, role_label: e.target.value }))}
@@ -218,13 +250,17 @@ function ApprovalConfigPanel({ company }: { company: Company }) {
           >{busy ? '저장 중…' : editTarget ? '수정 저장' : '추가'}</button>
           {editTarget && (
             <button
-              onClick={() => { setEditTarget(null); setForm({ step: '', role_label: '', approver_code: '' }) }}
+              onClick={() => { setEditTarget(null); setForm({ step: '', stage: '', role_label: '', approver_code: '' }) }}
               className="text-xs px-3 py-1.5 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
             >취소</button>
           )}
         </div>
-        <p className="text-[10px] text-gray-400 dark:text-gray-600 mt-2">
+        <p className="text-[10px] text-gray-400 dark:text-gray-600 mt-2 leading-relaxed">
           {company} 소속 활성 사용자 목록에서 선택하세요. 이름·코드·이메일로 검색 가능합니다.
+          <br />
+          <strong className="text-gray-500 dark:text-gray-500">차수</strong>를 비우면 단계와 같아져 <strong className="text-gray-500 dark:text-gray-500">순차 결재</strong>입니다.
+          중간결재자 여러 명에게 같은 차수(예: 모두 1)를 주면 <strong className="text-gray-500 dark:text-gray-500">동시에</strong> 결재할 수 있고,
+          최종결재자에게 더 큰 차수(예: 2)를 주면 그들이 모두 승인한 뒤에 차례가 옵니다.
         </p>
       </div>
     </div>

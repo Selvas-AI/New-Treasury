@@ -38,6 +38,10 @@ import { bizDaysBetween } from '../lib/bizDay'
 import FxRateNotice from '../components/common/FxRateNotice'
 import { fmtKRW, fmtNumber } from '../lib/format'
 import { notifyApprovalTurn } from '../lib/approvalNotify'
+import {
+  groupByStage, evaluateApproveGate, autoApproveStepsOnSubmit,
+  isFinalApproval, pendingInStage, describeFlow,
+} from '../lib/approvalFlow'
 import type { Company, DailyRecord, FxCode } from '../types'
 
 
@@ -884,63 +888,44 @@ export default function DailyReportPage() {
   const badge  = STATUS_LABEL[status] ?? STATUS_LABEL.draft
   const isReadOnly = status === 'approved'
   const canSubmit  = status === 'draft' || status === 'rejected'
-  // 결재자 코드 비교 — 공백·대소문자 차이로 매칭이 조용히 실패하지 않게 정규화한다.
-  // (결재선은 손으로 입력하므로 'K001 ' / 'k001' 같은 값이 실제로 들어온다)
-  const sameCode = (a?: string | null, b?: string | null): boolean =>
-    !!a && !!b && a.trim().toLowerCase() === b.trim().toLowerCase()
-
-  const myApproveStep = ac.config.find(c => sameCode(c.approver_code, user?.code))?.step
-  // 다단계 순차 결재: 정렬된 결재선 단계 + 이미 승인된 단계 → 다음 기대 단계
-  const sortedSteps   = [...ac.config].map(c => c.step).sort((a, b) => a - b)
+  // ⭐ 결재 진행 판정은 전부 lib/approvalFlow 를 거친다(SSOT).
+  //   버튼 노출·자동 승인·메일 수신자 세 곳이 같은 규칙을 봐야 한다 — 메일은 SQL 이라
+  //   함수를 공유 못 하므로 docs/db/approval_parallel_stage.sql 에 같은 규칙을 적어 뒀다.
+  //   한쪽만 고치면 "버튼은 안 보이는데 메일은 오는" 상태가 된다.
   const approvedSteps = new Set(dr.approvals.filter(a => a.action === 'approve').map(a => a.step))
-  const nextStep      = sortedSteps.find(s => !approvedSteps.has(s))  // undefined = 모든 단계 완료
-  const lastStep      = sortedSteps.length ? sortedSteps[sortedSteps.length - 1] : undefined
-  const canApprove = status === 'submitted' && (
-    // master: 다음 기대 단계를 대행 승인 가능 (오버라이드)
-    (user?.role === 'master') ||
-    // 일반: 본인 단계가 '다음 기대 단계'일 때만 (이전 단계 미승인 시 차단)
-    (myApproveStep !== undefined && myApproveStep === nextStep && (user?.can_approve !== false))
-  )
+  const stageGroups   = groupByStage(ac.config)
+  const gate = evaluateApproveGate({
+    config: ac.config,
+    approvedSteps,
+    status,
+    userCode: user?.code,
+    isMaster: user?.role === 'master',
+    canApproveFlag: user?.can_approve !== false,
+  })
+  const myApproveStep        = gate.mine?.step
+  const curStage             = gate.stage
+  const canApprove           = gate.canApprove
+  const approveBlockedReason = gate.reason
 
-  // 상신 시 자동 승인할 단계 — 1단계부터 시작해 **상신자 본인이 결재자인 연속 구간**.
+  // 상신과 동시에 자동 승인할 슬롯 — 상신자 본인이 결재자인 슬롯.
   // 같은 사람이 상신 직후 자기 단계를 한 번 더 눌러야 하는 무의미한 절차를 없앤다.
-  // ⚠ 다른 사람이 결재자인 단계를 만나면 즉시 멈춘다 — 남의 검토를 건너뛰지 않는다.
+  // ⚠ 병렬 차수에서는 본인 슬롯만 처리한다 — 동료 검토를 건너뛰지 않는다.
   //   결재선에 있다는 것만으로는 부족하고 승인 권한(can_approve)도 있어야 한다
-  //   (수동 승인 canApprove 와 같은 기준). 권한이 없으면 '결재 중'으로 남고
+  //   (수동 승인과 같은 기준). 권한이 없으면 '결재 중'으로 남고
   //   그 이유는 approveBlockedReason 이 표시한다.
-  const autoApproveSteps: number[] = (() => {
-    if (!user) return []
-    if (!(user.role === 'master' || user.can_approve !== false)) return []
-    const out: number[] = []
-    for (const st of sortedSteps) {
-      const cfg = ac.config.find(c => c.step === st)
-      if (!cfg || !sameCode(cfg.approver_code, user.code)) break
-      out.push(st)
-    }
-    return out
-  })()
+  const autoApproveSteps = autoApproveStepsOnSubmit({
+    config: ac.config,
+    userCode: user?.code,
+    isMaster: user?.role === 'master',
+    canApproveFlag: user?.can_approve !== false,
+  })
   const autoApproveLabel = autoApproveSteps.length ? `${autoApproveSteps.join('·')}단계` : null
-
-  // 결재 중인데 승인/반려 버튼이 안 보이는 이유를 화면에 밝힌다.
-  // 버튼은 canApprove 가 false 면 아예 렌더되지 않아, 안내가 없으면 결재자가
-  // "권한이 없는 건지 내 차례가 아닌 건지" 알 방법이 없다(2026-08-27 리포트).
-  const approveBlockedReason: string | null = (() => {
-    if (status !== 'submitted' || canApprove) return null
-    if (myApproveStep === undefined) return '이 법인 결재선에 등록되지 않은 계정입니다 — 조직도/결재선 관리에서 확인하세요.'
-    if (user?.can_approve === false) return '계정에 결재 권한(can_approve)이 없습니다 — 사용자 관리에서 부여해야 합니다.'
-    if (nextStep === undefined) return '모든 결재 단계가 승인된 상태입니다.'
-    if (myApproveStep > nextStep) {
-      const waiting = ac.config.find(c => c.step === nextStep)
-      return `${nextStep}단계(${waiting?.role_label ?? '-'} · ${waiting?.approver_code ?? '-'}) 승인 후에 ${myApproveStep}단계 차례가 됩니다 — 순차 결재입니다.`
-    }
-    return `${myApproveStep}단계는 이미 승인 처리되었습니다.`
-  })()
 
   // ── 모달 상태 ────────────────────────────────────────────────
   const [approveModal, setApproveModal] = useState<{ comment: string } | null>(null)
   const [rejectModal,  setRejectModal]  = useState<{ comment: string } | null>(null)
   const [configModal,  setConfigModal]  = useState(false)
-  const [cfgForm, setCfgForm] = useState({ step: '', role_label: '', approver_code: '' })
+  const [cfgForm, setCfgForm] = useState({ step: '', stage: '', role_label: '', approver_code: '' })
   const [actionBusy, setActionBusy] = useState(false)
 
   // ── CMS 증빙 첨부 상태 ───────────────────────────────────────
@@ -1033,13 +1018,17 @@ export default function DailyReportPage() {
     //   — 수동 승인(canApprove)과 같은 기준을 쓴다. 권한이 없으면 자동 승인도 하지
     //   않고 '결재 중'으로 남으며, 그 이유는 approveBlockedReason 이 표시한다.
     if (submitted && autoApproveSteps.length) {
+      // ⚠ 확정 판정은 "마지막 단계인가"가 아니라 "이걸로 전부 채워지는가"다 —
+      //   병렬 최종 차수에 결재자가 둘이면 먼저 누른 사람이 확정시켜 버린다.
+      const done = new Set(approvedSteps)
       for (const st of autoApproveSteps) {
-        const isFinal = lastStep === undefined ? true : st === lastStep
+        const isFinal = isFinalApproval(ac.config, done, st)
         const ok = await dr.approveReport(
           st, user.code, user.label ?? user.code,
           '상신자 = 결재자 본인 — 상신과 동시에 자동 승인', isFinal, reportId,
         )
         if (!ok) break   // 실패하면 뒤 단계까지 승인된 것처럼 남기지 않는다
+        done.add(st)
       }
     }
     // 자동 승인까지 끝난 뒤 호출한다 — '지금 차례'가 확정된 상태여야
@@ -1051,10 +1040,12 @@ export default function DailyReportPage() {
   async function handleApprove() {
     if (!user) return
     setActionBusy(true)
-    // 승인 단계: master는 다음 기대 단계 대행, 일반은 본인 단계
-    const step = user.role === 'master' ? (nextStep ?? lastStep ?? 1) : (myApproveStep ?? 1)
-    // 최종 단계(또는 결재선 미설정)일 때만 승인 확정
-    const isFinal = lastStep === undefined ? true : step === lastStep
+    // 승인 슬롯: 본인 슬롯이 우선. 결재선에 없는 master 는 현재 차수의 미승인 슬롯을 대행.
+    const proxy = curStage == null ? undefined : pendingInStage(ac.config, approvedSteps, curStage)[0]?.step
+    const step  = myApproveStep ?? proxy ?? 1
+    // ⚠ "마지막 단계인가"가 아니라 "이 승인으로 전부 채워지는가"로 판단한다 —
+    //   병렬 차수에서는 먼저 누른 사람이 확정시키면 안 된다.
+    const isFinal = isFinalApproval(ac.config, approvedSteps, step)
     const ok = await dr.approveReport(step, user.code, user.label ?? user.code, approveModal?.comment || undefined, isFinal)
     // 다음 단계 결재자에게 요청 메일. 최종 승인이면 서버가 '대상 없음'으로 판단해 발송하지 않는다.
     if (ok) notifyApprovalTurn(dr.report?.id)
@@ -1075,8 +1066,11 @@ export default function DailyReportPage() {
     const step = parseInt(cfgForm.step)
     if (!cfgForm.step || !cfgForm.role_label.trim() || !cfgForm.approver_code.trim() || isNaN(step)) return
     setActionBusy(true)
-    await ac.upsert(step, cfgForm.role_label.trim(), cfgForm.approver_code.trim())
-    setCfgForm({ step: '', role_label: '', approver_code: '' })
+    // 차수 미입력 = step 과 동일 = 순차. null 로 넘겨 기존 동작을 그대로 둔다.
+    const stage = cfgForm.stage.trim() ? parseInt(cfgForm.stage) : null
+    await ac.upsert(step, cfgForm.role_label.trim(), cfgForm.approver_code.trim(),
+      stage != null && !isNaN(stage) ? stage : null)
+    setCfgForm({ step: '', stage: '', role_label: '', approver_code: '' })
     setActionBusy(false)
   }
 
@@ -1498,36 +1492,68 @@ export default function DailyReportPage() {
                           )
                         })()}
 
-                        {/* 결재 단계 노드들 */}
-                        {ac.config.map((cfg) => {
-                          const approvedLog = dr.approvals.find(a => a.step === cfg.step && a.action === 'approve')
-                          const rejectedLog = dr.approvals.find(a => a.step === cfg.step && a.action === 'reject')
-                          return (
-                            <Fragment key={cfg.step}>
-                              <span className="text-gray-300 dark:text-gray-600 pb-4 mx-0.5">→</span>
-                              <div className="flex flex-col items-center gap-1">
-                                <div className={`w-9 h-9 rounded-full border flex items-center justify-center text-base font-medium ${
-                                  approvedLog
-                                    ? 'bg-green-50 dark:bg-green-900/30 border-green-400 dark:border-green-600 text-green-600 dark:text-green-300'
-                                    : rejectedLog
-                                    ? 'bg-red-50 dark:bg-red-900/30 border-red-400 dark:border-red-600 text-red-500 dark:text-red-300'
-                                    : 'bg-gray-50 dark:bg-slate-700 border-dashed border-gray-300 dark:border-slate-500 text-gray-400'
-                                }`}>
-                                  {approvedLog ? '✓' : rejectedLog ? '✗' : '?'}
-                                </div>
-                                <span className="text-[10px] text-gray-500 dark:text-slate-400 max-w-[56px] text-center truncate">{cfg.role_label}</span>
-                                <span className="text-[9px] text-gray-400 dark:text-slate-500">
-                                  {approvedLog
-                                    ? new Date(approvedLog.created_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
-                                    : rejectedLog
-                                    ? new Date(rejectedLog.created_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
-                                    : cfg.approver_code}
+                        {/* 결재 차수 노드들 — 같은 차수는 세로로 묶어 '동시'임을 보인다 */}
+                        {stageGroups.map((g) => (
+                          <Fragment key={g.stage}>
+                            <span className="text-gray-300 dark:text-gray-600 pb-4 mx-0.5">→</span>
+                            <div className={g.steps.length > 1
+                              ? 'flex flex-col gap-1.5 rounded-lg border border-dashed border-gray-300 dark:border-slate-600 px-1.5 py-1.5'
+                              : 'flex flex-col'}>
+                              {g.steps.length > 1 && (
+                                <span className="text-[9px] text-center text-gray-400 dark:text-slate-500">
+                                  {g.stage}차 · 동시 {g.steps.length}명
                                 </span>
+                              )}
+                              <div className={g.steps.length > 1 ? 'flex flex-col gap-2' : ''}>
+                                {g.steps.map(cfg => {
+                                  const approvedLog = dr.approvals.find(a => a.step === cfg.step && a.action === 'approve')
+                                  const rejectedLog = dr.approvals.find(a => a.step === cfg.step && a.action === 'reject')
+                                  // 지금 차수인데 아직 안 누른 사람 = 대기 중 (점선 대신 눈에 띄게)
+                                  const waitingNow = !approvedLog && !rejectedLog && curStage === g.stage && status === 'submitted'
+                                  return (
+                                    <div key={cfg.step} className="flex flex-col items-center gap-1">
+                                      <div className={`w-9 h-9 rounded-full border flex items-center justify-center text-base font-medium ${
+                                        approvedLog
+                                          ? 'bg-green-50 dark:bg-green-900/30 border-green-400 dark:border-green-600 text-green-600 dark:text-green-300'
+                                          : rejectedLog
+                                          ? 'bg-red-50 dark:bg-red-900/30 border-red-400 dark:border-red-600 text-red-500 dark:text-red-300'
+                                          : waitingNow
+                                          ? 'bg-amber-50 dark:bg-amber-900/30 border-amber-400 dark:border-amber-600 text-amber-600 dark:text-amber-300'
+                                          : 'bg-gray-50 dark:bg-slate-700 border-dashed border-gray-300 dark:border-slate-500 text-gray-400'
+                                      }`}>
+                                        {approvedLog ? '✓' : rejectedLog ? '✗' : waitingNow ? '!' : '?'}
+                                      </div>
+                                      <span className="text-[10px] text-gray-500 dark:text-slate-400 max-w-[56px] text-center truncate">{cfg.role_label}</span>
+                                      <span className="text-[9px] text-gray-400 dark:text-slate-500">
+                                        {approvedLog
+                                          ? new Date(approvedLog.created_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+                                          : rejectedLog
+                                          ? new Date(rejectedLog.created_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+                                          : cfg.approver_code}
+                                      </span>
+                                    </div>
+                                  )
+                                })}
                               </div>
-                            </Fragment>
-                          )
-                        })}
+                            </div>
+                          </Fragment>
+                        ))}
                       </div>
+
+                      {/* 현재 진행 상황 — 병렬이면 "누구를 기다리는지"가 한눈에 보여야 한다 */}
+                      {status === 'submitted' && curStage != null && (() => {
+                        const waiting = pendingInStage(ac.config, approvedSteps, curStage)
+                        const group = stageGroups.find(g => g.stage === curStage)
+                        if (!group || waiting.length === 0) return null
+                        const doneInStage = group.steps.length - waiting.length
+                        return (
+                          <div className="mt-2 text-[11px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 rounded px-3 py-1.5">
+                            ⏳ {curStage}차 진행 중 — {group.steps.length > 1
+                              ? `${group.steps.length}명 중 ${doneInStage}명 승인 · 대기 ${waiting.map(w => w.role_label).join('·')}`
+                              : `${waiting[0].role_label} 승인 대기`}
+                          </div>
+                        )
+                      })()}
 
                       {/* 반려 사유 */}
                       {dr.approvals.some(a => a.action === 'reject' && a.comment) && (
@@ -1870,9 +1896,16 @@ export default function DailyReportPage() {
               {ac.config.length === 0 && (
                 <p className="text-xs text-gray-400 dark:text-gray-500 text-center py-3">설정된 결재선이 없습니다</p>
               )}
+              {ac.config.length > 0 && (
+                <p className="text-[10px] text-gray-500 dark:text-slate-400 px-1">
+                  현재 구성: <strong>{describeFlow(ac.config)}</strong>
+                  <span className="ml-1 text-gray-400">— 같은 차수끼리 동시 결재, 차수가 다르면 순차</span>
+                </p>
+              )}
               {ac.config.map(cfg => (
                 <div key={cfg.step} className="flex items-center gap-2 bg-gray-50 dark:bg-slate-700 rounded-lg px-3 py-2">
                   <span className="text-[10px] text-gray-400 w-8">Step {cfg.step}</span>
+                  <span className="text-[10px] text-blue-600 dark:text-blue-400 w-9">{cfg.stage ?? cfg.step}차</span>
                   <span className="text-xs font-medium text-gray-700 dark:text-gray-200 flex-1">{cfg.role_label}</span>
                   <span className="text-[10px] text-gray-400 font-mono">{cfg.approver_code}</span>
                   <button
@@ -1896,6 +1929,16 @@ export default function DailyReportPage() {
                     value={cfgForm.step}
                     onChange={e => setCfgForm(f => ({ ...f, step: e.target.value }))}
                     placeholder="1"
+                    className="w-full text-xs border border-gray-200 dark:border-slate-600 rounded-lg px-2 py-1.5 bg-gray-50 dark:bg-slate-700 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                  />
+                </div>
+                <div className="w-16">
+                  <label className="block text-[10px] text-gray-400 mb-1" title="같은 차수끼리 동시(병렬) 결재합니다. 비우면 Step 과 같게 두어 순차가 됩니다.">차수</label>
+                  <input
+                    type="number" min="1" max="9"
+                    value={cfgForm.stage}
+                    onChange={e => setCfgForm(f => ({ ...f, stage: e.target.value }))}
+                    placeholder={cfgForm.step || '1'}
                     className="w-full text-xs border border-gray-200 dark:border-slate-600 rounded-lg px-2 py-1.5 bg-gray-50 dark:bg-slate-700 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-400"
                   />
                 </div>
@@ -1924,6 +1967,11 @@ export default function DailyReportPage() {
                   }))}
                 />
               </div>
+              <p className="text-[10px] text-gray-400 dark:text-slate-500 mb-2 leading-relaxed">
+                <strong>차수</strong>를 비우면 Step 과 같아져 <strong>순차 결재</strong>입니다.
+                중간결재자 여러 명에게 <strong>같은 차수</strong>를 주면 동시에 결재할 수 있고,
+                최종결재자에게 더 큰 차수를 주면 그들이 모두 끝난 뒤에 차례가 옵니다.
+              </p>
               <button
                 onClick={() => void handleCfgSave()}
                 disabled={!cfgForm.step || !cfgForm.role_label.trim() || !cfgForm.approver_code.trim() || actionBusy}

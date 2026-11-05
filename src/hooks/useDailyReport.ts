@@ -44,7 +44,16 @@ export interface ApprovalLog {
 export interface ApprovalConfig {
   id:             string
   company:        Company
+  /** 결재자 슬롯 번호. (company, step) 유니크 — 결재 로그·알림의 키다. */
   step:           number
+  /**
+   * 진행 차수. 같은 차수끼리 **병렬** 승인, 차수가 다르면 순차.
+   * ⚠ null 이면 step 을 차수로 쓴다 = 기존 순차 결재 그대로.
+   *   판정은 전부 src/lib/approvalFlow.ts 를 거친다 — 화면에서 재구현 금지.
+   * ⚠ 컬럼 미적용(approval_parallel_stage.sql 전) 환경에서는 항상 undefined 라
+   *   자동으로 순차로 동작한다.
+   */
+  stage:          number | null
   role_label:     string
   approver_code:  string
   is_active:      boolean
@@ -294,17 +303,33 @@ export function useApprovalConfig(company: Company | null) {
     step: number,
     roleLabel: string,
     approverCode: string,
+    stage?: number | null,
   ): Promise<boolean> => {
     if (!company) return false
     setError(null)
+    const row: Record<string, unknown> = {
+      id: generateUUID(), company, step,
+      role_label: roleLabel, approver_code: approverCode, is_active: true,
+    }
+    if (stage != null) row.stage = stage
     try {
       // 동일 (company, step) 기존 행 제거 (is_active 무관) → UNIQUE VIOLATION 방지
       await restDelete('daily_report_approval_config', { company, step })
-      const { error: err } = await restInsert('daily_report_approval_config', {
-        id: generateUUID(), company, step,
-        role_label: roleLabel, approver_code: approverCode, is_active: true,
-      })
-      if (err) throw new Error(err.message)
+      const { error: err } = await restInsert('daily_report_approval_config', row)
+      if (err) {
+        // ⚠ approval_parallel_stage.sql 미적용 환경 — stage 컬럼이 없다.
+        //   차수 지정만 포기하고 저장은 살린다(순차로 동작). 결재선이 통째로
+        //   저장되지 않으면 결재 자체가 막히므로, 여기서 실패시키면 안 된다.
+        if (stage != null && /stage/i.test(err.message)) {
+          delete row.stage
+          const retry = await restInsert('daily_report_approval_config', row)
+          if (retry.error) throw new Error(retry.error.message)
+          setError('차수(병렬 결재)는 저장되지 않았습니다 — docs/db/approval_parallel_stage.sql 을 실행하세요. 결재선은 순차로 저장됐습니다.')
+          await fetch()
+          return true
+        }
+        throw new Error(err.message)
+      }
       await fetch()
       return true
     } catch (e) {
