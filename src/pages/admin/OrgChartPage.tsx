@@ -72,6 +72,8 @@ function ApprovalConfigPanel({ company }: { company: Company }) {
   const [form, setForm] = useState({ step: '', stage: '', role_label: '', approver_code: '' })
   const [busy, setBusy] = useState(false)
   const [editTarget, setEditTarget] = useState<number | null>(null)
+  // 기존 단계를 덮어쓰겠다는 명시적 확인 — 체크하기 전에는 저장되지 않는다
+  const [overwrite, setOverwrite] = useState(false)
   const [nameByCode, setNameByCode] = useState<Record<string, string>>({})
   // 결재선에 넣어도 계정의 can_approve 가 false 면 승인 버튼이 아예 안 나온다.
   // 두 값이 별개 필드라 관리자가 그 사실을 알 방법이 없었다(2026-08-27 실사고).
@@ -97,8 +99,10 @@ function ApprovalConfigPanel({ company }: { company: Company }) {
   }, [])
 
   async function handleSave() {
-    const step = Number(form.step)
-    if (!step || !form.role_label.trim() || !form.approver_code.trim()) return
+    // 단계 미입력 = 새 슬롯 자동 배정. 기존 결재자를 건드리지 않는 안전한 기본값이다.
+    const step = typedStep ?? nextFreeStep
+    if (!step || isNaN(step) || !form.role_label.trim() || !form.approver_code.trim()) return
+    if (collision && !overwrite) return   // 교체는 반드시 명시적으로
     setBusy(true)
     // 차수 미입력 = step 과 동일 = 순차 결재(기존 동작). null 로 넘긴다.
     const stage = form.stage.trim() ? Number(form.stage) : null
@@ -106,6 +110,7 @@ function ApprovalConfigPanel({ company }: { company: Company }) {
       stage && !isNaN(stage) ? stage : null)
     setForm({ step: '', stage: '', role_label: '', approver_code: '' })
     setEditTarget(null)
+    setOverwrite(false)
     setBusy(false)
   }
 
@@ -116,6 +121,7 @@ function ApprovalConfigPanel({ company }: { company: Company }) {
 
   function startEdit(cfg: ApprovalConfig) {
     setEditTarget(cfg.step)
+    setOverwrite(false)
     setForm({
       step: String(cfg.step),
       stage: cfg.stage != null ? String(cfg.stage) : '',
@@ -125,6 +131,19 @@ function ApprovalConfigPanel({ company }: { company: Company }) {
   }
 
   const sorted = [...ac.config].sort((a, b) => a.step - b.step)
+
+  // ⚠ step 은 '결재자 슬롯 고유번호'이고 (법인, step) 이 유니크다.
+  //   기존 step 을 다시 입력하면 upsert 가 그 행을 지우고 새로 넣는다 = 사람이 교체된다.
+  //   같은 차수에 **추가**하려면 비어 있는 step 이어야 한다 — 실사용에서 이걸 모른 채
+  //   2단계를 다시 입력해 기존 결재자가 조용히 사라졌다(2026-11-05 리포트).
+  //   → 비워두면 자동 배정하고, 겹치면 저장을 막고 덮어쓰기를 명시적으로 받는다.
+  const usedSteps = new Set(ac.config.map(c => c.step))
+  const nextFreeStep = (() => { let n = 1; while (usedSteps.has(n)) n++; return n })()
+  const typedStep = form.step.trim() ? Number(form.step) : null
+  const collision = !editTarget && typedStep != null && usedSteps.has(typedStep)
+    ? (ac.config.find(c => c.step === typedStep) ?? null)
+    : null
+
   // 차수가 같은 슬롯이 둘 이상이면 병렬 — 화면에 그 사실을 분명히 적는다.
   const stageCount = new Map<number, number>()
   for (const c of sorted) {
@@ -213,10 +232,12 @@ function ApprovalConfigPanel({ company }: { company: Company }) {
         )}
         <div className="flex gap-2 flex-wrap">
           <input
-            type="number" min="1" max="9" placeholder="단계(1,2…)"
+            type="number" min="1" max="9"
+            placeholder={editTarget ? '단계' : `자동(${nextFreeStep})`}
+            title="결재자 슬롯 번호입니다. 비워두면 비어 있는 번호가 자동 배정됩니다. 기존 번호를 넣으면 그 결재자가 교체됩니다."
             value={form.step}
             disabled={!!editTarget}
-            onChange={e => setForm(f => ({ ...f, step: e.target.value }))}
+            onChange={e => { setForm(f => ({ ...f, step: e.target.value })); setOverwrite(false) }}
             className="w-24 text-xs border border-gray-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-200 placeholder-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:opacity-50"
           />
           <input
@@ -245,18 +266,44 @@ function ApprovalConfigPanel({ company }: { company: Company }) {
           />
           <button
             onClick={handleSave}
-            disabled={busy || !form.step || !form.role_label || !form.approver_code}
-            className="text-xs px-3 py-1.5 bg-blue-600 text-white rounded-lg disabled:opacity-40 hover:bg-blue-700 transition-colors"
-          >{busy ? '저장 중…' : editTarget ? '수정 저장' : '추가'}</button>
+            disabled={busy || !form.role_label || !form.approver_code || (!!collision && !overwrite)}
+            className={`text-xs px-3 py-1.5 text-white rounded-lg disabled:opacity-40 transition-colors ${
+              collision ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'
+            }`}
+          >{busy ? '저장 중…' : editTarget ? '수정 저장' : collision ? '교체 저장' : '추가'}</button>
           {editTarget && (
             <button
-              onClick={() => { setEditTarget(null); setForm({ step: '', stage: '', role_label: '', approver_code: '' }) }}
+              onClick={() => { setEditTarget(null); setOverwrite(false); setForm({ step: '', stage: '', role_label: '', approver_code: '' }) }}
               className="text-xs px-3 py-1.5 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
             >취소</button>
           )}
         </div>
+        {collision && (
+          <div className="mt-3 rounded-lg border border-red-200 dark:border-red-700 bg-red-50 dark:bg-red-900/20 px-3 py-2 text-xs text-red-800 dark:text-red-300">
+            <div className="font-medium">
+              ⚠ {collision.step}단계는 이미 <b>{nameByCode[collision.approver_code] ?? collision.approver_code}</b>
+              ({collision.role_label} · {collision.stage ?? collision.step}차)가 사용 중입니다.
+            </div>
+            <div className="mt-1 text-red-600 dark:text-red-400 leading-relaxed">
+              같은 차수에 <b>나란히 추가</b>하시려면 단계를 비우거나 <b>{nextFreeStep}</b>로 두고
+              차수만 <b>{form.stage.trim() || (collision.stage ?? collision.step)}</b>로 지정하세요.
+              이대로 저장하면 기존 결재자가 <b>교체</b>됩니다.
+            </div>
+            <label className="mt-2 flex items-center gap-1.5 cursor-pointer">
+              <input type="checkbox" checked={overwrite} onChange={e => setOverwrite(e.target.checked)} />
+              <span>알고 있습니다 — {nameByCode[collision.approver_code] ?? collision.approver_code}를 교체합니다</span>
+            </label>
+            <button
+              onClick={() => { setForm(f => ({ ...f, step: '' })); setOverwrite(false) }}
+              className="mt-2 text-[11px] underline underline-offset-2 hover:text-red-900 dark:hover:text-red-200"
+            >→ 새 슬롯({nextFreeStep}단계)으로 추가하기</button>
+          </div>
+        )}
         <p className="text-[10px] text-gray-400 dark:text-gray-600 mt-2 leading-relaxed">
           {company} 소속 활성 사용자 목록에서 선택하세요. 이름·코드·이메일로 검색 가능합니다.
+          <br />
+          <strong className="text-gray-500 dark:text-gray-500">단계</strong>는 결재자 한 명의 고유 슬롯 번호입니다 — 비워두면 자동 배정되고,
+          <strong className="text-gray-500 dark:text-gray-500"> 기존 번호를 넣으면 그 결재자가 교체</strong>됩니다.
           <br />
           <strong className="text-gray-500 dark:text-gray-500">차수</strong>를 비우면 단계와 같아져 <strong className="text-gray-500 dark:text-gray-500">순차 결재</strong>입니다.
           중간결재자 여러 명에게 같은 차수(예: 모두 1)를 주면 <strong className="text-gray-500 dark:text-gray-500">동시에</strong> 결재할 수 있고,

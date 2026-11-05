@@ -926,6 +926,15 @@ export default function DailyReportPage() {
   const [rejectModal,  setRejectModal]  = useState<{ comment: string } | null>(null)
   const [configModal,  setConfigModal]  = useState(false)
   const [cfgForm, setCfgForm] = useState({ step: '', stage: '', role_label: '', approver_code: '' })
+  // step 은 결재자 슬롯 고유번호다 — 기존 번호를 재입력하면 그 결재자가 교체된다.
+  // 같은 차수에 나란히 추가하려면 '빈 번호'여야 한다(2026-11-05 리포트).
+  const cfgNextFreeStep = (() => {
+    const used = new Set(ac.config.map(c => c.step))
+    let n = 1; while (used.has(n)) n++; return n
+  })()
+  const cfgCollision = cfgForm.step.trim()
+    ? (ac.config.find(c => c.step === parseInt(cfgForm.step)) ?? null)
+    : null
   const [actionBusy, setActionBusy] = useState(false)
 
   // ── CMS 증빙 첨부 상태 ───────────────────────────────────────
@@ -1063,8 +1072,11 @@ export default function DailyReportPage() {
   }
 
   async function handleCfgSave() {
-    const step = parseInt(cfgForm.step)
-    if (!cfgForm.step || !cfgForm.role_label.trim() || !cfgForm.approver_code.trim() || isNaN(step)) return
+    // 단계 미입력 = 비어 있는 슬롯 자동 배정. 기존 결재자를 건드리지 않는 기본값이다.
+    // ⚠ 기존 단계 번호를 넣으면 upsert 가 그 행을 교체한다 — 같은 차수에 '추가'가 아니다.
+    const step = cfgForm.step.trim() ? parseInt(cfgForm.step) : cfgNextFreeStep
+    if (!step || isNaN(step) || !cfgForm.role_label.trim() || !cfgForm.approver_code.trim()) return
+    if (cfgCollision) return   // 모달에서는 교체를 지원하지 않는다 — 조직도 화면에서 수정할 것
     setActionBusy(true)
     // 차수 미입력 = step 과 동일 = 순차. null 로 넘겨 기존 동작을 그대로 둔다.
     const stage = cfgForm.stage.trim() ? parseInt(cfgForm.stage) : null
@@ -1923,12 +1935,12 @@ export default function DailyReportPage() {
               <p className="text-[11px] text-gray-500 dark:text-slate-300 font-medium mb-2">결재 단계 추가</p>
               <div className="flex gap-2 mb-2">
                 <div className="w-16">
-                  <label className="block text-[10px] text-gray-400 mb-1">Step</label>
+                  <label className="block text-[10px] text-gray-400 mb-1" title="결재자 슬롯 번호. 비우면 빈 번호가 자동 배정됩니다.">Step</label>
                   <input
                     type="number" min="1" max="9"
                     value={cfgForm.step}
                     onChange={e => setCfgForm(f => ({ ...f, step: e.target.value }))}
-                    placeholder="1"
+                    placeholder={`자동(${cfgNextFreeStep})`}
                     className="w-full text-xs border border-gray-200 dark:border-slate-600 rounded-lg px-2 py-1.5 bg-gray-50 dark:bg-slate-700 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-400"
                   />
                 </div>
@@ -1967,14 +1979,27 @@ export default function DailyReportPage() {
                   }))}
                 />
               </div>
+              {cfgCollision && (
+                <div className="mb-2 rounded-lg border border-red-200 dark:border-red-700 bg-red-50 dark:bg-red-900/20 px-2.5 py-2 text-[11px] text-red-800 dark:text-red-300 leading-relaxed">
+                  ⚠ Step {cfgCollision.step}은 이미 <b>{cfgCollision.role_label}</b>({cfgCollision.approver_code})가 사용 중입니다.
+                  같은 차수에 나란히 추가하려면 <b>Step 을 비우거나 {cfgNextFreeStep}</b>로 두고
+                  차수만 <b>{cfgForm.stage.trim() || (cfgCollision.stage ?? cfgCollision.step)}</b>로 지정하세요.
+                  <button
+                    onClick={() => setCfgForm(f => ({ ...f, step: '' }))}
+                    className="ml-1 underline underline-offset-2 hover:text-red-900 dark:hover:text-red-200"
+                  >새 슬롯으로</button>
+                </div>
+              )}
               <p className="text-[10px] text-gray-400 dark:text-slate-500 mb-2 leading-relaxed">
+                <strong>Step</strong> 은 결재자 한 명의 슬롯 번호입니다 — 비우면 자동 배정되고, 기존 번호를 넣으면 그 결재자가 교체됩니다.
+                <br />
                 <strong>차수</strong>를 비우면 Step 과 같아져 <strong>순차 결재</strong>입니다.
                 중간결재자 여러 명에게 <strong>같은 차수</strong>를 주면 동시에 결재할 수 있고,
                 최종결재자에게 더 큰 차수를 주면 그들이 모두 끝난 뒤에 차례가 옵니다.
               </p>
               <button
                 onClick={() => void handleCfgSave()}
-                disabled={!cfgForm.step || !cfgForm.role_label.trim() || !cfgForm.approver_code.trim() || actionBusy}
+                disabled={!!cfgCollision || !cfgForm.role_label.trim() || !cfgForm.approver_code.trim() || actionBusy}
                 className="w-full text-xs py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium disabled:opacity-40"
               >
                 + 추가
