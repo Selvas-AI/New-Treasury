@@ -130,7 +130,12 @@ function ApprovalConfigPanel({ company }: { company: Company }) {
     })
   }
 
-  const sorted = [...ac.config].sort((a, b) => a.step - b.step)
+  // ⚠ 정렬은 **차수 우선**이다. No.(슬롯 번호)는 자동 배정된 식별자일 뿐이라
+  //   그 순으로 늘어놓으면 실제 결재 흐름과 순서가 어긋나 보인다
+  //   (예: No.4 가 1차인데 No.2(2차) 아래에 표시됨).
+  const sorted = [...ac.config].sort(
+    (a, b) => ((a.stage ?? a.step) - (b.stage ?? b.step)) || (a.step - b.step),
+  )
 
   // ⚠ step 은 '결재자 슬롯 고유번호'이고 (법인, step) 이 유니크다.
   //   기존 step 을 다시 입력하면 upsert 가 그 행을 지우고 새로 넣는다 = 사람이 교체된다.
@@ -173,11 +178,14 @@ function ApprovalConfigPanel({ company }: { company: Company }) {
         <table className="w-full text-xs">
           <thead>
             <tr className="bg-gray-50 dark:bg-slate-700/50 border-b border-gray-100 dark:border-slate-700">
-              <th className="px-4 py-2.5 text-left font-medium text-gray-500 w-16">단계</th>
               <th
                 className="px-4 py-2.5 text-left font-medium text-gray-500 w-28"
-                title="같은 차수끼리 동시(병렬) 결재합니다. 차수가 다르면 앞 차수가 전원 승인된 뒤에 다음 차수 차례가 됩니다."
-              >차수</th>
+                title="결재 진행 순서입니다. 같은 차수끼리 동시(병렬) 결재하고, 차수가 다르면 앞 차수가 전원 승인된 뒤에 다음 차수 차례가 됩니다. 목록은 이 순서로 정렬됩니다."
+              >차수 ↓</th>
+              <th
+                className="px-4 py-2.5 text-left font-medium text-gray-400 w-14"
+                title="결재자 슬롯 식별번호입니다. 결재 순서와는 무관하며, 추가할 때 자동 배정됩니다."
+              >No.</th>
               <th className="px-4 py-2.5 text-left font-medium text-gray-500">이름</th>
               <th className="px-4 py-2.5 text-left font-medium text-gray-500">직책</th>
               <th className="px-4 py-2.5 text-left font-medium text-gray-500">결재자 코드</th>
@@ -185,15 +193,30 @@ function ApprovalConfigPanel({ company }: { company: Company }) {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50 dark:divide-slate-700/50">
-            {sorted.map(cfg => (
-              <tr key={cfg.step} className="hover:bg-gray-50 dark:hover:bg-slate-700/30">
-                <td className="px-4 py-3 font-semibold text-blue-600 dark:text-blue-400">{cfg.step}단계</td>
-                <td className="px-4 py-3 text-gray-600 dark:text-slate-300 whitespace-nowrap">
-                  {cfg.stage ?? cfg.step}차
-                  {(stageCount.get(cfg.stage ?? cfg.step) ?? 0) > 1 && (
-                    <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-700">병렬</span>
+            {sorted.map((cfg, i) => {
+              const myStage = cfg.stage ?? cfg.step
+              const prev = i > 0 ? sorted[i - 1] : null
+              // 같은 차수의 첫 행에만 차수를 적는다 — 아래 행들이 '같은 묶음'임이 눈에 보인다
+              const firstOfStage = !prev || (prev.stage ?? prev.step) !== myStage
+              return (
+              <tr key={cfg.step} className={`hover:bg-gray-50 dark:hover:bg-slate-700/30 ${
+                firstOfStage && i > 0 ? 'border-t-2 border-gray-200 dark:border-slate-600' : ''
+              }`}>
+                <td className="px-4 py-3 whitespace-nowrap align-top">
+                  {firstOfStage ? (
+                    <>
+                      <span className="font-semibold text-blue-600 dark:text-blue-400">{myStage}차</span>
+                      {(stageCount.get(myStage) ?? 0) > 1 && (
+                        <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-700">
+                          병렬 {stageCount.get(myStage)}
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    <span className="text-gray-300 dark:text-slate-600" title={`${myStage}차 (위와 동시 결재)`}>↳ 동시</span>
                   )}
                 </td>
+                <td className="px-4 py-3 text-gray-400 dark:text-slate-500 tabular-nums">{cfg.step}</td>
                 <td className="px-4 py-3 text-gray-700 dark:text-gray-200">
                   {nameByCode[cfg.approver_code] ?? '—'}
                   {canApproveByCode[cfg.approver_code] === false && (
@@ -216,7 +239,8 @@ function ApprovalConfigPanel({ company }: { company: Company }) {
                   >삭제</button>
                 </td>
               </tr>
-            ))}
+              )
+            })}
           </tbody>
         </table>
         </>
@@ -225,7 +249,7 @@ function ApprovalConfigPanel({ company }: { company: Company }) {
       {/* 추가/수정 폼 */}
       <div className="px-5 py-4 border-t border-gray-100 dark:border-slate-700 bg-gray-50/50 dark:bg-slate-700/20">
         <p className="text-xs font-semibold text-gray-500 dark:text-slate-300 mb-3">
-          {editTarget ? `${editTarget}단계 수정` : '새 결재단계 추가'}
+          {editTarget ? `No. ${editTarget} 수정` : '결재자 추가'}
         </p>
         {ac.error && (
           <p className="text-xs text-red-500 dark:text-red-400 mb-2 px-1">⚠ {ac.error}</p>
@@ -233,20 +257,20 @@ function ApprovalConfigPanel({ company }: { company: Company }) {
         <div className="flex gap-2 flex-wrap">
           <input
             type="number" min="1" max="9"
-            placeholder={editTarget ? '단계' : `자동(${nextFreeStep})`}
-            title="결재자 슬롯 번호입니다. 비워두면 비어 있는 번호가 자동 배정됩니다. 기존 번호를 넣으면 그 결재자가 교체됩니다."
-            value={form.step}
-            disabled={!!editTarget}
-            onChange={e => { setForm(f => ({ ...f, step: e.target.value })); setOverwrite(false) }}
-            className="w-24 text-xs border border-gray-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-200 placeholder-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:opacity-50"
-          />
-          <input
-            type="number" min="1" max="9"
-            placeholder={form.step ? `차수(${form.step})` : '차수'}
-            title="같은 차수를 가진 결재자들은 동시에 결재합니다. 비우면 단계와 같아져 순차가 됩니다."
+            placeholder="차수(1,2…)"
+            title="결재 진행 순서입니다. 같은 차수를 가진 결재자들은 동시에 결재합니다. 비우면 No. 와 같아져 순차가 됩니다."
             value={form.stage}
             onChange={e => setForm(f => ({ ...f, stage: e.target.value }))}
             className="w-24 text-xs border border-gray-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-200 placeholder-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-400"
+          />
+          <input
+            type="number" min="1" max="9"
+            placeholder={editTarget ? 'No.' : `No. 자동(${nextFreeStep})`}
+            title="결재자 슬롯 식별번호입니다. 결재 순서와 무관하며, 비워두면 빈 번호가 자동 배정됩니다. 기존 번호를 넣으면 그 결재자가 교체됩니다."
+            value={form.step}
+            disabled={!!editTarget}
+            onChange={e => { setForm(f => ({ ...f, step: e.target.value })); setOverwrite(false) }}
+            className="w-28 text-xs border border-gray-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-800 text-gray-400 dark:text-slate-400 placeholder-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:opacity-50"
           />
           <input
             type="text" placeholder="직책 (예: 팀장)"
@@ -281,11 +305,11 @@ function ApprovalConfigPanel({ company }: { company: Company }) {
         {collision && (
           <div className="mt-3 rounded-lg border border-red-200 dark:border-red-700 bg-red-50 dark:bg-red-900/20 px-3 py-2 text-xs text-red-800 dark:text-red-300">
             <div className="font-medium">
-              ⚠ {collision.step}단계는 이미 <b>{nameByCode[collision.approver_code] ?? collision.approver_code}</b>
+              ⚠ No. {collision.step} 은 이미 <b>{nameByCode[collision.approver_code] ?? collision.approver_code}</b>
               ({collision.role_label} · {collision.stage ?? collision.step}차)가 사용 중입니다.
             </div>
             <div className="mt-1 text-red-600 dark:text-red-400 leading-relaxed">
-              같은 차수에 <b>나란히 추가</b>하시려면 단계를 비우거나 <b>{nextFreeStep}</b>로 두고
+              같은 차수에 <b>나란히 추가</b>하시려면 No. 를 비우고(자동 {nextFreeStep})
               차수만 <b>{form.stage.trim() || (collision.stage ?? collision.step)}</b>로 지정하세요.
               이대로 저장하면 기존 결재자가 <b>교체</b>됩니다.
             </div>
@@ -296,18 +320,17 @@ function ApprovalConfigPanel({ company }: { company: Company }) {
             <button
               onClick={() => { setForm(f => ({ ...f, step: '' })); setOverwrite(false) }}
               className="mt-2 text-[11px] underline underline-offset-2 hover:text-red-900 dark:hover:text-red-200"
-            >→ 새 슬롯({nextFreeStep}단계)으로 추가하기</button>
+            >→ 새 슬롯(No. {nextFreeStep})으로 추가하기</button>
           </div>
         )}
         <p className="text-[10px] text-gray-400 dark:text-gray-600 mt-2 leading-relaxed">
           {company} 소속 활성 사용자 목록에서 선택하세요. 이름·코드·이메일로 검색 가능합니다.
           <br />
-          <strong className="text-gray-500 dark:text-gray-500">단계</strong>는 결재자 한 명의 고유 슬롯 번호입니다 — 비워두면 자동 배정되고,
-          <strong className="text-gray-500 dark:text-gray-500"> 기존 번호를 넣으면 그 결재자가 교체</strong>됩니다.
+          <strong className="text-gray-500 dark:text-gray-500">차수</strong>가 결재 순서입니다 — 중간결재자 여러 명에게 같은 차수(예: 모두 1)를 주면
+          <strong className="text-gray-500 dark:text-gray-500"> 동시에</strong> 결재할 수 있고, 최종결재자에게 더 큰 차수(예: 2)를 주면
+          그들이 모두 승인한 뒤에 차례가 옵니다. 비우면 No. 와 같아져 <strong className="text-gray-500 dark:text-gray-500">순차 결재</strong>입니다.
           <br />
-          <strong className="text-gray-500 dark:text-gray-500">차수</strong>를 비우면 단계와 같아져 <strong className="text-gray-500 dark:text-gray-500">순차 결재</strong>입니다.
-          중간결재자 여러 명에게 같은 차수(예: 모두 1)를 주면 <strong className="text-gray-500 dark:text-gray-500">동시에</strong> 결재할 수 있고,
-          최종결재자에게 더 큰 차수(예: 2)를 주면 그들이 모두 승인한 뒤에 차례가 옵니다.
+          <strong className="text-gray-500 dark:text-gray-500">No.</strong> 는 결재자 슬롯 식별번호로 순서와 무관합니다 — 비워두면 자동 배정되므로 보통 건드릴 필요가 없습니다.
         </p>
       </div>
     </div>

@@ -1650,14 +1650,15 @@ export default function DailyReportPage() {
                     <div style={apvLabelStyle}>작 성</div>
                     <div style={apvBodyStyle}>{submitLog?.actor_label ?? '—'}</div>
                   </div>
-                  {/* ac.config 기반 동적 결재 칸 */}
-                  {ac.config.map((cfg, idx) => {
+                  {/* ac.config 기반 동적 결재 칸 — 인쇄물도 차수 순으로 찍혀야 한다
+                      (No. 는 자동 배정된 식별자라 그 순서로 찍으면 결재 흐름과 어긋난다) */}
+                  {stageGroups.flatMap(g => g.steps).map((cfg, idx, arr) => {
                     const approvedLog = dr.approvals.find(a => a.step === cfg.step && a.action === 'approve')
                     const rejectedLog = dr.approvals.find(a => a.step === cfg.step && a.action === 'reject')
                     return (
                       <div key={cfg.step} style={{
                         ...apvCellStyle,
-                        borderRight: idx === ac.config.length - 1 ? 'none' : `0.5px solid #ccc`,
+                        borderRight: idx === arr.length - 1 ? 'none' : `0.5px solid #ccc`,
                       }}>
                         <div style={apvLabelStyle}>{cfg.role_label}</div>
                         <div style={apvBodyStyle}>
@@ -1914,10 +1915,14 @@ export default function DailyReportPage() {
                   <span className="ml-1 text-gray-400">— 같은 차수끼리 동시 결재, 차수가 다르면 순차</span>
                 </p>
               )}
-              {ac.config.map(cfg => (
+              {/* 정렬은 차수 우선 — No.(슬롯 번호)는 자동 배정된 식별자라 그 순서로 늘어놓으면
+                  실제 결재 흐름과 어긋나 보인다. 조직도 결재선 화면과 같은 규칙. */}
+              {[...ac.config]
+                .sort((a, b) => ((a.stage ?? a.step) - (b.stage ?? b.step)) || (a.step - b.step))
+                .map(cfg => (
                 <div key={cfg.step} className="flex items-center gap-2 bg-gray-50 dark:bg-slate-700 rounded-lg px-3 py-2">
-                  <span className="text-[10px] text-gray-400 w-8">Step {cfg.step}</span>
-                  <span className="text-[10px] text-blue-600 dark:text-blue-400 w-9">{cfg.stage ?? cfg.step}차</span>
+                  <span className="text-[10px] font-semibold text-blue-600 dark:text-blue-400 w-9">{cfg.stage ?? cfg.step}차</span>
+                  <span className="text-[10px] text-gray-400 w-10" title="결재자 슬롯 식별번호 — 순서와 무관">No.{cfg.step}</span>
                   <span className="text-xs font-medium text-gray-700 dark:text-gray-200 flex-1">{cfg.role_label}</span>
                   <span className="text-[10px] text-gray-400 font-mono">{cfg.approver_code}</span>
                   <button
@@ -1932,26 +1937,26 @@ export default function DailyReportPage() {
 
             {/* 신규 추가 폼 */}
             <div className="border-t border-gray-100 dark:border-slate-700 pt-4">
-              <p className="text-[11px] text-gray-500 dark:text-slate-300 font-medium mb-2">결재 단계 추가</p>
+              <p className="text-[11px] text-gray-500 dark:text-slate-300 font-medium mb-2">결재자 추가</p>
               <div className="flex gap-2 mb-2">
                 <div className="w-16">
-                  <label className="block text-[10px] text-gray-400 mb-1" title="결재자 슬롯 번호. 비우면 빈 번호가 자동 배정됩니다.">Step</label>
+                  <label className="block text-[10px] text-gray-400 mb-1" title="결재 진행 순서. 같은 차수끼리 동시(병렬) 결재합니다. 비우면 No. 와 같아져 순차가 됩니다.">차수</label>
+                  <input
+                    type="number" min="1" max="9"
+                    value={cfgForm.stage}
+                    onChange={e => setCfgForm(f => ({ ...f, stage: e.target.value }))}
+                    placeholder="1"
+                    className="w-full text-xs border border-gray-200 dark:border-slate-600 rounded-lg px-2 py-1.5 bg-gray-50 dark:bg-slate-700 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                  />
+                </div>
+                <div className="w-20">
+                  <label className="block text-[10px] text-gray-400 mb-1" title="결재자 슬롯 식별번호 — 순서와 무관. 비우면 빈 번호가 자동 배정됩니다.">No.</label>
                   <input
                     type="number" min="1" max="9"
                     value={cfgForm.step}
                     onChange={e => setCfgForm(f => ({ ...f, step: e.target.value }))}
                     placeholder={`자동(${cfgNextFreeStep})`}
-                    className="w-full text-xs border border-gray-200 dark:border-slate-600 rounded-lg px-2 py-1.5 bg-gray-50 dark:bg-slate-700 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-400"
-                  />
-                </div>
-                <div className="w-16">
-                  <label className="block text-[10px] text-gray-400 mb-1" title="같은 차수끼리 동시(병렬) 결재합니다. 비우면 Step 과 같게 두어 순차가 됩니다.">차수</label>
-                  <input
-                    type="number" min="1" max="9"
-                    value={cfgForm.stage}
-                    onChange={e => setCfgForm(f => ({ ...f, stage: e.target.value }))}
-                    placeholder={cfgForm.step || '1'}
-                    className="w-full text-xs border border-gray-200 dark:border-slate-600 rounded-lg px-2 py-1.5 bg-gray-50 dark:bg-slate-700 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                    className="w-full text-xs border border-gray-200 dark:border-slate-600 rounded-lg px-2 py-1.5 bg-gray-50 dark:bg-slate-700 text-gray-400 dark:text-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
                   />
                 </div>
                 <div className="w-24">
@@ -1981,8 +1986,8 @@ export default function DailyReportPage() {
               </div>
               {cfgCollision && (
                 <div className="mb-2 rounded-lg border border-red-200 dark:border-red-700 bg-red-50 dark:bg-red-900/20 px-2.5 py-2 text-[11px] text-red-800 dark:text-red-300 leading-relaxed">
-                  ⚠ Step {cfgCollision.step}은 이미 <b>{cfgCollision.role_label}</b>({cfgCollision.approver_code})가 사용 중입니다.
-                  같은 차수에 나란히 추가하려면 <b>Step 을 비우거나 {cfgNextFreeStep}</b>로 두고
+                  ⚠ No. {cfgCollision.step} 은 이미 <b>{cfgCollision.role_label}</b>({cfgCollision.approver_code})가 사용 중입니다.
+                  같은 차수에 나란히 추가하려면 <b>No. 를 비우고</b>(자동 {cfgNextFreeStep})
                   차수만 <b>{cfgForm.stage.trim() || (cfgCollision.stage ?? cfgCollision.step)}</b>로 지정하세요.
                   <button
                     onClick={() => setCfgForm(f => ({ ...f, step: '' }))}
@@ -1991,11 +1996,10 @@ export default function DailyReportPage() {
                 </div>
               )}
               <p className="text-[10px] text-gray-400 dark:text-slate-500 mb-2 leading-relaxed">
-                <strong>Step</strong> 은 결재자 한 명의 슬롯 번호입니다 — 비우면 자동 배정되고, 기존 번호를 넣으면 그 결재자가 교체됩니다.
+                <strong>차수</strong>가 결재 순서입니다 — 중간결재자 여러 명에게 <strong>같은 차수</strong>를 주면 동시에 결재할 수 있고,
+                최종결재자에게 더 큰 차수를 주면 그들이 모두 끝난 뒤에 차례가 옵니다. 비우면 No. 와 같아져 <strong>순차 결재</strong>입니다.
                 <br />
-                <strong>차수</strong>를 비우면 Step 과 같아져 <strong>순차 결재</strong>입니다.
-                중간결재자 여러 명에게 <strong>같은 차수</strong>를 주면 동시에 결재할 수 있고,
-                최종결재자에게 더 큰 차수를 주면 그들이 모두 끝난 뒤에 차례가 옵니다.
+                <strong>No.</strong> 는 슬롯 식별번호로 순서와 무관합니다 — 비우면 자동 배정되므로 보통 건드릴 필요가 없습니다.
               </p>
               <button
                 onClick={() => void handleCfgSave()}
