@@ -155,3 +155,61 @@ describe('describeFlow', () => {
   it('병렬 포함', () => { expect(describeFlow(PAR)).toBe('병렬 포함 · 3(병렬) → 1') })
   it('미설정', () => { expect(describeFlow([])).toBe('결재선 미설정') })
 })
+
+// ── 재상신 시 전원 재승인 (B안, 2026-11-05) ───────────────────
+import { validApprovedSteps, validApprovalOf } from './approvalFlow'
+
+const log = (step: number, action: string, t: string) =>
+  ({ step, action, created_at: `2026-11-05T${t}:00Z` })
+
+describe('validApprovedSteps — 반려 이후 승인만 유효', () => {
+  it('반려가 없으면 모든 승인이 유효', () => {
+    const logs = [log(0, 'submit', '09:00'), log(1, 'approve', '09:10'), log(2, 'approve', '09:20')]
+    expect([...validApprovedSteps(logs)].sort()).toEqual([1, 2])
+  })
+
+  it('반려 전 승인은 무효화된다 — 병렬에서 A 승인 → B 반려 → 재상신', () => {
+    const logs = [
+      log(0, 'submit', '09:00'),
+      log(1, 'approve', '09:10'),   // 김병준 승인
+      log(2, 'reject',  '09:20'),   // 김재호 반려
+      log(0, 'submit',  '10:00'),   // 재상신
+    ]
+    expect(validApprovedSteps(logs).size).toBe(0)   // 전원 다시 승인해야 한다
+  })
+
+  it('재상신 후 찍은 승인은 유효', () => {
+    const logs = [
+      log(1, 'approve', '09:10'), log(2, 'reject', '09:20'),
+      log(0, 'submit', '10:00'), log(1, 'approve', '10:10'),
+    ]
+    expect([...validApprovedSteps(logs)]).toEqual([1])
+  })
+
+  it('반려가 두 번이면 마지막 반려가 기준', () => {
+    const logs = [
+      log(1, 'approve', '09:10'), log(2, 'reject', '09:20'),
+      log(1, 'approve', '10:10'), log(2, 'reject', '10:20'),
+      log(1, 'approve', '11:10'),
+    ]
+    expect([...validApprovedSteps(logs)]).toEqual([1])
+  })
+
+  it('무효화된 승인 뒤에는 결재가 완료되지 않는다', () => {
+    const logs = [log(1, 'approve', '09:10'), log(2, 'reject', '09:20'), log(0, 'submit', '10:00')]
+    const valid = validApprovedSteps(logs)
+    expect(currentStage(PAR, valid)).toBe(1)
+    expect(isFinalApproval(PAR, valid, 1)).toBe(false)
+  })
+})
+
+describe('validApprovalOf — 화면에 찍히는 도장', () => {
+  it('반려 전 승인은 도장으로 표시하지 않는다', () => {
+    const logs = [log(1, 'approve', '09:10'), log(2, 'reject', '09:20')]
+    expect(validApprovalOf(logs, 1)).toBeNull()
+  })
+  it('재상신 후 승인이 여러 건이면 가장 최근 것', () => {
+    const logs = [log(1, 'approve', '09:10'), log(2, 'reject', '09:20'), log(1, 'approve', '10:10')]
+    expect(validApprovalOf(logs, 1)?.created_at).toContain('10:10')
+  })
+})

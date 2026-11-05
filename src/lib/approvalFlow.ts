@@ -34,6 +34,49 @@ export function stageOf(c: Pick<ApprovalStep, 'step' | 'stage'>): number {
   return c.stage ?? c.step
 }
 
+/**
+ * ⭐ 반려 이후의 승인만 유효하다 (B안, 2026-11-05 사용자 결정)
+ *
+ *   반려되면 내용을 고쳐서 다시 올린다. 그런데 승인 로그를 그대로 두면
+ *   **수정 전 내용에 승인한 사람의 도장이 수정본에 그대로 남는다.**
+ *   특히 병렬에서는 "A 승인 → B 반려 → 재상신 → B만 누르면 완료" 가 되어
+ *   A 는 고쳐진 내용을 보지 못한 채 승인한 것이 된다.
+ *
+ *   → 재상신하면 **전원 다시 승인**한다. 단 로그는 지우지 않는다(이력 보존) —
+ *     "마지막 반려 이후에 찍힌 승인만 유효"로 판정만 바꾼다.
+ *
+ * ⚠ 같은 규칙이 메일 RPC 에도 있어야 한다. 거기까지 안 고치면 재상신 후
+ *   이미 승인했던 사람에게 결재 요청이 가지 않는다
+ *   (docs/db/approval_resubmit_reset.sql).
+ */
+export interface ApprovalLogLite {
+  step: number
+  action: string
+  created_at: string
+}
+
+export function validApprovedSteps(approvals: readonly ApprovalLogLite[]): Set<number> {
+  let cutoff = ''
+  for (const a of approvals) {
+    if (a.action === 'reject' && a.created_at > cutoff) cutoff = a.created_at
+  }
+  const out = new Set<number>()
+  for (const a of approvals) {
+    if (a.action === 'approve' && a.created_at > cutoff) out.add(a.step)
+  }
+  return out
+}
+
+/** 그 슬롯의 유효한 승인 로그 (마지막 반려 이후). 없으면 null */
+export function validApprovalOf<T extends ApprovalLogLite>(
+  approvals: readonly T[],
+  step: number,
+): T | null {
+  const valid = validApprovedSteps(approvals)
+  if (!valid.has(step)) return null
+  return [...approvals].reverse().find(a => a.action === 'approve' && a.step === step) ?? null
+}
+
 /** 결재자 코드 비교 — 손입력이라 공백·대소문자 차이로 조용히 어긋나지 않게 정규화 */
 export function sameCode(a?: string | null, b?: string | null): boolean {
   return !!a && !!b && a.trim().toLowerCase() === b.trim().toLowerCase()

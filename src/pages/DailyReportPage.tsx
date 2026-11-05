@@ -41,6 +41,7 @@ import { notifyApprovalTurn } from '../lib/approvalNotify'
 import {
   groupByStage, evaluateApproveGate, autoApproveStepsOnSubmit,
   isFinalApproval, pendingInStage, describeFlow,
+  validApprovedSteps, validApprovalOf,
 } from '../lib/approvalFlow'
 import type { Company, DailyRecord, FxCode } from '../types'
 
@@ -892,7 +893,16 @@ export default function DailyReportPage() {
   //   버튼 노출·자동 승인·메일 수신자 세 곳이 같은 규칙을 봐야 한다 — 메일은 SQL 이라
   //   함수를 공유 못 하므로 docs/db/approval_parallel_stage.sql 에 같은 규칙을 적어 뒀다.
   //   한쪽만 고치면 "버튼은 안 보이는데 메일은 오는" 상태가 된다.
-  const approvedSteps = new Set(dr.approvals.filter(a => a.action === 'approve').map(a => a.step))
+  // ⚠ 반려 이후의 승인만 유효하다 — 재상신하면 전원 다시 승인한다(B안, 2026-11-05).
+  //   로그는 지우지 않고 판정만 바꾼다. 같은 규칙이 메일 RPC 에도 있다
+  //   (docs/db/approval_resubmit_reset.sql) — 한쪽만 고치면 재상신 후
+  //   이미 승인했던 사람에게 결재 요청이 가지 않는다.
+  const approvedSteps = validApprovedSteps(dr.approvals)
+  // 마지막 반려 — 재상신 후에도 "무엇 때문에 반려됐는지" 를 보여줘야 한다
+  const lastReject = [...dr.approvals].reverse().find(a => a.action === 'reject') ?? null
+  const resetByReject = lastReject != null && dr.approvals.some(
+    a => a.action === 'approve' && a.created_at < lastReject.created_at,
+  )
   const stageGroups   = groupByStage(ac.config)
   const gate = evaluateApproveGate({
     config: ac.config,
@@ -1518,8 +1528,9 @@ export default function DailyReportPage() {
                               )}
                               <div className={g.steps.length > 1 ? 'flex flex-col gap-2' : ''}>
                                 {g.steps.map(cfg => {
-                                  const approvedLog = dr.approvals.find(a => a.step === cfg.step && a.action === 'approve')
-                                  const rejectedLog = dr.approvals.find(a => a.step === cfg.step && a.action === 'reject')
+                                  // 반려 전 승인은 도장으로 찍지 않는다 — 수정본을 승인한 것이 아니다
+                                  const approvedLog = validApprovalOf(dr.approvals, cfg.step)
+                                  const rejectedLog = lastReject?.step === cfg.step ? lastReject : null
                                   // 지금 차수인데 아직 안 누른 사람 = 대기 중 (점선 대신 눈에 띄게)
                                   const waitingNow = !approvedLog && !rejectedLog && curStage === g.stage && status === 'submitted'
                                   return (
@@ -1568,9 +1579,15 @@ export default function DailyReportPage() {
                       })()}
 
                       {/* 반려 사유 */}
-                      {dr.approvals.some(a => a.action === 'reject' && a.comment) && (
+                      {lastReject?.comment && (
                         <div className="mt-2 text-[11px] text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded px-3 py-1.5">
-                          ✗ 반려 사유: {dr.approvals.find(a => a.action === 'reject')?.comment}
+                          ✗ 반려 사유: {lastReject.comment}
+                        </div>
+                      )}
+                      {resetByReject && (
+                        <div className="mt-2 text-[11px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 rounded px-3 py-1.5 leading-relaxed">
+                          ↻ 반려로 결재가 <strong>초기화</strong>되었습니다 — 내용이 수정됐을 수 있어
+                          이전에 승인하신 분들도 <strong>다시 승인</strong>해야 합니다. 승인 이력은 그대로 보존됩니다.
                         </div>
                       )}
                     </div>
@@ -1653,8 +1670,8 @@ export default function DailyReportPage() {
                   {/* ac.config 기반 동적 결재 칸 — 인쇄물도 차수 순으로 찍혀야 한다
                       (No. 는 자동 배정된 식별자라 그 순서로 찍으면 결재 흐름과 어긋난다) */}
                   {stageGroups.flatMap(g => g.steps).map((cfg, idx, arr) => {
-                    const approvedLog = dr.approvals.find(a => a.step === cfg.step && a.action === 'approve')
-                    const rejectedLog = dr.approvals.find(a => a.step === cfg.step && a.action === 'reject')
+                    const approvedLog = validApprovalOf(dr.approvals, cfg.step)
+                    const rejectedLog = lastReject?.step === cfg.step ? lastReject : null
                     return (
                       <div key={cfg.step} style={{
                         ...apvCellStyle,
