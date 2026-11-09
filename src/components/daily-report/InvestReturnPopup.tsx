@@ -5,6 +5,7 @@
  */
 import { useState, useEffect } from 'react'
 import { supabase, restUpdate } from '../../lib/supabase'
+import { useAuditLog } from '../../hooks/useAuditLog'
 import type { Company, InvestmentRecord, EquityRecord } from '../../types'
 
 interface Props {
@@ -20,7 +21,14 @@ function fmtKRW(n: number) {
   return Math.round(n).toLocaleString('ko-KR') + '원'
 }
 
+/** 통화 단위를 붙인 금액 — 원화만 '원', 나머지는 통화코드 */
+function fmtAmt(n: number, currency: string): string {
+  const v = Math.round(n).toLocaleString('ko-KR')
+  return currency === 'KRW' ? `${v}원` : `${v} ${currency}`
+}
+
 export default function InvestReturnPopup({ company, reportDate, onSaved, onClose }: Props) {
+  const { logAction } = useAuditLog()
   const [tab,       setTab]       = useState<Tab>('invest')
   const [invests,   setInvests]   = useState<InvestmentRecord[]>([])
   const [equities,  setEquities]  = useState<EquityRecord[]>([])
@@ -57,6 +65,12 @@ export default function InvestReturnPopup({ company, reportDate, onSaved, onClos
     setAmtStr(def > 0 ? Math.round(def).toLocaleString('ko-KR') : '')
   }
 
+  // 선택한 항목의 통화 — 사용자가 고르지 않는다(원천 레코드가 정본).
+  //   지분은 total_value 가 원화 평가액이므로 항상 KRW.
+  const selectedCurrency = tab === 'invest'
+    ? (invests.find(i => i.id === selectedId)?.currency || 'KRW')
+    : 'KRW'
+
   function getDefaultAmountById(id: string): number {
     if (tab === 'invest') {
       return invests.find(i => i.id === id)?.amount ?? 0
@@ -71,17 +85,32 @@ export default function InvestReturnPopup({ company, reportDate, onSaved, onClos
     setSaving(true)
     setError(null)
     try {
-      // 운용자금 → active = false 처리
-      if (tab === 'invest') {
-        const { error: e } = await restUpdate('investments', { active: false }, { id: selectedId })
-        if (e) throw new Error(e.message)
-      }
       const inv  = invests.find(i => i.id === selectedId)
       const eq   = equities.find(e => e.id === selectedId)
+      // 운용자금 → 만기/해지 처리
+      if (tab === 'invest' && inv) {
+        // ⚠ closed_date 필수 — 없으면 회수 이후 과거 잔액이 전부 소급 차감돼 보인다
+        //   (세션19차 Task 5·6, 세션27차 point-in-time 재구성). 실제 회수일은
+        //   처리일과 다를 수 있으므로 보고대상일을 쓴다.
+        const { error: e } = await restUpdate('investments',
+          { active: false, closed_date: reportDate }, { id: selectedId })
+        if (e) throw new Error(e.message)
+        await logAction({
+          table: 'investments', action: 'SETACTIVE', company, recordId: selectedId,
+          summary: `${inv.bank ?? ''} ${inv.product ?? ''} ${fmtAmt(inv.amount, inv.currency || 'KRW')} 회수 (자금일보 연동)`,
+          before: { ...inv },
+          after:  { ...inv, active: false, closed_date: reportDate },
+        })
+      }
       const label = tab === 'invest'
         ? `${inv?.bank ?? ''} ${inv?.product ?? ''} 회수`
         : `${eq?.name ?? ''} 지분 회수`
-      await onSaved(amount, 'KRW', memo || label, tab === 'invest' ? 'investment' : 'equity', selectedId)
+      // ⚠ 통화는 원천 레코드가 정본이다. 과거 'KRW' 하드코딩 때문에 USD 정기예금을
+      //   회수하면 원금 숫자가 그대로 원화로 기록돼 검증식이 어긋났다
+      //   (차입금 상환 팝업과 같은 결함 — 2026-11-06 리포트).
+      //   지분(equities)은 total_value 가 원화 평가액이라 KRW 가 맞다.
+      await onSaved(amount, selectedCurrency, memo || label,
+        tab === 'invest' ? 'investment' : 'equity', selectedId)
       onClose()
     } catch (e) {
       setError(String(e))

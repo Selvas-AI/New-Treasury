@@ -599,7 +599,7 @@ export default function ItemsSection({
       )}
       {linkedPopup === 'loan_repayment' && (
         <LoanRepaymentPopup
-          company={company}
+          company={company} reportDate={reportDate}
           onSaved={(amt, cur, memo, lt, li) => handleLinkedSaved(amt, cur, memo, lt, li)}
           onClose={() => setLinkedPopup(null)}
         />
