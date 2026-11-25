@@ -1480,6 +1480,15 @@ baf8ef9 fix: 투자 집행 연동 저장 실패 수정 + 자산 구분(운용/�
   유니크 인덱스 2개(`equities_company_name_date_uniq` / `investments_bond_company_ticker_date_uniq`).
   **실행 완료** (2026-09-15 — 지분 73건 삭제 · 국채 0건(중복 없었음) · 남은 중복 0그룹 · 인덱스 2개 생성).
   백업 `backup.equities_dup_20260915` / `backup.investments_dup_20260915` 에 삭제분 보존.
+- **`docs/db/fx_fifo_integrity_and_scope.sql`** ⭐⭐ — FX 전수조사 묶음 B (2026-11-25). **실행 필요**.
+  ① `fx_lots.available_from`(로트가 장부에 생긴 날) + backfill + 자동 채움 트리거 —
+     소급 체결·유출·대체가 **처분일 이후에 생긴 로트**를 소진하던 문제(F-04).
+     ⚠ 대체 로트는 원본 취득일을 승계하므로 생성일 = **대체일**이다(acquired_date 로 거르면 통과한다).
+  ② 체결·체결취소·전체원복 RPC 에 **법인 범위 검사**(F-10) + 쓰지 않는 구 체결 RPC 2종 실행 권한 회수.
+  ③ `completed_at` = 마지막 체결일로 통일(F-22).
+  선행 조건(fx_outflow_account_and_reverse 등)이 없으면 첫 단계에서 멈추고 아무것도 바꾸지 않는다.
+  끝의 결과표 9행 중 **'과거 시점 위반 소진 건수'가 0이 아니면** 목록을 확인할 것(자동 정정하지 않음).
+  이후 체결·유출·대체 RPC 를 고칠 때는 **이 파일이 최신 기준**이다.
 - **`docs/db/fx_term_deposit_verify.sql`** — 정기예금 연동 적용 상태 검증(읽기 전용, 12항목).
   마이그레이션이 아니라 **점검 도구**다. 2026-09-15 실행 결과 12/12 OK.
 - **`docs/db/fx_lot_transfer.sql`** ⭐⭐ — 계좌 간 대체 (세션26차 12일차). `fx_lot_transfers` 테이블 +

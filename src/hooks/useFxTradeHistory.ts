@@ -250,7 +250,11 @@ export function useFxTradeHistory(company?: Company | null) {
     if (fillErr) return { data: null, error: fillErr }
     return restUpdate('fx_trade_history', {
       filled_amount: newFilled, status: newStatus, completed_rate: newRate,
-      completed_pnl: newPnl, completed_at: new Date().toISOString(), completed_by: completedBy,
+      // F-22: completed_at = 마지막 체결일(서버 RPC 와 같은 규칙). 실행 시각을 쓰면
+      //   소급 체결이 오늘 체결된 것처럼 기록된다.
+      completed_pnl: newPnl,
+      completed_at: `${[fillDate, rec?.completed_at?.slice(0, 10) ?? ''].sort().pop()}T00:00:00.000Z`,
+      completed_by: completedBy,
     }, { id })
   }, [data])
 

@@ -51,6 +51,8 @@ interface FxLotRow {
   source_type: FxLot['sourceType']; source_id: string | null; memo: string | null
   account_type: FxLot['accountType']; annual_interest_rate: number; maturity_date: string | null
   transfer_id?: string | null; investment_id?: string | null
+  /** 장부에 생긴 날 — fx_fifo_integrity_and_scope.sql 적용 전에는 없다(acquired_date 로 폴백) */
+  available_from?: string | null
 }
 
 function mapRow(row: FxLotRow): FxLot {
@@ -60,6 +62,7 @@ function mapRow(row: FxLotRow): FxLot {
     annualInterestRate: Number(row.annual_interest_rate ?? 0), maturityDate: row.maturity_date,
     sourceType: row.source_type, sourceId: row.source_id,
     transferId: row.transfer_id ?? null, investmentId: row.investment_id ?? null,
+    availableFrom: row.available_from ?? null,
     memo: row.memo }
 }
 

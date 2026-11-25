@@ -154,3 +154,35 @@ describe('정기예금 예상 만기이자 (2026-09-18 실사고)', () => {
   })
 })
 
+
+// ── 처분일 이전에 장부에 있던 로트만 소진 (2026-11-25 전수조사 F-04) ─────────
+// 소급 체결(체결일을 과거로 입력)이 처분일 **이후에** 들어온 로트까지 소진하던 문제.
+// 서버 RPC 의 `available_from <= 처분일` 과 같은 규칙이어야 미리보기와 실제 소진이 일치한다.
+describe('시점 무결성 — 처분일 이후에 생긴 로트는 소진하지 않는다', () => {
+  it('취득일이 처분일보다 늦은 로트는 환전 가능하지 않다', () => {
+    expect(isLotAvailable(lot({ acquiredDate: '2026-08-19' }), '2026-08-18')).toBe(false)
+    expect(isLotAvailable(lot({ acquiredDate: '2026-08-18' }), '2026-08-18')).toBe(true)   // 당일 포함
+  })
+
+  it('대체 로트는 승계한 취득일이 아니라 **대체일**을 기준으로 본다', () => {
+    // 1월에 취득한 원본을 8월 20일에 MMDA 로 대체 → 승계 취득일 01-01, 생성일 08-20
+    const moved = lot({ acquiredDate: '2026-01-01', availableFrom: '2026-08-20', accountType: 'mmda' })
+    expect(isLotAvailable(moved, '2026-08-19')).toBe(false)
+    expect(isLotAvailable(moved, '2026-08-20')).toBe(true)
+  })
+
+  it('소급 체결 미리보기는 그 날짜 이후에 들어온 로트를 건너뛴다', () => {
+    const book = [
+      lot({ id: 'a', acquiredDate: '2026-08-01', remainingAmount: 100, acqRate: 1400 }),
+      lot({ id: 'b', acquiredDate: '2026-08-19', remainingAmount: 100, acqRate: 1300 }),
+    ]
+    const rows = previewFifoConsumption(book, 150, 1450, '2026-08-18')
+    expect(rows.map(r => r.lotId)).toEqual(['a'])       // b 는 8/19 에 생겨 8/18 체결에 쓸 수 없다
+    expect(rows.reduce((s, r) => s + r.amount, 0)).toBe(100)   // 부족분 50 은 서버가 오류로 막는다
+  })
+
+  it('환전 가능액도 같은 규칙 — 미래 날짜로 등록된 유입은 오늘 가능액에 들어가지 않는다', () => {
+    const book = [lot({ remainingAmount: 100 }), lot({ id: 'f', acquiredDate: '2099-01-01', remainingAmount: 50 })]
+    expect(availableAmount(book, '2026-11-25')).toBe(100)
+  })
+})

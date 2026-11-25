@@ -36,6 +36,12 @@ export interface FxLot {
   transferId?: string | null
   /** 연결된 운용자금(investments) 레코드 — 정기예금 연동 (Phase 2) */
   investmentId?: string | null
+  /**
+   * 이 로트가 **장부에 생긴 날** (fx_lots.available_from, 2026-11-25 F-04).
+   * 대체 로트는 원본 취득일을 승계하므로 acquiredDate 와 다르다 — 대체일이다.
+   * 처분일보다 늦게 생긴 로트는 FIFO 소진 대상이 아니다. 없으면 acquiredDate 로 본다.
+   */
+  availableFrom?: string | null
   memo?: string | null
 }
 
@@ -46,7 +52,16 @@ export interface FxLot {
  *   그러면 mmda 처럼 새 유형이 추가될 때마다 **조용히 잠긴 것으로 취급**되어
  *   환전 가능액이 과소 계산된다. 잠기는 유형(term_deposit)만 명시하는 쪽으로 뒤집는다.
  */
-export function isLotAvailable(lot: Pick<FxLot, 'accountType' | 'maturityDate'>, asOfDate: string): boolean {
+export function isLotAvailable(
+  lot: Pick<FxLot, 'accountType' | 'maturityDate'> & Partial<Pick<FxLot, 'acquiredDate' | 'availableFrom'>>,
+  asOfDate: string,
+): boolean {
+  // ⚠ 그 날짜에 **아직 장부에 없던 로트**는 환전할 수 없다(F-04).
+  //   과거엔 소급 체결이 처분일 이후에 들어온 로트까지 소진했다. 서버 RPC 의
+  //   `available_from <= 처분일` 조건과 **반드시 같은 규칙**이어야 미리보기와 실제 소진이 일치한다.
+  //   (docs/db/fx_fifo_integrity_and_scope.sql)
+  const since = lot.availableFrom ?? lot.acquiredDate
+  if (since && since > asOfDate) return false
   if (!LOCKED_ACCOUNT_TYPES.includes(lot.accountType)) return true
   return !!lot.maturityDate && lot.maturityDate <= asOfDate
 }
