@@ -49,6 +49,17 @@ function fmtTime(iso: string) {
  *
  * ⚠ 이 테이블 도입(세션26차 7일차) 이전 시점은 조회할 수 없다 — 과거로 소급 복원 불가.
  */
+/**
+ * 목표 대비 현재의 차이(%p). 둘 중 하나라도 없으면 null.
+ *
+ * ⚠ 스냅샷에는 당시 리밸런싱 밴드가 저장돼 있지 않다 — 밴드는 그 뒤 바뀌었을 수 있으므로
+ *   "밴드 몇 %p" 를 단정하지 않고 **차이만** 적는다. 차이는 저장된 두 값에서 그대로 나온다.
+ */
+function gapOf(row: { target_pct: number | null; current_pct: number | null }): number | null {
+  if (row.target_pct == null || row.current_pct == null) return null
+  return row.current_pct - row.target_pct
+}
+
 export default function RegimeHistoryCard({ company, currency }: { company: Company; currency: string }) {
   const { rows, loading } = useFxRegimeSnapshotHistory(company, currency)
   const [open, setOpen] = useState(false)
@@ -124,9 +135,18 @@ export default function RegimeHistoryCard({ company, currency }: { company: Comp
                       )}
                       <span className="ml-auto tabular-nums text-gray-500 dark:text-slate-400">
                         목표 {g.last.target_pct != null ? `${g.last.target_pct}%` : '—'} / 현재 {g.last.current_pct != null ? `${g.last.current_pct}%` : '—'}
+                        {/* ⚠ 차이를 같이 적는다 — "목표 28.3% / 현재 29.4% · 조치 불필요" 만 있으면
+                            초과인데 왜 조치가 없는지 알 수 없어 모순으로 읽힌다(2026-11-25 리포트) */}
+                        {gapOf(g.last) != null && (
+                          <span className="ml-1 text-gray-400 dark:text-slate-500">
+                            (차이 {gapOf(g.last)! >= 0 ? '+' : ''}{gapOf(g.last)!.toFixed(1)}%p)
+                          </span>
+                        )}
                       </span>
                       <span className={`tabular-nums font-semibold ${g.last.suggest_krw > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-400'}`}>
-                        {g.last.suggest_krw > 0 ? fmtKRW(g.last.suggest_krw) : '조치 불필요'}
+                        {g.last.suggest_krw > 0
+                          ? fmtKRW(g.last.suggest_krw)
+                          : <span title="목표와 현재의 차이가 리밸런싱 밴드 미만이라 거래하지 않습니다. 소액 매매로 거래 비용만 쓰는 것을 막는 장치입니다.">조치 불필요 · 밴드 이내</span>}
                       </span>
                     </button>
 
@@ -165,7 +185,7 @@ export default function RegimeHistoryCard({ company, currency }: { company: Comp
                                   <td className="py-1.5 pr-3 text-right tabular-nums">{r.current_pct != null ? `${r.current_pct}%` : '—'}</td>
                                   <td className={`py-1.5 pr-3 text-right font-semibold tabular-nums ${
                                     r.suggest_krw > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-400'}`}>
-                                    {r.suggest_krw > 0 ? fmtKRW(r.suggest_krw) : '조치 불필요'}
+                                    {r.suggest_krw > 0 ? fmtKRW(r.suggest_krw) : '조치 불필요 · 밴드 이내'}
                                   </td>
                                   <td className="py-1.5 pr-3 tabular-nums text-gray-500 dark:text-slate-400">{r.since_date ?? '—'}</td>
                                   <td className="py-1.5 text-gray-400">{r.captured_by ?? '—'}</td>

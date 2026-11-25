@@ -6,6 +6,7 @@ import { useFx } from '../../hooks/useFx'
 import { usePolicyParams } from '../../hooks/usePolicyParams'
 import { fetchFxStdDev } from '../../hooks/useGas'
 import { fmtKRW, fmtNumber } from '../../lib/format'
+import { computeFxBandExceed } from '../../lib/fxBandExceed'
 import { restInsert } from '../../lib/supabase'
 import { generateUUID } from '../../lib/format'
 import { NumInput } from '../common/NumInput'
@@ -284,8 +285,27 @@ export default function FxPolicyTab({ company }: { company: Company }) {
   const totalIndividualFxKrw = policyData.fxPortfolioHoldings
   const currentFxKrw   = totalIndividualFxKrw
   const currentFxRatio = policyData.fxRatio
-  const fxGap          = currentFxKrw - effectiveLimit  // 양수 = 초과, 음수 = 여유
-  const isOverLimit    = fxGap > 0
+
+  /**
+   * ⭐ [준수 기준] 이행 여부는 **의결된 정책 밴드(fx_target_max)** 로만 판정한다.
+   *
+   * ⚠ 과거엔 ④ 매각 집행 탭이 effectiveLimit(= min(σ×Z 손실허용 한도,
+   *   fx_max_fx_ratio 슬라이더 × 총자금))을 '정책 상한'으로 써서,
+   *   같은 밴드를 두고 리짐 화면과 **정반대 결론**을 냈다
+   *   (2026-11-25 실사례: 리짐 "밴드 이내 271.9/277.0억" vs 여기 "41.0억 초과".
+   *    230.9억 = 923.4억 × 25% = 밴드 **하한**을 상한 자리에 쓴 값이었다).
+   *
+   *   effectiveLimit 은 ③ 한도 계산기가 **밴드를 만들 때 쓰는 참고값**이지
+   *   집행 기준이 아니다 — 세션26차에 "한도(밴드)는 리스크 모델이 만들고,
+   *   시점과 금액은 리짐이 정한다"로 구조를 정했고 lib/fxBandExceed.ts 에
+   *   그 이유를 적어 뒀는데, 이 탭만 교체되지 않은 채 남아 있었다.
+   *
+   * 금지: 이 탭의 초과 판정에 effectiveLimit 을 다시 쓰지 말 것.
+   */
+  const bandExceed = useMemo(() => computeFxBandExceed(policyData, params), [policyData, params])
+  const bandCeilingKrw = bandExceed.ceilingKRW
+  const fxGap          = currentFxKrw - bandCeilingKrw  // 양수 = 초과, 음수 = 여유
+  const isOverLimit    = bandExceed.configured && fxGap > 0
 
   // ── Target Band
   const bandInRange = targetMin <= 100 && targetMax <= 100
@@ -523,9 +543,10 @@ export default function FxPolicyTab({ company }: { company: Company }) {
   }
 
   // ── 통화별 상한/현재 비교 행
+  // 통화별 상한 = **의결 밴드 상한** × 정책 비중(fx_weight_*). 합계는 밴드 상한과 일치한다.
   const compareRows = currencyRows.map(r => {
     const krwVal    = fxKrwByCode[r.code] ?? 0
-    const ceilKrw   = effectiveLimit * r.wgt   // 정책 상한 (이 통화의 한도)
+    const ceilKrw   = bandCeilingKrw * r.wgt   // 이 통화 몫의 상한
     const excess    = krwVal - ceilKrw          // 양수 = 초과, 음수 = 여유
     return { ...r, krwVal, ceilKrw, excess }
   })
@@ -626,15 +647,27 @@ export default function FxPolicyTab({ company }: { company: Company }) {
 
       {fxSubTab === 'exec' && <>
 
+      {/* 밴드 미설정이면 이행 판정 자체가 불가능하다 — 조용히 '한도 내'로 보이면 안 된다 */}
+      {!bandExceed.configured && (
+        <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-4 py-3">
+          <p className="text-sm font-semibold text-amber-700 dark:text-amber-300">
+            ⚠ 정책 밴드(fx_target_max)가 설정되지 않아 초과 여부를 판정할 수 없습니다
+          </p>
+          <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">
+            ② 정책 기준 탭에서 밴드를 의결 저장하세요. ③ 한도 계산기의 실효한도는 밴드를 만들 때 쓰는 참고값이며 집행 기준이 아닙니다.
+          </p>
+        </div>
+      )}
+
       {/* 초과 보유 경고 배너 */}
       {isOverLimit && (
         <div className="rounded-xl border border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-950/30 px-4 py-3 flex items-center justify-between gap-3">
           <div>
             <p className="text-sm font-semibold text-orange-700 dark:text-orange-300">
-              ⚠ 외화 보유량이 정책 상한을 {fmtKRW(fxGap)} 초과했습니다
+              ⚠ 외화 보유량이 의결 밴드 상한을 {fmtKRW(fxGap)} 초과했습니다
             </p>
             <p className="text-xs text-orange-600 dark:text-orange-400 mt-0.5">
-              외화가 계속 누적되어 상한({fmtKRW(effectiveLimit)})을 넘었습니다. 초과분 매도 발의를 검토하세요.
+              현재 {currentFxRatio.toFixed(1)}% · 밴드 상한 {targetMax}% ({fmtKRW(bandCeilingKrw)}) — 초과분 매도 발의를 검토하세요.
             </p>
           </div>
           <button onClick={() => openTradeModal('total', fxGap)}
@@ -1380,10 +1413,10 @@ export default function FxPolicyTab({ company }: { company: Company }) {
       <div className={card}>
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">
-            통화별 정책 상한 vs 현재 보유량
+            통화별 밴드 상한 vs 현재 보유량
           </h3>
           <p className="text-xs text-gray-400 dark:text-gray-500">
-            외화 누적 시 상한 초과 여부 확인 — 초과 통화는 매도 발의
+            기준 = 의결 밴드 상한 {targetMax}% ({fmtKRW(bandCeilingKrw)}) × 통화 비중
           </p>
         </div>
         <div className="overflow-x-auto">
@@ -1393,7 +1426,7 @@ export default function FxPolicyTab({ company }: { company: Company }) {
                 <th className="text-left pb-2 pr-3 text-gray-400 font-medium">통화</th>
                 <th className="text-right pb-2 pr-3 text-gray-400 font-medium">정책 비중</th>
                 <th className="text-right pb-2 pr-3 font-medium bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 rounded-t-lg px-2">
-                  정책 상한 (KRW)
+                  밴드 상한 (KRW)
                 </th>
                 <th className="text-right pb-2 pr-3 font-medium bg-slate-50 dark:bg-slate-700/40 text-gray-700 dark:text-slate-200 rounded-t-lg px-2">
                   현재 보유 (KRW)
@@ -1457,7 +1490,7 @@ export default function FxPolicyTab({ company }: { company: Company }) {
               <tr className="border-t border-gray-200 dark:border-slate-600">
                 <td colSpan={2} className="pt-3 text-xs text-gray-500 dark:text-slate-400 font-medium">합계</td>
                 <td className="pt-3 text-right tabular-nums font-bold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/20 px-2">
-                  {fmtKRW(effectiveLimit)}
+                  {fmtKRW(bandCeilingKrw)}
                 </td>
                 <td className={`pt-3 text-right tabular-nums font-bold px-2 ${
                   isOverLimit
@@ -1492,7 +1525,7 @@ export default function FxPolicyTab({ company }: { company: Company }) {
         {/* 한도 내 상태 안내 */}
         {!isOverLimit && (
           <div className="mt-4 px-4 py-3 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-xl text-xs text-green-700 dark:text-green-300">
-            ✓ 현재 외화 보유량이 정책 상한({fmtKRW(effectiveLimit)}) 이내입니다. 추가 조치 불필요.
+            ✓ 현재 외화 보유량이 의결 밴드 상한({fmtKRW(bandCeilingKrw)} · {targetMax}%) 이내입니다. 추가 조치 불필요.
           </div>
         )}
       </div>

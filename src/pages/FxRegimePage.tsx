@@ -746,8 +746,10 @@ export default function FxRegimePage() {
       bandExcessKRW: bandExcess.excessKRW,
       bandMaxPct:    bandExcess.maxPct,
       asOfStaleDays: staleDays,
+      // 조치 카드가 "왜 조정하지 않는가"를 표면에 적으려면 밴드 수치가 필요하다
+      rebalanceBandPct: protocol.rebalanceBandPct,
     })
-  }, [leadSignal, leadCode, isLead, series, leadHist.data, decisionBudget, bandExcess, staleDays])
+  }, [leadSignal, leadCode, isLead, series, leadHist.data, decisionBudget, bandExcess, staleDays, protocol.rebalanceBandPct])
 
   /**
    * 조치 금액의 통화별 권장 배분.

@@ -96,6 +96,39 @@ export default function VerdictCard({
         {verdict.headline}
       </h2>
 
+      {/* 목표·현재·차이 — 조치가 없을 때도 **표면에** 보여준다.
+          ⚠ "목표 28.3% / 현재 29.4%" 인데 "아무것도 하지 않습니다" 만 보이면
+            담당자에게는 모순으로 읽힌다(2026-11-25 리포트). 접힌 '왜 그런가요?'
+            안에만 두지 말 것. */}
+      {verdict.kind === 'hold' && (() => {
+        const gapPct = (verdict.currentRatio - verdict.targetRatio) * 100
+        const bandPct = verdict.rebalanceBandPct * 100
+        return (
+          <div className="mt-3 rounded-xl border border-gray-200 bg-white/80 px-4 py-3 dark:border-slate-600 dark:bg-slate-800/70">
+            <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1 text-xs tabular-nums">
+              <span className="text-gray-500 dark:text-slate-400">
+                목표 <b className="text-sm text-gray-900 dark:text-slate-50">{(verdict.targetRatio * 100).toFixed(1)}%</b>
+              </span>
+              <span className="text-gray-500 dark:text-slate-400">
+                현재 <b className="text-sm text-gray-900 dark:text-slate-50">{(verdict.currentRatio * 100).toFixed(1)}%</b>
+              </span>
+              <span className="text-gray-500 dark:text-slate-400">
+                차이 <b className={`text-sm ${gapPct >= 0 ? 'text-red-600 dark:text-red-400' : 'text-blue-600 dark:text-blue-400'}`}>
+                  {gapPct >= 0 ? '+' : ''}{gapPct.toFixed(1)}%p
+                </b>
+              </span>
+            </div>
+            <p className="mt-1.5 text-[11px] leading-relaxed text-gray-500 dark:text-slate-400">
+              차이가 리밸런싱 밴드 <b>{bandPct.toFixed(1)}%p</b> 미만이라 오늘은 조정하지 않습니다 —
+              소액 매매로 거래 비용만 쓰는 것을 막는 장치입니다.
+              {Math.abs(gapPct) >= bandPct * 0.7 && (
+                <> 차이가 밴드에 가까워, 국면이 조금만 바뀌어도 매도 권고로 전환될 수 있습니다.</>
+              )}
+            </p>
+          </div>
+        )
+      })()}
+
       {/* 실행 지시 */}
       {verdict.order && (
         <div className="mt-3 rounded-xl border border-gray-200 bg-white/80 px-4 py-3 dark:border-slate-600 dark:bg-slate-800/70">

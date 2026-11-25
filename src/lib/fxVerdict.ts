@@ -36,6 +36,16 @@ export interface Verdict {
   /** 현재 외화 보유 비중 (0~1) — expectedRatioAfter 와 나란히 비교 표시용 */
   currentRatio: number
   /**
+   * 오늘 국면이 지시한 목표 비중 (0~1) 과 리밸런싱 밴드(0~1).
+   *
+   * ⚠ 화면이 이 둘을 **표면에** 보여줘야 한다. 목표(28.3%)보다 현재(29.4%)가 높은데
+   *   "오늘은 아무것도 하지 않습니다"만 보이면 담당자에게는 모순으로 읽힌다
+   *   (2026-11-25 리포트). 차이가 밴드 미만이라 거래하지 않는다는 사실을
+   *   접힌 패널이 아니라 카드에서 바로 읽혀야 한다.
+   */
+  targetRatio: number
+  rebalanceBandPct: number
+  /**
    * 오늘 집행할 **바구니 기준 총액**(KRW, 양수). 조치가 없으면 null.
    * ⚠ 화면은 이 값을 통화별로 안분해 보여준다(allocateAcrossBasket).
    *   order 문자열에서 숫자를 다시 파싱하지 말 것.
@@ -46,6 +56,8 @@ export interface Verdict {
 export interface VerdictInput {
   signal: FxRegimeSignal
   currency: string
+  /** 리밸런싱 밴드(0~1). 목표와 현재의 차이가 이 미만이면 거래하지 않는다 */
+  rebalanceBandPct?: number
   /** 보유 외화 (외화 단위) */
   holdingFx: number
   /** 평균 취득환율 (0 = 미설정) */
@@ -95,6 +107,7 @@ export function buildVerdict(input: VerdictInput): Verdict {
     signal, currency, holdingFx, avgCostRate,
     allowedFx, requestedFx, pctDaysAboveBep,
     bandExcessKRW, bandMaxPct, asOfStaleDays,
+    rebalanceBandPct = 0.03,
   } = input
 
   const rate = signal.indicators.close
@@ -136,6 +149,8 @@ export function buildVerdict(input: VerdictInput): Verdict {
       orderKRW: bandOver ? bandExcessKRW : null,
       expectedRatioAfter: null,
       currentRatio: d.currentRatio,
+    targetRatio: d.appliedTargetRatio,
+    rebalanceBandPct,
     }
   }
 
@@ -197,6 +212,8 @@ export function buildVerdict(input: VerdictInput): Verdict {
         orderKRW: null,
         expectedRatioAfter: null,
         currentRatio: d.currentRatio,
+    targetRatio: d.appliedTargetRatio,
+    rebalanceBandPct,
       }
     }
 
@@ -222,6 +239,8 @@ export function buildVerdict(input: VerdictInput): Verdict {
       orderKRW: execKRW,
       expectedRatioAfter,
       currentRatio: d.currentRatio,
+    targetRatio: d.appliedTargetRatio,
+    rebalanceBandPct,
     }
   }
 
@@ -247,6 +266,8 @@ export function buildVerdict(input: VerdictInput): Verdict {
         orderKRW: bandExcessKRW,
         expectedRatioAfter: null,
         currentRatio: d.currentRatio,
+    targetRatio: d.appliedTargetRatio,
+    rebalanceBandPct,
       }
     }
     return {
@@ -257,13 +278,20 @@ export function buildVerdict(input: VerdictInput): Verdict {
       orderKRW: null,
       expectedRatioAfter: null,
       currentRatio: d.currentRatio,
+    targetRatio: d.appliedTargetRatio,
+    rebalanceBandPct,
     }
   }
 
   // ── 조치 불필요 ───────────────────────────────────────────
+  // ⚠ 반올림 자리를 조치 이력(소수점 1자리)과 맞춘다 — 28% vs 28.3% 로 갈리면
+  //   같은 판정을 두 화면이 다르게 말하는 것처럼 보인다.
   reasons.push(
-    `목표 **${(d.appliedTargetRatio * 100).toFixed(0)}%** 와 현재 ` +
-    `**${(d.currentRatio * 100).toFixed(0)}%** 의 차이가 작아, 거래 비용을 쓸 만큼이 아닙니다.`,
+    `목표 **${(d.appliedTargetRatio * 100).toFixed(1)}%** 와 현재 ` +
+    `**${(d.currentRatio * 100).toFixed(1)}%** 의 차이가 ` +
+    `**${(Math.abs(d.currentRatio - d.appliedTargetRatio) * 100).toFixed(1)}%p** 로, ` +
+    `리밸런싱 밴드 **${(rebalanceBandPct * 100).toFixed(1)}%p** 미만입니다. ` +
+    `거래 비용을 쓸 만큼이 아니라 오늘은 조정하지 않습니다.`,
   )
 
   // ⚠ [핵심] 리밸런싱 밴드(3%p)는 소액매매를 막는 장치이지 **정책 위반을 묵인하는 장치가 아니다.**
@@ -280,6 +308,8 @@ export function buildVerdict(input: VerdictInput): Verdict {
       orderKRW: bandExcessKRW,
       expectedRatioAfter: null,
       currentRatio: d.currentRatio,
+    targetRatio: d.appliedTargetRatio,
+    rebalanceBandPct,
     }
   }
 
@@ -293,5 +323,7 @@ export function buildVerdict(input: VerdictInput): Verdict {
     orderKRW: null,
     expectedRatioAfter: null,
     currentRatio: d.currentRatio,
+    targetRatio: d.appliedTargetRatio,
+    rebalanceBandPct,
   }
 }
