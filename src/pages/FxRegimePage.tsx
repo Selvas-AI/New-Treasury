@@ -407,8 +407,14 @@ export default function FxRegimePage() {
   //   정책회의 의결(discretionary)이나 한도초과(threshold)로 등록된다 — 리짐이 아니라는
   //   이유로 숨기면 "300만불 중 200만불 체결, 잔여 100만불"이 화면 어디에도 안 보이는
   //   바로 그 문제가 그대로 재현된다(2026-08-20 리포트). 발생 경로와 무관하게 보여준다.
+  //
+  // ⚠ 리짐 지시(order_type='regime')는 **바구니 결정**이라 어느 통화 탭에서 등록됐든
+  //   여기 보여야 한다. 현재 통화만 보면 USD 탭에서 등록한 뒤 EUR 탭으로 가는 순간
+  //   등록 패널이 다시 나타나 같은 권고를 중복 등록할 수 있었다(2026-11-25 전수조사 F-01).
+  //   한도초과·재량 지시는 통화별 발의이므로 지금처럼 현재 통화만 본다.
   const pendingRegimeOrders = useMemo(
-    () => actualTradeHistory.data.filter(t => t.currency === currency && t.direction === 'sell'
+    () => actualTradeHistory.data.filter(t => t.direction === 'sell'
+      && (t.currency === currency || t.order_type === 'regime')
       && (t.status === '발의' || t.status === '승인' || t.status === '부분체결')),
     [actualTradeHistory.data, currency])
 
@@ -562,36 +568,6 @@ export default function FxRegimePage() {
   }
 
   const avgAcqRate = treasuryInputs.avgAcquisitionRate
-
-  /**
-   * 리짐 권고를 매각 지시로 등록 (세션26차 Phase 4).
-   * 기존 워크플로우(발의 → 승인 → 완료)를 그대로 쓰고, 발생 경로만 `regime` 으로 구분한다.
-   * 기한은 다른 매각 지시와 동일하게 **등록일 +3영업일**(환율과 무관하게 실행).
-   */
-  const registerRegimeOrder = useCallback(async (amountFx: number): Promise<string | null> => {
-    if (!signal || amountFx <= 0) return '등록할 금액이 없습니다.'
-    const rate = signal.indicators.close
-    const acq  = treasuryInputs.avgAcquisitionRate > 0 ? treasuryInputs.avgAcquisitionRate : null
-    const today = todayStr()
-    const { error } = await actualTradeHistory.propose({
-      company, trade_date: today, currency, direction: 'sell',
-      amount_fx: amountFx,
-      acq_rate: acq,
-      trade_rate: rate,
-      fx_pnl: acq != null ? Math.round((rate - acq) * amountFx) : null,
-      amount_krw: Math.round(rate * amountFx),
-      memo: `리짐 권고 자동 등록 — 국면 ${signal.regime.code}`
-        + `${signal.level ? ` · 수준 ${signal.level.label}` : ''}`
-        + ` · 목표 ${(signal.decision.appliedTargetRatio * 100).toFixed(1)}%`
-        + ` / 현재 ${(signal.decision.currentRatio * 100).toFixed(1)}% (판정일 ${signal.asOf})`,
-      created_by: user?.label ?? user?.code ?? 'unknown',
-      due_date: addBizDays(today, 3),
-      order_type: 'regime',
-    })
-    if (error) return error.message ?? '등록 실패'
-    await actualTradeHistory.load()
-    return null
-  }, [signal, treasuryInputs.avgAcquisitionRate, company, currency, actualTradeHistory, user])
 
   /**
    * 정책 밴드 상한 초과분 매도 발의 (세션26차 11일차).
@@ -750,6 +726,43 @@ export default function FxRegimePage() {
       rebalanceBandPct: protocol.rebalanceBandPct,
     })
   }, [leadSignal, leadCode, isLead, series, leadHist.data, decisionBudget, bandExcess, staleDays, protocol.rebalanceBandPct])
+
+  /**
+   * 리짐 권고를 매각 지시로 등록 (세션26차 Phase 4).
+   * 기존 워크플로우(발의 → 승인 → 완료)를 그대로 쓰고, 발생 경로만 `regime` 으로 구분한다.
+   * 기한은 다른 매각 지시와 동일하게 **등록일 +3영업일**(환율과 무관하게 실행).
+   *
+   * ⚠ [임시 조치 — 2026-11-25 전수조사 F-01 Step 0]
+   *   조치 카드는 대표 통화 기준의 **바구니 결정**인데, 과거엔 이 함수가 **현재 탭 통화**로
+   *   지시를 만들어 EUR 탭에서 누르면 USD 수량이 EUR 지시로 등록됐다(JPY 탭이면 약 1/150 금액).
+   *   정식 수정(통화별 배분대로 여러 건 등록)은 바구니 판정 공통화(F-05) 이후에 한다.
+   *   그때까지는 **대표 통화로만** 등록하고, 패널도 대표 통화 탭에서만 연다.
+   *   금지: 이 함수에서 `currency`·`signal`·`treasuryInputs` 를 다시 쓰지 말 것.
+   */
+  const registerRegimeOrder = useCallback(async (amountFx: number): Promise<string | null> => {
+    if (!leadSignal || !decisionBudget || amountFx <= 0) return '등록할 금액이 없습니다.'
+    const rate = decisionBudget.rate
+    const acq  = decisionBudget.costRate > 0 ? decisionBudget.costRate : null
+    const today = todayStr()
+    const { error } = await actualTradeHistory.propose({
+      company, trade_date: today, currency: leadCode, direction: 'sell',
+      amount_fx: amountFx,
+      acq_rate: acq,
+      trade_rate: rate,
+      fx_pnl: acq != null ? Math.round((rate - acq) * amountFx) : null,
+      amount_krw: Math.round(rate * amountFx),
+      memo: `리짐 권고 자동 등록 — 바구니 대표 ${leadCode} · 국면 ${leadSignal.regime.code}`
+        + `${leadSignal.level ? ` · 수준 ${leadSignal.level.label}` : ''}`
+        + ` · 목표 ${(leadSignal.decision.appliedTargetRatio * 100).toFixed(1)}%`
+        + ` / 현재 ${(leadSignal.decision.currentRatio * 100).toFixed(1)}% (판정일 ${leadSignal.asOf})`,
+      created_by: user?.label ?? user?.code ?? 'unknown',
+      due_date: addBizDays(today, 3),
+      order_type: 'regime',
+    })
+    if (error) return error.message ?? '등록 실패'
+    await actualTradeHistory.load()
+    return null
+  }, [leadSignal, decisionBudget, leadCode, company, actualTradeHistory, user])
 
   /**
    * 조치 금액의 통화별 권장 배분.
@@ -927,15 +940,27 @@ export default function FxRegimePage() {
       {pendingRegimeOrders.length > 0 ? (
         <PendingOrdersCard company={company} currency={currency} orders={pendingRegimeOrders} />
       ) : (
-        inputSource === 'live' && canEdit() && signal && decisionBudget && decisionBudget.budget.allowedFx > 0 && (
-          <RegisterOrderPanel
-            currency={currency}
-            company={company}
-            allowedFx={decisionBudget.budget.allowedFx}
-            rate={decisionBudget.rate}
-            avgCostRate={treasuryInputs.avgAcquisitionRate}
-            onRegister={registerRegimeOrder}
-          />
+        inputSource === 'live' && canEdit() && leadSignal && decisionBudget && decisionBudget.budget.allowedFx > 0 && (
+          // ⚠ 등록 수량·환율·장부환율은 전부 **대표 통화** 값이다. 다른 통화 탭에서 열면
+          //   통화 라벨만 바뀐 채 대표 통화 수량이 들어간다(F-01). 그래서 대표 탭에서만 연다.
+          isLead ? (
+            <RegisterOrderPanel
+              currency={leadCode}
+              company={company}
+              allowedFx={decisionBudget.budget.allowedFx}
+              rate={decisionBudget.rate}
+              avgCostRate={decisionBudget.costRate}
+              onRegister={registerRegimeOrder}
+            />
+          ) : (
+            <div className="flex flex-wrap items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-xs text-gray-600 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+              <span>🧾 리짐 매각 지시는 바구니 대표 통화(<b>{leadCode}</b>) 탭에서 등록합니다 — 조치 카드가 {leadCode} 기준 판정이기 때문입니다.</span>
+              <button type="button" onClick={() => setCurrency(leadCode)}
+                className="ml-auto rounded-lg bg-orange-600 px-3 py-1.5 font-semibold text-white hover:bg-orange-700">
+                {leadCode} 탭으로 이동
+              </button>
+            </div>
+          )
         )
       )}
 

@@ -1,12 +1,11 @@
 import { useMemo, useState } from 'react'
+import { todayStr } from '../../lib/bizDay'
 import { useFxRegimeSnapshotHistory, type RegimeSnapshotHistoryRow } from '../../hooks/useFxRegimeSnapshotHistory'
 import { fmtKRW } from '../../lib/format'
 import { CLAMP_LABEL, LEVEL_LABEL, regimeLabel, type ClampReason, type LevelGrade, type RegimeCode } from '../../lib/fxRegime'
 import type { Company } from '../../types'
 
-function todayStr() {
-  return new Date().toISOString().slice(0, 10)
-}
+// 오늘 날짜는 lib/bizDay 의 todayStr(KST 로컬)을 쓴다 — toISOString 은 UTC 라 오전 9시 전엔 하루 전이 된다.
 
 /**
  * 판정 근거 한 줄 — "왜 이 목표가 나왔는가".

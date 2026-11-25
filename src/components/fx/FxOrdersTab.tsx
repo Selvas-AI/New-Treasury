@@ -16,7 +16,8 @@ const PENDING_STATUS = ['발의', '승인', '부분체결']
 
 function monthAgoStr() {
   const d = new Date(); d.setMonth(d.getMonth() - 3)
-  return d.toISOString().slice(0, 10)
+  // 로컬(KST) 날짜로 만든다 — toISOString 은 UTC 라 하루 밀린다(F-17)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 function statusBadge(s: string) {

@@ -94,6 +94,14 @@ export const STALE_LIMIT_BIZDAYS = 10
 
 const num = (v: number) => Math.round(v).toLocaleString()
 
+/**
+ * 보유 비중(0~1) → "28.3%" — **판정 문구의 비율 표기는 전부 이 함수로**.
+ * ⚠ 분기마다 toFixed(0)/toFixed(1) 이 섞여 있어, 같은 판정을 조치 카드는 "28%",
+ *   조치 이력은 "28.3%" 로 말했다(2026-11-25 전수조사 F-19).
+ *   정책 밴드(30%) 같은 의결 정수값과 빈도(%)는 이 함수 대상이 아니다.
+ */
+const pct1 = (ratio: number) => `${(ratio * 100).toFixed(1)}%`
+
 /** 억원 단위 간결 표기 */
 function eok(v: number): string {
   const a = Math.abs(v)
@@ -194,8 +202,8 @@ export function buildVerdict(input: VerdictInput): Verdict {
     }
 
     reasons.push(
-      `목표 보유 비중 **${(d.appliedTargetRatio * 100).toFixed(0)}%** 대비 ` +
-      `현재 **${(d.currentRatio * 100).toFixed(0)}%** 로 초과 보유 상태입니다.`,
+      `목표 보유 비중 **${pct1(d.appliedTargetRatio)}** 대비 ` +
+      `현재 **${pct1(d.currentRatio)}** 로 초과 보유 상태입니다.`,
     )
     if (bandOver) reasons.push(bandReason())
 
@@ -247,8 +255,8 @@ export function buildVerdict(input: VerdictInput): Verdict {
   // ── 매수(=환전 지연) 권고 ──────────────────────────────────
   if (d.actionRequired && d.suggestedTradeKRW > 0) {
     reasons.push(
-      `목표 **${(d.appliedTargetRatio * 100).toFixed(0)}%** 보다 현재 보유가 ` +
-      `**${(d.currentRatio * 100).toFixed(0)}%** 로 적어, 지금 파는 것은 손해입니다.`,
+      `목표 **${pct1(d.appliedTargetRatio)}** 보다 현재 보유가 ` +
+      `**${pct1(d.currentRatio)}** 로 적어, 지금 파는 것은 손해입니다.`,
     )
     const caveat = pctDaysAboveBep != null && avgCostRate > 0
       ? `다만 최근 3년 중 평단(${num(avgCostRate)}원)을 넘긴 날은 ` +
@@ -287,8 +295,8 @@ export function buildVerdict(input: VerdictInput): Verdict {
   // ⚠ 반올림 자리를 조치 이력(소수점 1자리)과 맞춘다 — 28% vs 28.3% 로 갈리면
   //   같은 판정을 두 화면이 다르게 말하는 것처럼 보인다.
   reasons.push(
-    `목표 **${(d.appliedTargetRatio * 100).toFixed(1)}%** 와 현재 ` +
-    `**${(d.currentRatio * 100).toFixed(1)}%** 의 차이가 ` +
+    `목표 **${pct1(d.appliedTargetRatio)}** 와 현재 ` +
+    `**${pct1(d.currentRatio)}** 의 차이가 ` +
     `**${(Math.abs(d.currentRatio - d.appliedTargetRatio) * 100).toFixed(1)}%p** 로, ` +
     `리밸런싱 밴드 **${(rebalanceBandPct * 100).toFixed(1)}%p** 미만입니다. ` +
     `거래 비용을 쓸 만큼이 아니라 오늘은 조정하지 않습니다.`,

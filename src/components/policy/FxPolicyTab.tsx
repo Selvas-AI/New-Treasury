@@ -6,7 +6,9 @@ import { useFx } from '../../hooks/useFx'
 import { usePolicyParams } from '../../hooks/usePolicyParams'
 import { fetchFxStdDev } from '../../hooks/useGas'
 import { fmtKRW, fmtNumber } from '../../lib/format'
-import { computeFxBandExceed } from '../../lib/fxBandExceed'
+import { computeFxBandExceed, buildThresholdOrderPayload } from '../../lib/fxBandExceed'
+import FxBandExceedCard from '../fx/FxBandExceedCard'
+import { useFxLots } from '../../hooks/useFxLots'
 import { restInsert } from '../../lib/supabase'
 import { generateUUID } from '../../lib/format'
 import { NumInput } from '../common/NumInput'
@@ -52,7 +54,7 @@ function fmtAmt(v: number, code: FxCode): string {
   return fmtNumber(Math.round(v), 0)
 }
 
-interface TradeModal { code: FxCode | 'total'; excessKrw: number; discretionary: boolean }
+interface TradeModal { code: FxCode; excessKrw: number; discretionary: boolean }
 
 // 이행 대기 매각 지시 목록 — D-day(영업일 기준)로 기한 임박/초과를 강조
 //
@@ -303,8 +305,14 @@ export default function FxPolicyTab({ company }: { company: Company }) {
    * 금지: 이 탭의 초과 판정에 effectiveLimit 을 다시 쓰지 말 것.
    */
   const bandExceed = useMemo(() => computeFxBandExceed(policyData, params), [policyData, params])
+  // 공용 밴드 초과 카드가 통화별 수량 환산에 쓰는 시장환율 (공유 캐시 — 추가 호출 없음)
+  const marketRates = useMemo(() => Object.fromEntries(
+    fx.rates.map(r => [r.code, r.rate])) as Partial<Record<FxCode, number>>, [fx.rates])
   const bandCeilingKrw = bandExceed.ceilingKRW
   const fxGap          = currentFxKrw - bandCeilingKrw  // 양수 = 초과, 음수 = 여유
+  // ③ 한도 계산기 전용 — 계산기 상한 대비 차이. 이행 판정에 쓰지 말 것.
+  const calcGap  = currentFxKrw - effectiveLimit
+  const calcOver = calcGap > 0
   const isOverLimit    = bandExceed.configured && fxGap > 0
 
   // ── Target Band
@@ -355,7 +363,7 @@ export default function FxPolicyTab({ company }: { company: Company }) {
 
   async function handleDecideConf() {
     setDecideSaving(true)
-    const today = new Date().toISOString().slice(0, 10)
+    const today = todayStr()
     await params.set('fx_confidence_level_decided', localConfLevel,  null,                                          user?.label ?? '')
     await params.set('fx_conf_decided_date',         null,           today,                                         user?.label ?? '')
     await params.set('fx_conf_decided_meeting',      null,           decideMeeting.trim() || '자금정책위원회',      user?.label ?? '')
@@ -456,56 +464,58 @@ export default function FxPolicyTab({ company }: { company: Company }) {
   }
 
   // 환차손익 계산 (모달 내 실시간)
+  // 취득환율을 비워두면 해당 통화의 **FIFO 잔존 장부환율**을 쓴다.
+  // ⚠ 과거엔 비워두면 acq_rate=null 로 저장돼 예상 손익이 기록되지 않았다(F-11).
+  const tradeLots = useFxLots(company, tradeModal?.code ?? 'USD')
+  const effectiveAcqRate: number | null =
+    Number(String(tradeAcqRate).replace(/,/g, '')) || tradeLots.bookRate || null
   const tradeFxPnl = useMemo(() => {
     const amt  = Number(tradeAmt)
-    const acq  = Number(tradeAcqRate)
-    const sell = Number(tradeSellRate)
-    if (!amt || !acq || !sell) return null
-    return (sell - acq) * amt
-  }, [tradeAmt, tradeAcqRate, tradeSellRate])
+    const sell = Number(String(tradeSellRate).replace(/,/g, ''))
+    if (!amt || !effectiveAcqRate || !sell) return null
+    return (sell - effectiveAcqRate) * amt
+  }, [tradeAmt, effectiveAcqRate, tradeSellRate])
 
   // ── 환전 발의 제출
   // discretionary=true → 정책회의 재량 매각 지시(보유비중 초과와 무관, case1)
   // discretionary=false → 보유비중 초과로 인한 매각(case2). 두 경우 모두 등록일+3영업일이
   // 환율과 무관한 실행 기한 — addBizDays로 계산해 기본값으로 채우되(수정 가능),
   // due_date 컬럼에는 이 값을 그대로 저장해 이행 여부를 추적한다.
-  function openTradeModal(code: FxCode | 'total', excessKrw: number, discretionary = false) {
-    const rate = code !== 'total' ? fx.toKRW(1, code) : 0
-    const defaultAmt = !discretionary && code !== 'total' && rate > 0
-      ? Math.ceil(excessKrw / rate).toString()
-      : ''
-    const currentRate = code !== 'total' ? fx.toKRW(1, code) : 0
+  function openTradeModal(code: FxCode, excessKrw: number, discretionary = false) {
+    // ⚠ 'total'(통화 미지정) 발의는 없앴다 — 수량 입력란을 숨긴 채 USD 0주문을 등록했다(F-11).
+    //   밴드 초과 발의는 공용 FxBandExceedCard 가 통화별로 한다. 이 모달은 재량 매각 전용이다.
+    const rate = fx.toKRW(1, code)
+    const defaultAmt = !discretionary && rate > 0 ? Math.ceil(excessKrw / rate).toString() : ''
     setTradeModal({ code, excessKrw, discretionary })
     setTradeAmt(defaultAmt)
     setTradeDate(addBizDays(todayStr(), 3))
-    setTradeAcqRate('')
-    setTradeSellRate(currentRate > 0 ? fmtNumber(currentRate, 2) : '')
+    setTradeAcqRate('')   // 비워두면 FIFO 장부환율을 쓴다(아래 effectiveAcqRate)
+    setTradeSellRate(rate > 0 ? fmtNumber(rate, 2) : '')
     setTradeMemo(
       discretionary
         ? '정책회의 재량 매각 지시 — 환차익실현 등 정책 판단에 따른 매각.'
-        : code === 'total'
-          ? `FX 정책 상한(${fmtKRW(effectiveLimit)}) 초과 발생. 초과분 ${fmtKRW(excessKrw)} 원화 전환 발의.`
-          : `FX 정책 상한 초과 — ${code} ${fmtKRW(excessKrw)} 원화 전환 발의.`
+        : `의결 밴드 상한(${targetMax}%) 초과 — ${code} 몫 ${fmtKRW(excessKrw)} 원화 전환 발의.`
     )
   }
 
   async function submitTradeProposal() {
     if (!tradeModal) return
-    setTradeSaving(true)
     const amtFx    = Number(tradeAmt) || 0
-    const acqRate  = Number(tradeAcqRate) || null
-    const sellRate = Number(tradeSellRate) || null
+    if (amtFx <= 0) { toast.error('매도 금액을 입력하세요.'); return }
+    const sellRate = Number(String(tradeSellRate).replace(/,/g, '')) || 0
+    if (sellRate <= 0) { toast.error('매도(예정) 환율을 입력하세요.'); return }
+    setTradeSaving(true)
+    const acqRate  = effectiveAcqRate
     const pnl      = tradeFxPnl
-    const krw      = sellRate && amtFx ? sellRate * amtFx : null
-    const currency = tradeModal.code !== 'total' ? tradeModal.code : 'USD'
+    const currency = tradeModal.code
     try {
       const body = [
         `${tradeModal.discretionary ? '🟡 재량 매각 지시' : '💱 외화 매도 발의'} (${user?.label ?? ''})`,
         `법인: ${company}`,
-        `통화: ${tradeModal.code === 'total' ? '복합' : tradeModal.code}`,
-        tradeModal.code !== 'total' ? `외화 금액: ${tradeAmt} ${tradeModal.code}` : '',
-        acqRate  ? `취득 환율: ${fmtNumber(acqRate, 2)}원` : '',
-        sellRate ? `매도(예정) 환율: ${fmtNumber(sellRate, 2)}원` : '',
+        `통화: ${currency}`,
+        `외화 금액: ${tradeAmt} ${currency}`,
+        acqRate  ? `취득 환율: ${fmtNumber(acqRate, 2)}원${tradeAcqRate === '' ? ' (FIFO 장부환율)' : ''}` : '',
+        `매도(예정) 환율: ${fmtNumber(sellRate, 2)}원`,
         pnl != null ? `예상 환차${pnl >= 0 ? '익' : '손'}: ${fmtKRW(Math.abs(pnl))}` : '',
         !tradeModal.discretionary ? `원화 환산 초과분: ${fmtKRW(tradeModal.excessKrw)}` : '',
         `이행 기한(3영업일): ${addBizDays(todayStr(), 3)}`,
@@ -518,22 +528,15 @@ export default function FxPolicyTab({ company }: { company: Company }) {
         body,
         created_by: user?.label ?? '',
       })
-      // 외화매매거래 이력 기록 — due_date(등록일+3영업일)/order_type 으로 이행 기한 추적
-      const { error: proposeErr } = await tradeHist.propose({
-        company,
-        trade_date: tradeDate,
-        currency,
-        direction: 'sell',
-        amount_fx: amtFx,
-        acq_rate: acqRate,
-        trade_rate: sellRate,
-        fx_pnl: pnl,
-        amount_krw: krw,
-        memo: tradeMemo,
-        created_by: user?.label ?? '',
-        due_date: addBizDays(todayStr(), 3),
-        order_type: tradeModal.discretionary ? 'discretionary' : 'threshold',
-      })
+      // ⭐ payload 는 공용 빌더로만 만든다(CLAUDE.md SSOT — 화면에서 propose 인자 직접 조립 금지).
+      const { error: proposeErr } = await tradeHist.propose(buildThresholdOrderPayload({
+        company, currency, amountFx: amtFx, rate: sellRate,
+        acqRate, excessKRW: tradeModal.excessKrw,
+        createdBy: user?.label ?? user?.code ?? 'unknown',
+        origin: '자금정책 › 매각 집행',
+        orderType: tradeModal.discretionary ? 'discretionary' : 'threshold',
+        tradeDate, memo: tradeMemo,
+      }))
       if (proposeErr) { toast.error(`매각 지시 등록 실패: ${proposeErr.message ?? proposeErr}`); return }
       await tradeHist.load()
       setTradeModal(null)
@@ -617,10 +620,14 @@ export default function FxPolicyTab({ company }: { company: Company }) {
             cls: 'text-gray-800 dark:text-slate-100',
           },
           {
-            label: isOverLimit ? '⚠ 상한 초과' : '✓ 여유 (상한까지)',
-            value: (isOverLimit ? '+' : '') + fmtKRW(Math.abs(fxGap)),
-            sub: isOverLimit ? '환전 발의 필요' : '한도 내 보유 중',
-            cls: isOverLimit ? 'text-orange-600 dark:text-orange-400' : 'text-green-600 dark:text-green-400',
+            // ⚠ 이 탭은 **계산기**다. 첫 칸이 계산기 상한(effectiveLimit)이므로 차이도 같은
+            //   기준으로 낸다. 2026-11-25 에 ④ 탭 판정을 의결 밴드로 바꾸면서 이 칸이
+            //   fxGap(밴드 기준)을 그대로 쓰게 돼, 한 줄 카드가 서로 다른 상한을 섞어 보였다(F-11).
+            //   이행 판정(fxGap·isOverLimit)은 ④ 매각 집행 탭 전용이다.
+            label: calcOver ? '⚠ 계산기 상한 대비 초과' : '✓ 계산기 상한 대비 여유',
+            value: (calcOver ? '+' : '') + fmtKRW(Math.abs(calcGap)),
+            sub: '참고값 — 집행 기준은 ② 의결 밴드',
+            cls: calcOver ? 'text-amber-600 dark:text-amber-400' : 'text-gray-600 dark:text-slate-300',
           },
           {
             label: decidedLevel !== null && localConfLevel !== decidedLevel
@@ -659,22 +666,27 @@ export default function FxPolicyTab({ company }: { company: Company }) {
         </div>
       )}
 
-      {/* 초과 보유 경고 배너 */}
-      {isOverLimit && (
-        <div className="rounded-xl border border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-950/30 px-4 py-3 flex items-center justify-between gap-3">
-          <div>
-            <p className="text-sm font-semibold text-orange-700 dark:text-orange-300">
-              ⚠ 외화 보유량이 의결 밴드 상한을 {fmtKRW(fxGap)} 초과했습니다
-            </p>
-            <p className="text-xs text-orange-600 dark:text-orange-400 mt-0.5">
-              현재 {currentFxRatio.toFixed(1)}% · 밴드 상한 {targetMax}% ({fmtKRW(bandCeilingKrw)}) — 초과분 매도 발의를 검토하세요.
-            </p>
-          </div>
-          <button onClick={() => openTradeModal('total', fxGap)}
-            className="shrink-0 text-sm font-medium px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg whitespace-nowrap">
-            💱 매도 발의
-          </button>
-        </div>
+      {/* 정책 밴드 초과 — 공용 카드(FX 리짐 전략·외화거래명세와 같은 컴포넌트).
+          ⚠ 과거엔 이 탭만 자체 배너·자체 모달·자체 payload 를 썼고, '전체 발의'는 수량
+            입력란을 숨긴 채 **USD 0주문**을 등록했다(2026-11-25 전수조사 F-11).
+            바구니 초과분을 보유 구성비로 나눠 통화별로 발의하는 규칙을 세 화면이 공유한다. */}
+      {bandExceed.configured && (
+        <FxBandExceedCard
+          data={bandExceed}
+          marketRates={marketRates}
+          canPropose={canEditPolicy}
+          onPropose={async ({ currency, amountFx, rate, excessKRW }) => {
+            const { error } = await tradeHist.propose(buildThresholdOrderPayload({
+              company, currency, amountFx, rate,
+              acqRate: null, excessKRW,
+              createdBy: user?.label ?? user?.code ?? 'unknown',
+              origin: '자금정책 › 매각 집행',
+            }))
+            if (error) return error.message ?? String(error)
+            await tradeHist.load()
+            return null
+          }}
+        />
       )}
 
       {/* ══ 매각 지시 이행 관리 (세션20차 정책 이행 통제 Phase 3) ══════════
@@ -1433,7 +1445,7 @@ export default function FxPolicyTab({ company }: { company: Company }) {
                 </th>
                 <th className="text-right pb-2 pr-3 text-gray-400 font-medium">보유 외화</th>
                 <th className="text-right pb-2 pr-3 text-gray-400 font-medium">초과 / 여유</th>
-                <th className="text-center pb-2 text-gray-400 font-medium">조치</th>
+                <th className="text-center pb-2 text-gray-400 font-medium">참고</th>
               </tr>
             </thead>
             <tbody>
@@ -1472,16 +1484,14 @@ export default function FxPolicyTab({ company }: { company: Company }) {
                       {isOver ? '+' : ''}{fmtKRW(r.excess)}
                     </td>
                     <td className="py-2.5 text-center">
-                      {isOver ? (
-                        <button onClick={() => openTradeModal(r.code, r.excess)}
-                          className="text-xs px-2.5 py-1 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-medium whitespace-nowrap">
-                          매도 발의
-                        </button>
-                      ) : (
-                        <span className="text-xs px-2 py-0.5 bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300 rounded-full">
-                          ✓ 한도 내
-                        </span>
-                      )}
+                      {/* ⚠ 여기서는 발의하지 않는다. 이 표는 정책 비중(fx_weight_*) 기준 참고값이라
+                          바구니 전체가 밴드 이내여도 한 통화가 '비중 초과'로 보일 수 있다.
+                          이행 의무는 바구니 기준이고, 발의는 위 공용 카드에서 한다. */}
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${isOver
+                        ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+                        : 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'}`}>
+                        {isOver ? '비중 초과' : '✓ 비중 내'}
+                      </span>
                     </td>
                   </tr>
                 )
@@ -1506,16 +1516,12 @@ export default function FxPolicyTab({ company }: { company: Company }) {
                   {isOverLimit ? '+' : ''}{fmtKRW(fxGap)}
                 </td>
                 <td className="pt-3 text-center">
-                  {isOverLimit ? (
-                    <button onClick={() => openTradeModal('total', fxGap)}
-                      className="text-xs px-2.5 py-1 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-medium whitespace-nowrap">
-                      전체 발의
-                    </button>
-                  ) : (
-                    <span className="text-xs px-2 py-0.5 bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300 rounded-full">
-                      ✓ 한도 내
-                    </span>
-                  )}
+                  {/* 바구니 합계가 이행 기준이다. 초과면 위 공용 카드에서 통화별로 발의한다. */}
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${isOverLimit
+                    ? 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+                    : 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'}`}>
+                    {isOverLimit ? '⚠ 밴드 초과 — 위 카드에서 발의' : '✓ 한도 내'}
+                  </span>
                 </td>
               </tr>
             </tbody>
@@ -1540,7 +1546,7 @@ export default function FxPolicyTab({ company }: { company: Company }) {
             <div className="px-6 pt-5 pb-3 border-b border-gray-100 dark:border-slate-700 flex items-start justify-between">
               <div>
                 <p className="text-base font-semibold text-gray-800 dark:text-slate-100">
-                  {tradeModal.discretionary ? '🟡 재량 매각 지시' : '💱 외화 매도 발의'} {tradeModal.code !== 'total' ? `— ${tradeModal.code}` : '(전체)'}
+                  {tradeModal.discretionary ? '🟡 재량 매각 지시' : '💱 외화 매도 발의'} — {tradeModal.code}
                 </p>
                 <p className="text-xs text-gray-400 mt-0.5">
                   {tradeModal.discretionary ? '정책회의 판단에 따른 매각 — 등록일+3영업일 내 환율 무관 실행' : '외화 누적 → 상한 초과분 원화 전환 발의'}
@@ -1555,7 +1561,7 @@ export default function FxPolicyTab({ company }: { company: Company }) {
               {tradeModal.discretionary && (
                 <div>
                   <label className="text-xs font-medium text-gray-600 dark:text-slate-300 block mb-1">매각 통화</label>
-                  <select value={tradeModal.code === 'total' ? 'USD' : tradeModal.code}
+                  <select value={tradeModal.code}
                     onChange={e => {
                       const code = e.target.value as FxCode
                       const rate = fx.toKRW(1, code)
@@ -1575,7 +1581,7 @@ export default function FxPolicyTab({ company }: { company: Company }) {
                   <p className="font-medium text-orange-700 dark:text-orange-300">초과 보유 금액</p>
                   <p className="text-orange-600 dark:text-orange-400 tabular-nums font-bold text-sm mt-0.5">
                     {fmtKRW(tradeModal.excessKrw)}
-                    {tradeModal.code !== 'total' && (
+                    {(
                       <span className="font-normal text-xs ml-2">
                         (상한 대비 {tradeModal.code} {fmtAmt(tradeModal.excessKrw / fx.toKRW(1, tradeModal.code), tradeModal.code)} 초과)
                       </span>
@@ -1585,7 +1591,7 @@ export default function FxPolicyTab({ company }: { company: Company }) {
               )}
 
               {/* 매도 금액 (외화) */}
-              {tradeModal.code !== 'total' && (
+              {(
                 <div>
                   <label className="text-xs font-medium text-gray-600 dark:text-slate-300 block mb-1">
                     매도 금액 ({tradeModal.code})
@@ -1615,7 +1621,7 @@ export default function FxPolicyTab({ company }: { company: Company }) {
               )}
 
               {/* 취득환율 / 매도(예정)환율 */}
-              {tradeModal.code !== 'total' && (
+              {(
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="text-xs font-medium text-gray-600 dark:text-slate-300 block mb-1">
@@ -1641,7 +1647,7 @@ export default function FxPolicyTab({ company }: { company: Company }) {
               )}
 
               {/* 환차손익 자동계산 */}
-              {tradeModal.code !== 'total' && tradeFxPnl != null && (
+              {tradeFxPnl != null && (
                 <div className={`px-3 py-2.5 rounded-xl border text-xs ${
                   tradeFxPnl >= 0
                     ? 'bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800'

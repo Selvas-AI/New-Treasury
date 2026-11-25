@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { todayStr } from '../lib/bizDay'
 import { restInsert, restSelect, restRpc } from '../lib/supabase'
 import { availableAmount, expectedTermInterestFx, weightedBookRate, remainingAmount, type FxLot } from '../lib/fxLots'
 import { inventoryMatchKey, type InventoryCsvRow } from '../lib/fxCsvImport'
@@ -432,7 +433,8 @@ export function useFxLots(company: string, currency: string) {
     return err?.message ?? null
   }, [refetch])
 
-  const today = new Date().toISOString().slice(0, 10)
+  // ⚠ KST 로컬 오늘 — UTC 를 쓰면 오전 9시 전엔 오늘 만기 정기예금이 잠긴 것으로 계산된다(F-17)
+  const today = todayStr()
   return useMemo(() => ({ lots, loading, error, refetch, addOpeningLot,
     importOpeningLots, updateLot, deleteLot, planLotRepair, applyLotRepair,
     reconcileDailyInflow, reconcileDailyOutflow, addManualOutflow,

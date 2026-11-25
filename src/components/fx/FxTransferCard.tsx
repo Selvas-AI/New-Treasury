@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { todayStr } from '../../lib/bizDay'
 import { fmtKRW, fmtNumber } from '../../lib/format'
 import { ACCOUNT_TYPE_LABEL, previewFifoConsumption, type FxAccountType, type FxLot } from '../../lib/fxLots'
 import type { FxLotTransfer } from '../../hooks/useFxTransfers'
@@ -7,7 +8,7 @@ import type { FxCode } from '../../types'
 const ACCOUNT_TYPES: FxAccountType[] = ['demand_deposit', 'mmda', 'term_deposit']
 const FIELD = 'mt-1 w-full rounded border border-gray-300 px-2 py-1.5 text-xs dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100'
 
-function todayStr() { return new Date().toISOString().slice(0, 10) }
+// 오늘 날짜는 lib/bizDay 의 todayStr(KST 로컬)을 쓴다 — toISOString 은 UTC 라 오전 9시 전엔 하루 전이 된다.
 
 /**
  * 계좌 간 대체 (세션26차 12일차).

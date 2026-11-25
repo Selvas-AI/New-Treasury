@@ -132,6 +132,9 @@ export function computeFxBandExceed(
  * 자금정책 화면의 기존 발의와 **동일한 컬럼 규약**을 쓴다(order_type='threshold',
  * due_date=등록일+3영업일). 발의 경로가 늘어도 이행 관리·대시보드 경보·D-day 계산이
  * 전부 같은 규칙으로 동작해야 하므로 payload 조립은 이 함수 하나로만 한다.
+ *
+ * 재량 매각(`orderType: 'discretionary'`)도 이 함수를 쓴다(2026-11-25 전수조사 F-11).
+ * 과거엔 자금정책 ④ 탭이 propose 인자를 화면에서 직접 조립했다.
  */
 export function buildThresholdOrderPayload(input: {
   company: Company
@@ -145,11 +148,23 @@ export function buildThresholdOrderPayload(input: {
   createdBy: string
   /** 발의가 일어난 화면 — 사후 추적용으로 메모에 남긴다 */
   origin: string
+  /** 기본 'threshold'. 정책회의 재량 매각이면 'discretionary' */
+  orderType?: 'threshold' | 'discretionary'
+  /** 희망 집행일. 기본 = 등록일 +3영업일 */
+  tradeDate?: string
+  /** 사유. 주면 그대로 쓰고(출처만 덧붙임), 없으면 초과분 문구를 만든다 */
+  memo?: string
 }) {
   const today = todayStr()
+  const orderType = input.orderType ?? 'threshold'
+  const memo = input.memo?.trim()
+    ? `${input.memo.trim()} (${input.origin})`
+    : orderType === 'discretionary'
+      ? `정책회의 재량 매각 지시 (${input.origin})`
+      : `정책 밴드 상한 초과 — 초과분 ${fmtKRW(input.excessKRW)} 원화 전환 발의 (${input.origin})`
   return {
     company: input.company,
-    trade_date: addBizDays(today, 3),
+    trade_date: input.tradeDate ?? addBizDays(today, 3),
     currency: input.currency,
     direction: 'sell' as const,
     amount_fx: input.amountFx,
@@ -157,9 +172,10 @@ export function buildThresholdOrderPayload(input: {
     trade_rate: input.rate,
     fx_pnl: input.acqRate != null ? Math.round((input.rate - input.acqRate) * input.amountFx) : null,
     amount_krw: Math.round(input.rate * input.amountFx),
-    memo: `정책 밴드 상한 초과 — 초과분 ${fmtKRW(input.excessKRW)} 원화 전환 발의 (${input.origin})`,
+    memo,
     created_by: input.createdBy,
+    // 이행 기한은 희망 집행일과 무관하게 항상 등록일 +3영업일(환율과 무관하게 실행)
     due_date: addBizDays(today, 3),
-    order_type: 'threshold' as const,
+    order_type: orderType,
   }
 }

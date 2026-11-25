@@ -1,13 +1,12 @@
 import { useMemo, useState } from 'react'
+import { todayStr } from '../../lib/bizDay'
 import { fmtKRW, fmtNumber } from '../../lib/format'
 import { useFxLots } from '../../hooks/useFxLots'
 import { usePolicyParams } from '../../hooks/usePolicyParams'
 import { previewFifoConsumption, parseAccountPriority, ACCOUNT_TYPE_LABEL } from '../../lib/fxLots'
 import type { FxTradeRecord } from '../../types'
 
-function todayStr() {
-  return new Date().toISOString().slice(0, 10)
-}
+// 오늘 날짜는 lib/bizDay 의 todayStr(KST 로컬)을 쓴다 — toISOString 은 UTC 라 오전 9시 전엔 하루 전이 된다.
 
 /**
  * 외화매매거래 "체결 등록" 공용 모달 — 체결 수량·체결일·실제 체결환율 입력 + 손익 미리보기.

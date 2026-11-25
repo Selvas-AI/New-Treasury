@@ -28,14 +28,19 @@ export default function PendingOrdersCard({ company, currency, orders }: {
 }) {
   if (orders.length === 0) return null
   const today = todayStr()
+  // ⚠ 리짐 지시는 바구니 결정이라 다른 통화 탭에서 등록된 것도 여기 함께 보인다.
+  //   행마다 **그 지시의 통화**로 표기해야 한다 — 현재 탭 통화로 찍으면 JPY 지시가
+  //   소수점 2자리로, USD 지시가 0자리로 나오는 식으로 틀린다.
+  const codes = [...new Set(orders.map(o => o.currency))]
+  const dec = (code: string) => (code === 'JPY' ? 0 : 2)
 
   return (
     <div className={CARD}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="text-sm font-semibold text-gray-800 dark:text-slate-100">
-          🧾 이행 중인 매각 지시 ({currency})
+          🧾 이행 중인 매각 지시 ({codes.join('·')})
         </div>
-        <Link to={`/fx-ledger/${company}?tab=orders&currency=${currency}`}
+        <Link to={`/fx-ledger/${company}?tab=orders&currency=${codes.length === 1 ? codes[0] : currency}`}
           className="rounded-lg border border-gray-300 dark:border-slate-600 px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800">
           외화거래명세에서 체결·이력 확인 →
         </Link>
@@ -51,6 +56,7 @@ export default function PendingOrdersCard({ company, currency, orders }: {
                 <span className={`rounded px-1.5 py-0.5 font-semibold ${STATUS_BADGE[o.status] ?? 'bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-slate-300'}`}>
                   {o.status}
                 </span>
+                <span className="rounded bg-indigo-50 px-1.5 py-0.5 font-semibold text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300">{o.currency}</span>
                 <span className="text-gray-500 dark:text-slate-400">{o.trade_date} 발의</span>
                 <span className="text-gray-400">{orderTypeLabel(o.order_type)}</span>
                 {dday != null && (
@@ -62,15 +68,15 @@ export default function PendingOrdersCard({ company, currency, orders }: {
               <div className="mt-1.5 grid grid-cols-3 gap-2 tabular-nums">
                 <div>
                   <div className="text-[10px] text-gray-400">지시 수량</div>
-                  <div className="font-medium">{fmtNumber(o.amount_fx, currency === 'JPY' ? 0 : 2)}</div>
+                  <div className="font-medium">{fmtNumber(o.amount_fx, dec(o.currency))}</div>
                 </div>
                 <div>
                   <div className="text-[10px] text-gray-400">체결 완료</div>
-                  <div className="font-medium text-emerald-600 dark:text-emerald-400">{fmtNumber(filled, currency === 'JPY' ? 0 : 2)}</div>
+                  <div className="font-medium text-emerald-600 dark:text-emerald-400">{fmtNumber(filled, dec(o.currency))}</div>
                 </div>
                 <div>
                   <div className="text-[10px] text-gray-400">잔여</div>
-                  <div className="font-semibold text-orange-600 dark:text-orange-400">{fmtNumber(remaining, currency === 'JPY' ? 0 : 2)}</div>
+                  <div className="font-semibold text-orange-600 dark:text-orange-400">{fmtNumber(remaining, dec(o.currency))}</div>
                 </div>
               </div>
             </div>

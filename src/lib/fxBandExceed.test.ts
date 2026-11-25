@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { allocateAcrossBasket, computeFxBandExceed } from './fxBandExceed'
+import { allocateAcrossBasket, computeFxBandExceed, buildThresholdOrderPayload } from './fxBandExceed'
+import { addBizDays, todayStr } from './bizDay'
 
 /**
  * 2026-11-04 리포트 회귀 — 조치 카드가 "선택한 통화 하나로 전량 판다"는 금액을 보여줘
@@ -77,5 +78,43 @@ describe('computeFxBandExceed — 상한/하한 혼동 방지', () => {
     const r = computeFxBandExceed(DATA, params(25, null))
     expect(r.configured).toBe(false)
     expect(r.over).toBe(false)
+  })
+})
+
+// ── 발의 payload 빌더 — 재량 매각까지 한 함수로 (2026-11-25 전수조사 F-11) ─────
+describe('buildThresholdOrderPayload', () => {
+  const base = {
+    company: '메디아나', currency: 'EUR' as const, amountFx: 100_000, rate: 1_500,
+    acqRate: 1_450, excessKRW: 150_000_000, createdBy: 'tester', origin: '테스트',
+  }
+
+  it('기본은 한도초과(threshold) — 희망 집행일·이행 기한 모두 +3영업일', () => {
+    const p = buildThresholdOrderPayload(base)
+    expect(p.order_type).toBe('threshold')
+    expect(p.trade_date).toBe(addBizDays(todayStr(), 3))
+    expect(p.due_date).toBe(addBizDays(todayStr(), 3))
+    expect(p.memo).toContain('정책 밴드 상한 초과')
+  })
+
+  it('재량 매각은 order_type 과 사유를 그대로 싣는다', () => {
+    const p = buildThresholdOrderPayload({ ...base, orderType: 'discretionary', memo: '환차익 실현' })
+    expect(p.order_type).toBe('discretionary')
+    expect(p.memo).toBe('환차익 실현 (테스트)')
+  })
+
+  it('희망 집행일을 바꿔도 이행 기한은 등록일 +3영업일로 고정', () => {
+    const p = buildThresholdOrderPayload({ ...base, tradeDate: '2099-01-02' })
+    expect(p.trade_date).toBe('2099-01-02')
+    expect(p.due_date).toBe(addBizDays(todayStr(), 3))
+  })
+
+  it('장부환율이 있으면 예상 손익과 원화 금액을 계산한다', () => {
+    const p = buildThresholdOrderPayload(base)
+    expect(p.fx_pnl).toBe(5_000_000)        // (1500 − 1450) × 100,000
+    expect(p.amount_krw).toBe(150_000_000)
+  })
+
+  it('장부환율이 없으면 손익은 null', () => {
+    expect(buildThresholdOrderPayload({ ...base, acqRate: null }).fx_pnl).toBeNull()
   })
 })

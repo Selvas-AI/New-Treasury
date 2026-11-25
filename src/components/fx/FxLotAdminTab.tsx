@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { todayStr } from '../../lib/bizDay'
 import { INVENTORY_CSV_TEMPLATE, SALES_CSV_TEMPLATE, parseInventoryCsv, parseSalesCsv, type InventoryCsvRow, type SalesCsvRow } from '../../lib/fxCsvImport'
 import { ACCOUNT_TYPE_LABEL, type FxAccountType, type FxLot } from '../../lib/fxLots'
 import type { LotRepairPlanItem } from '../../hooks/useFxLots'
@@ -70,7 +71,7 @@ export function FxLotAdminTab({ ledger, trades, company, currency, valuationMeth
   onChanged: () => void
 }) {
   const [showOpening, setShowOpening] = useState(false)
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
+  const [date, setDate] = useState(todayStr())
   const [amount, setAmount] = useState(0)
   const [rate, setRate] = useState(0)
   const [accountType, setAccountType] = useState<FxAccountType>('demand_deposit')
@@ -79,7 +80,7 @@ export function FxLotAdminTab({ ledger, trades, company, currency, valuationMeth
   const [memo, setMemo] = useState('')
   const [saving, setSaving] = useState(false)
   const [showOutflow, setShowOutflow] = useState(false)
-  const [outDate, setOutDate] = useState(new Date().toISOString().slice(0, 10))
+  const [outDate, setOutDate] = useState(todayStr())
   const [outAmount, setOutAmount] = useState(0)
   const [outRate, setOutRate] = useState(0)
   const [outMemo, setOutMemo] = useState('')
