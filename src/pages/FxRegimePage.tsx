@@ -25,16 +25,15 @@ import {
 import { useAuth } from '../hooks/useAuth'
 import { usePageCompany } from '../hooks/usePageCompany'
 import { useFxTradeHistory } from '../hooks/useFxTradeHistory'
-import { useFxRegime, MIN_SERIES_LENGTH } from '../hooks/useFxRegime'
-import { useFxLots } from '../hooks/useFxLots'
+import { useFxRegime } from '../hooks/useFxRegime'
 import {
-  useFxHistory, backfillFxHistory, syncLatestFxHistory, fetchFxHistoryCoverage, type FxHistoryCoverage,
+  backfillFxHistory, syncLatestFxHistory, fetchFxHistoryCoverage, type FxHistoryCoverage,
   type BackfillProgress,
 } from '../hooks/useFxHistory'
 import {
-  kalmanSmooth, bollinger, evaluateRegime, protocolFromParams,
+  kalmanSmooth, bollinger,
   TREND_LABEL, VOL_LABEL, CLAMP_LABEL,
-  type TrendCode, type VolCode, type RegimeSeriesPoint,
+  type TrendCode, type VolCode,
 } from '../lib/fxRegime'
 import { buildChartNarrative } from '../lib/fxChartNarrative'
 import InfoTip from '../components/common/InfoTip'
@@ -44,16 +43,16 @@ import DecisionTab from '../components/fxRegime/DecisionTab'
 import VerdictCard from '../components/fxRegime/VerdictCard'
 import RegisterOrderPanel from '../components/fxRegime/RegisterOrderPanel'
 import PendingOrdersCard from '../components/fxRegime/PendingOrdersCard'
-import { buildVerdict } from '../lib/fxVerdict'
-import { lossBudget, bepStats } from '../lib/fxPnl'
 import { fmtKRW, generateUUID } from '../lib/format'
-import { syncRegimeSnapshot, type RegimeSnapshotHistoryEntry } from '../lib/fxRegimeSnapshot'
+import { syncRegimeSnapshot, BASKET_SNAPSHOT_CURRENCY, type RegimeSnapshotHistoryEntry } from '../lib/fxRegimeSnapshot'
+import { useFxBasketDecision } from '../hooks/useFxBasketDecision'
+import { buildRegimeOrderPayloads, type RegimeOrderPayload } from '../lib/fxRegimeOrder'
 import { restInsert } from '../lib/supabase'
 import RegimeHistoryCard from '../components/fxRegime/RegimeHistoryCard'
 import FxBandExceedCard from '../components/fx/FxBandExceedCard'
-import { computeFxBandExceed, buildThresholdOrderPayload, allocateAcrossBasket } from '../lib/fxBandExceed'
+import { computeFxBandExceed, buildThresholdOrderPayload } from '../lib/fxBandExceed'
 import { useFx } from '../hooks/useFx'
-import { addBizDays, bizDaysBetween, todayStr } from '../lib/bizDay'
+import { bizDaysBetween, todayStr } from '../lib/bizDay'
 import {
   REGIME_CURRENCIES as CURRENCIES,
   type FieldOwner,
@@ -425,6 +424,25 @@ export default function FxRegimePage() {
     policyData,
   } = useFxRegime(company, currency, inputSource, true)
 
+  /**
+   * ⭐ 바구니 판정 — 조치 카드·매각 지시·판정 스냅샷이 **모두 이 하나**를 쓴다
+   * (2026-11-25 전수조사 F-05). 통화 탭은 아래 분석 화면(차트·근거·앵커)만 바꾼다.
+   * 대표 통화 선택·바구니 ctx·예산·verdict·배분은 lib/fxBasketDecision 에 있다 —
+   * 이 페이지에서 다시 계산하지 말 것.
+   *
+   * 시뮬레이션 모드에서는 실험값(총자금·보유·밴드)으로 조치 카드만 다시 그린다.
+   * 스냅샷은 live 에서만 쓴다.
+   */
+  const simCtx = useMemo(() => inputSource === 'simulation' ? {
+    totalFundKRW: ctx.totalFundKRW, fxHoldingKRW: ctx.fxHoldingKRW,
+    policyMaxRatio: ctx.policyMaxRatio, policyMinRatio: ctx.policyMinRatio,
+  } : null, [inputSource, ctx.totalFundKRW, ctx.fxHoldingKRW, ctx.policyMaxRatio, ctx.policyMinRatio])
+  const basket = useFxBasketDecision(company, { policyData, params, ctxOverride: simCtx })
+  const leadCode   = basket.leadCode
+  const leadShare  = basket.leadShare
+  const leadSignal = basket.signal
+  const verdict    = basket.verdict
+
   // ── 판정 스냅샷 기록 (Phase 4) ────────────────────────────────────
   // 대시보드·자금일보는 환율 이력 전체를 돌릴 수 없으므로, 실무 화면이 판정할 때
   // 결과 요약만 policy_params 에 남긴다. 이게 "권고 미이행 경과일"의 기산점이 된다.
@@ -445,15 +463,7 @@ export default function FxRegimePage() {
   //   hist 가 이미 캐시로 준비돼 있으면 이 첫 렌더에서 signal 이 나온다 — 즉
   //   "!loading" 만으로는 로딩 시작 전과 로딩 완료 후를 구분하지 못한다.
   //   → 법인/통화가 바뀔 때마다 리셋되는 "로딩 중이었던 적이 있다" 플래그로 gate 한다.
-  const treasuryLoadingNow = policyData.loading || fxLots.loading || hist.loading
-  const sawTreasuryLoadingRef = useRef(false)
-  const treasuryScopeRef = useRef(`${company}|${currency}`)
-  if (treasuryScopeRef.current !== `${company}|${currency}`) {
-    treasuryScopeRef.current = `${company}|${currency}`
-    sawTreasuryLoadingRef.current = false   // 법인·통화 전환 시 새 로딩 사이클을 다시 확인해야 한다
-  }
-  if (treasuryLoadingNow) sawTreasuryLoadingRef.current = true
-  const treasuryReady = sawTreasuryLoadingRef.current && !treasuryLoadingNow
+  // 준비 판정은 useFxBasketDecision().ready 가 한다("로드를 실제로 거쳤다"는 확인 포함).
   // 스냅샷이 실제로 바뀔 때만(=syncRegimeSnapshot 내부에서 write 가 일어날 때만) 이력 1건을
   // 남긴다 — "조치 카드 일자별 조회"(세션26차 7일차)의 데이터 소스.
   const recordRegimeHistory = useCallback(async (entry: RegimeSnapshotHistoryEntry) => {
@@ -478,27 +488,30 @@ export default function FxRegimePage() {
   }, [company])
   const snapWrittenRef = useRef<string>('')
   useEffect(() => {
-    if (inputSource !== 'live' || !signal || !canEdit() || !treasuryReady) return
-    const suggest = signal.decision.actionRequired && signal.decision.suggestedTradeKRW < 0
-      ? -signal.decision.suggestedTradeKRW : 0
-    // 같은 판정을 중복 기록하지 않기 위한 렌더 단위 가드 (DB 레벨 비교는 sync 내부에서 한 번 더)
-    const stamp = `${company}|${currency}|${signal.asOf}|${Math.round(suggest)}`
+    // ⚠ 바구니 판정만 기록한다(통화 탭과 무관). 과거엔 탭마다 그 통화의 판정을 통화 키로 남겨
+    //   대시보드·자금일보가 같은 의무를 통화 수만큼 띄웠다(F-05).
+    // ⚠ 판정 이력이 오래된 경우(blocked)는 기록하지 않는다 — 오래된 데이터가 경보로 번진다.
+    if (inputSource !== 'live' || !canEdit() || !basket.ready) return
+    const sig = basket.signal
+    if (!sig || !basket.verdict || basket.verdict.kind === 'blocked') return
+    const suggest = basket.regimeSuggestKRW
+    const stamp = `${company}|${sig.asOf}|${Math.round(suggest)}|${basket.leadCode}`
     if (snapWrittenRef.current === stamp) return
     snapWrittenRef.current = stamp
-    void syncRegimeSnapshot(params, currency, {
-      targetPct:  signal.decision.appliedTargetRatio == null ? null
-        : Math.round(signal.decision.appliedTargetRatio * 1000) / 10,
-      currentPct: Math.round(signal.decision.currentRatio * 1000) / 10,
+    void syncRegimeSnapshot(params, BASKET_SNAPSHOT_CURRENCY, {
+      targetPct:  Math.round(sig.decision.appliedTargetRatio * 1000) / 10,
+      currentPct: Math.round(sig.decision.currentRatio * 1000) / 10,
       suggestKRW: suggest,
-      asOf:       signal.asOf,
-      // 판정 근거 — 목표가 왜 그 값이 됐는지(이력 조회에서 사용)
-      regimeCode:   signal.regime.code,
-      levelGrade:   signal.level?.grade ?? null,
-      trendGroup:   signal.level?.trendGroup ?? null,
-      rawTargetPct: Math.round(signal.decision.rawTargetRatio * 1000) / 10,
-      clampedBy:    signal.decision.clampedBy,
+      asOf:       sig.asOf,
+      lead:       basket.leadCode,
+      regimeCode:   sig.regime.code,
+      levelGrade:   sig.level?.grade ?? null,
+      trendGroup:   sig.level?.trendGroup ?? null,
+      rawTargetPct: Math.round(sig.decision.rawTargetRatio * 1000) / 10,
+      clampedBy:    sig.decision.clampedBy,
     }, todayStr(), user?.label ?? user?.code ?? 'system', recordRegimeHistory)
-  }, [inputSource, signal, company, currency, params, canEdit, user, treasuryReady, recordRegimeHistory])
+  }, [inputSource, basket.ready, basket.signal, basket.verdict, basket.regimeSuggestKRW, basket.leadCode,
+      company, params, canEdit, user, recordRegimeHistory])
 
   // ── 수집 상태 ──────────────────────────────────────────────────────
   const [busy, setBusy]         = useState(false)
@@ -593,42 +606,6 @@ export default function FxRegimePage() {
     return null
   }, [company, currency, actualTradeHistory, treasuryInputs.avgAcquisitionRate, user])
 
-  /**
-   * ⭐ 바구니 대표 통화 — **조치 카드를 통화 탭과 무관하게 하나로 만든다.**
-   *
-   * 배경(2026-11-04): 판정은 통화별로 돌아가는데 그 결과를 **바구니 전체 목표 비중**에
-   *   적용하고 있었다. 그래서 USD 탭 35.9억 / EUR 탭 17.2억 / JPY 탭 51.2억 처럼
-   *   같은 바구니에 대해 탭마다 다른 지시가 나왔다. 바구니 비중은 하나뿐이므로
-   *   목표도 하나여야 한다.
-   * → 바구니에서 비중이 가장 큰 통화의 판정을 **바구니 결정**으로 삼는다.
-   *   (실측 USD 76% — 바구니 성격을 사실상 지배한다)
-   * ⚠ 통화별 앵커가 모두 설정되면 '비중 가중평균'으로 올리는 것이 더 정확하다.
-   *   지금은 앵커가 USD 에만 있어 가중평균이 오히려 왜곡된다.
-   */
-  const leadCode = useMemo(() => {
-    const rows = Object.entries(policyData.fxByCurrency)
-      .filter(([, v]) => v.krwAmount > 0)
-      .sort((a, b) => b[1].krwAmount - a[1].krwAmount)
-    return (rows[0]?.[0] ?? 'USD') as FxCode
-  }, [policyData.fxByCurrency])
-  const isLead = leadCode === currency
-  const leadShare = useMemo(() => {
-    const total = Object.values(policyData.fxByCurrency).reduce((a, v) => a + v.krwAmount, 0)
-    const lead = policyData.fxByCurrency[leadCode]?.krwAmount ?? 0
-    return total > 0 ? (lead / total) * 100 : null
-  }, [policyData.fxByCurrency, leadCode])
-
-  // 대표 통화가 현재 탭과 다를 때만 추가로 읽는다(같으면 위 번들을 그대로 쓴다).
-  const leadHist = useFxHistory(leadCode)
-  const leadLots = useFxLots(company, leadCode)
-  const leadSignal = useMemo(() => {
-    if (isLead) return signal
-    const s: RegimeSeriesPoint[] = leadHist.data.map((p: { date: string; rate: number }) => ({ date: p.date, rate: p.rate }))
-    if (s.length < MIN_SERIES_LENGTH) return null
-    // ctx(바구니 분모·보유액·정책밴드)는 통화와 무관하게 동일하다. 앵커만 대표 통화 것을 쓴다.
-    return evaluateRegime(s, ctx, protocolFromParams((k: string) => params.get(k), leadCode), leadCode)
-  }, [isLead, signal, leadHist.data, ctx, params, leadCode])
-
   // 정책 밴드 상한 대비 전사 외화 보유 — 분자·분모는 usePolicyDashboard(SSOT) 그대로.
   const bandExceed = useMemo(() => computeFxBandExceed(policyData, params), [policyData, params])
   const marketRates = useMemo(() => Object.fromEntries(
@@ -661,108 +638,44 @@ export default function FxRegimePage() {
     return out
   }, [series, protocol])
 
-  // 분기 손실한도 기준 집행 가능액 — 조치 카드(VerdictCard)와 매각 지시 등록 패널이
-  // 공유한다(둘 다 상단에 붙어 있으므로 계산을 한 곳에만 둔다).
-  // ⚠ 대표 통화 기준으로 계산한다 — 탭을 바꿔도 같은 금액이 나와야 하기 때문.
-  //   손실 한도(분기 캡·기실현 손실)는 법인 단위라 통화와 무관하고,
-  //   한도를 외화 수량으로 환산할 때 쓰는 장부환율·보유량만 대표 통화 것을 쓴다.
-  const decisionBudget = useMemo(() => {
-    if (!leadSignal) return null
-    const rate = leadSignal.indicators.close
-    const avail = isLead ? availableFx : leadLots.availableAmount
-    const holdFx = isLead ? treasuryInputs.fxHoldingFx : leadLots.totalAmount
-    // bookRate 는 로트가 없으면 null 이다 — 0 으로 내려 손익 계산을 건너뛴다(한도 미적용).
-    const costRate = (isLead ? treasuryInputs.avgAcquisitionRate : leadLots.bookRate) ?? 0
-    const suggestedKRW = leadSignal.decision.actionRequired && leadSignal.decision.suggestedTradeKRW < 0
-      ? -leadSignal.decision.suggestedTradeKRW : 0
-    const requestedFx = rate > 0 ? Math.min(suggestedKRW / rate, avail) : 0
-    const budget = lossBudget(
-      treasuryInputs.quarterLossCapKRW,
-      treasuryInputs.realizedLossThisQuarterKRW,
-      requestedFx, holdFx, costRate, rate,
-    )
-    return { rate, requestedFx, budget, costRate, holdFx }
-  }, [leadSignal, isLead, availableFx, leadLots.availableAmount, leadLots.totalAmount, leadLots.bookRate,
-      treasuryInputs.quarterLossCapKRW, treasuryInputs.realizedLossThisQuarterKRW,
-      treasuryInputs.fxHoldingFx, treasuryInputs.avgAcquisitionRate])
-
-  // 선택한 통화의 정책 상한 초과 안분분 — 조치 카드와 초과 카드가 같은 값을 쓰게 한다.
-  // ⚠ 조치 카드가 대표 통화 기준이므로 밴드 초과분도 **바구니 전체**를 쓴다.
-  //   통화별 안분은 카드 안 배분표가 담당한다 — 여기서 통화 몫만 넘기면 총액이 또 갈라진다.
-  const bandExcess = useMemo(
-    () => ({ excessKRW: bandExceed.over ? bandExceed.excessKRW : 0, maxPct: bandExceed.max }),
-    [bandExceed])
-
-  // 판정 기준일이 얼마나 뒤처졌는지 — 환율 이력 백필이 끊긴 통화 감지
-  // ⚠ EUR 이 2022-12-30 기준으로 판정되고 있었다(2026-11-02 발견). 4년 전 데이터다.
-  const staleDays = useMemo(() => {
-    if (!leadSignal?.asOf) return null
-    const today = todayStr()
-    return leadSignal.asOf >= today ? 0 : bizDaysBetween(leadSignal.asOf, today)
-  }, [leadSignal?.asOf])
-
-  // ⭐ 오늘의 결론 — 화면 최상단. 이 카드 하나만 보고 나가도 업무가 되도록 한다.
-  const verdict = useMemo(() => {
-    if (!leadSignal || !decisionBudget) return null
-    const bep = decisionBudget.costRate > 0
-      ? bepStats(isLead ? series : leadHist.data.map((p: { date: string; rate: number }) => ({ date: p.date, rate: p.rate })),
-                 decisionBudget.costRate, 750)
-      : null
-    // ⚠ 바구니 결정이므로 **대표 통화** 기준으로 만든다 — 탭을 바꿔도 같은 결론이어야 한다.
-    return buildVerdict({
-      signal: leadSignal, currency: leadCode,
-      holdingFx:   decisionBudget.holdFx,
-      avgCostRate: decisionBudget.costRate,
-      allowedFx:   decisionBudget.budget.allowedFx,
-      requestedFx: decisionBudget.requestedFx,
-      pctDaysAboveBep: bep?.pctDaysAbove ?? null,
-      // ⭐ 같은 화면의 '정책 상한 초과' 카드와 **같은 숫자**를 쓴다.
-      //   과거엔 조치 카드가 이 값을 몰라 "아무것도 하지 않습니다"와 "5.3억 초과"가
-      //   동시에 떴다(2026-11-02 리포트). 통화별 안분분을 그대로 넘긴다.
-      bandExcessKRW: bandExcess.excessKRW,
-      bandMaxPct:    bandExcess.maxPct,
-      asOfStaleDays: staleDays,
-      // 조치 카드가 "왜 조정하지 않는가"를 표면에 적으려면 밴드 수치가 필요하다
-      rebalanceBandPct: protocol.rebalanceBandPct,
-    })
-  }, [leadSignal, leadCode, isLead, series, leadHist.data, decisionBudget, bandExcess, staleDays, protocol.rebalanceBandPct])
 
   /**
-   * 리짐 권고를 매각 지시로 등록 (세션26차 Phase 4).
-   * 기존 워크플로우(발의 → 승인 → 완료)를 그대로 쓰고, 발생 경로만 `regime` 으로 구분한다.
-   * 기한은 다른 매각 지시와 동일하게 **등록일 +3영업일**(환율과 무관하게 실행).
-   *
-   * ⚠ [임시 조치 — 2026-11-25 전수조사 F-01 Step 0]
-   *   조치 카드는 대표 통화 기준의 **바구니 결정**인데, 과거엔 이 함수가 **현재 탭 통화**로
-   *   지시를 만들어 EUR 탭에서 누르면 USD 수량이 EUR 지시로 등록됐다(JPY 탭이면 약 1/150 금액).
-   *   정식 수정(통화별 배분대로 여러 건 등록)은 바구니 판정 공통화(F-05) 이후에 한다.
-   *   그때까지는 **대표 통화로만** 등록하고, 패널도 대표 통화 탭에서만 연다.
-   *   금지: 이 함수에서 `currency`·`signal`·`treasuryInputs` 를 다시 쓰지 말 것.
+   * 바구니 리짐 권고 → 통화별 매각 지시 (2026-11-25 전수조사 F-01 정식).
+   * payload 는 buildRegimeOrderPayloads 하나로만 만든다. 배분은 **리짐 몫만**
+   * (밴드 복귀분은 아래 한도초과 카드가 threshold 로 따로 발의한다 — 섞으면 같은 의무를 두 번 등록).
    */
-  const registerRegimeOrder = useCallback(async (amountFx: number): Promise<string | null> => {
-    if (!leadSignal || !decisionBudget || amountFx <= 0) return '등록할 금액이 없습니다.'
-    const rate = decisionBudget.rate
-    const acq  = decisionBudget.costRate > 0 ? decisionBudget.costRate : null
-    const today = todayStr()
-    const { error } = await actualTradeHistory.propose({
-      company, trade_date: today, currency: leadCode, direction: 'sell',
-      amount_fx: amountFx,
-      acq_rate: acq,
-      trade_rate: rate,
-      fx_pnl: acq != null ? Math.round((rate - acq) * amountFx) : null,
-      amount_krw: Math.round(rate * amountFx),
-      memo: `리짐 권고 자동 등록 — 바구니 대표 ${leadCode} · 국면 ${leadSignal.regime.code}`
-        + `${leadSignal.level ? ` · 수준 ${leadSignal.level.label}` : ''}`
-        + ` · 목표 ${(leadSignal.decision.appliedTargetRatio * 100).toFixed(1)}%`
-        + ` / 현재 ${(leadSignal.decision.currentRatio * 100).toFixed(1)}% (판정일 ${leadSignal.asOf})`,
-      created_by: user?.label ?? user?.code ?? 'unknown',
-      due_date: addBizDays(today, 3),
-      order_type: 'regime',
+  const regimeOrders = useMemo(() => {
+    if (!leadSignal || basket.regimeAllocation.length === 0) return null
+    return buildRegimeOrderPayloads({
+      company,
+      allocation: basket.regimeAllocation,
+      info: basket.lotsInfo,
+      summary: {
+        leadCode, regimeCode: leadSignal.regime.code, levelLabel: leadSignal.level?.label ?? null,
+        targetRatio: leadSignal.decision.appliedTargetRatio,
+        currentRatio: leadSignal.decision.currentRatio, asOf: leadSignal.asOf,
+      },
+      createdBy: user?.label ?? user?.code ?? 'unknown',
+      today: todayStr(),
+      groupId: generateUUID(),
     })
-    if (error) return error.message ?? '등록 실패'
+    // groupId 는 렌더마다 바뀌면 안 된다 — 판정이 바뀔 때만 새로 만든다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [leadSignal, basket.regimeAllocation, basket.lotsInfo, leadCode, company])
+
+  const registerRegimeOrders = useCallback(async (payloads: RegimeOrderPayload[]) => {
+    let done = 0
+    for (const p of payloads) {
+      const { error } = await actualTradeHistory.propose(p)
+      if (error) {
+        await actualTradeHistory.load()
+        return { done, error: error.message ?? '등록 실패' }
+      }
+      done++
+    }
     await actualTradeHistory.load()
-    return null
-  }, [leadSignal, decisionBudget, leadCode, company, actualTradeHistory, user])
+    return { done, error: null }
+  }, [actualTradeHistory])
 
   /**
    * 조치 금액의 통화별 권장 배분.
@@ -772,10 +685,7 @@ export default function FxRegimePage() {
    *   두 금액을 더해야 하나 고민했다(2026-11-04 리포트).
    *   상한 초과 카드와 **같은 안분 규칙**(보유 구성비)을 써서 한 화면에서 말이 맞게 한다.
    */
-  const orderAllocation = useMemo(() => {
-    if (!verdict?.orderKRW) return []
-    return allocateAcrossBasket(verdict.orderKRW, policyData.fxByCurrency)
-  }, [verdict?.orderKRW, policyData.fxByCurrency])
+  const orderAllocation = basket.allocation
 
   // 차트 자동 해석 — 지표값을 평이한 문장으로 변환 (fxChartNarrative)
   const narrative = useMemo(() => {
@@ -919,10 +829,10 @@ export default function FxRegimePage() {
       </div>
 
       {/* ⭐ 오늘의 결론 — 항상 최상단. 이것만 보고 나가도 업무가 되게 한다. */}
-      {verdict && signal && (
+      {verdict && leadSignal && (
         <VerdictCard
           verdict={verdict}
-          asOf={signal.asOf}
+          asOf={leadSignal.asOf}
           currency={currency}
           renderBold={renderBold}
           onOpenDetail={() => { setTab('decision'); setDetailsOpen(true) }}
@@ -940,27 +850,15 @@ export default function FxRegimePage() {
       {pendingRegimeOrders.length > 0 ? (
         <PendingOrdersCard company={company} currency={currency} orders={pendingRegimeOrders} />
       ) : (
-        inputSource === 'live' && canEdit() && leadSignal && decisionBudget && decisionBudget.budget.allowedFx > 0 && (
-          // ⚠ 등록 수량·환율·장부환율은 전부 **대표 통화** 값이다. 다른 통화 탭에서 열면
-          //   통화 라벨만 바뀐 채 대표 통화 수량이 들어간다(F-01). 그래서 대표 탭에서만 연다.
-          isLead ? (
-            <RegisterOrderPanel
-              currency={leadCode}
-              company={company}
-              allowedFx={decisionBudget.budget.allowedFx}
-              rate={decisionBudget.rate}
-              avgCostRate={decisionBudget.costRate}
-              onRegister={registerRegimeOrder}
-            />
-          ) : (
-            <div className="flex flex-wrap items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-xs text-gray-600 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
-              <span>🧾 리짐 매각 지시는 바구니 대표 통화(<b>{leadCode}</b>) 탭에서 등록합니다 — 조치 카드가 {leadCode} 기준 판정이기 때문입니다.</span>
-              <button type="button" onClick={() => setCurrency(leadCode)}
-                className="ml-auto rounded-lg bg-orange-600 px-3 py-1.5 font-semibold text-white hover:bg-orange-700">
-                {leadCode} 탭으로 이동
-              </button>
-            </div>
-          )
+        inputSource === 'live' && canEdit() && regimeOrders && (
+          // 통화 탭과 무관하게 같은 표가 나온다 — 바구니 배분대로 통화마다 한 건씩 등록한다(F-01).
+          <RegisterOrderPanel
+            company={company}
+            payloads={regimeOrders.payloads}
+            shortfalls={regimeOrders.shortfalls}
+            totalKRW={regimeOrders.totalKRW}
+            onRegister={registerRegimeOrders}
+          />
         )
       )}
 
@@ -999,7 +897,7 @@ export default function FxRegimePage() {
       {coverageStale && historyPanel}
 
       {/* 조치 이력 — 과거 특정 날짜의 조치 카드 재조회(세션26차 7일차) */}
-      <RegimeHistoryCard company={company} currency={currency} />
+      <RegimeHistoryCard company={company} currency={BASKET_SNAPSHOT_CURRENCY} />
 
       {/* 근거를 보고 싶은 사람만 여는 영역 */}
       <details open={detailsOpen} onToggle={e => setDetailsOpen((e.target as HTMLDetailsElement).open)}>

@@ -70,6 +70,10 @@
 |---|---|---|
 | 외화비중·바구니 분자/분모 | `usePolicyDashboard` | 화면에서 재계산 |
 | 리짐 판정 | `useFxRegime` → `evaluateRegime` | 화면에서 목표비중 재계산 |
+| **바구니 판정**(대표 통화·바구니 ctx·예산·verdict·배분) | `lib/fxBasketDecision.ts` / `useFxBasketDecision` (2026-11-25) | 화면에서 대표 통화·예산 재계산, 현재 탭 통화 값을 바구니 판정에 섞기 |
+| **판정 스냅샷** | `fx_regime_snap_*_basket` **1건** + `readBasketSnapshot`(신선도) | 통화별 스냅샷 기록·조회(같은 의무를 통화 수만큼 셌다) |
+| 리짐 매각 지시 payload | `lib/fxRegimeOrder.ts` `buildRegimeOrderPayloads` (배분표대로 통화별) | 바구니 총액을 한 통화로 등록 |
+| 환율 시계열 단위 | `useFxHistory().series` (원/1외화 정규화) | 엔진에 `data`(JPY 원/100엔 원값) 넣기 |
 | 밴드 초과분 산출 | `lib/fxBandExceed.ts` | σ×Z 한도 모델을 실무 화면에 복제 |
 | 매각 지시 payload | `buildThresholdOrderPayload` / `registerRegimeOrder` | 화면마다 propose 인자 직접 조립 |
 | **체결(집행)·취소** | **외화거래명세 › 외화매도이력 한 곳** | 다른 화면에 체결 모달 복제 |
@@ -1480,6 +1484,9 @@ baf8ef9 fix: 투자 집행 연동 저장 실패 수정 + 자산 구분(운용/�
   유니크 인덱스 2개(`equities_company_name_date_uniq` / `investments_bond_company_ticker_date_uniq`).
   **실행 완료** (2026-09-15 — 지분 73건 삭제 · 국채 0건(중복 없었음) · 남은 중복 0그룹 · 인덱스 2개 생성).
   백업 `backup.equities_dup_20260915` / `backup.investments_dup_20260915` 에 삭제분 보존.
+- **`docs/db/fx_jpy_unit_normalize.sql`** ⭐ — FX 전수조사 묶음 C (2026-11-25). **실행 필요**.
+  이미 저장된 JPY 앵커(옛 단위 원/100엔)를 원/1엔으로 나눈다(100 이상인 값만, 멱등).
+  결과표 ②에 원/100엔으로 등록된 JPY 매각 지시가 나오면 담당자에게 알릴 것(자동 수정 안 함).
 - **`docs/db/fx_fifo_integrity_and_scope.sql`** ⭐⭐ — FX 전수조사 묶음 B (2026-11-25). **실행 필요**.
   ① `fx_lots.available_from`(로트가 장부에 생긴 날) + backfill + 자동 채움 트리거 —
      소급 체결·유출·대체가 **처분일 이후에 생긴 로트**를 소진하던 문제(F-04).

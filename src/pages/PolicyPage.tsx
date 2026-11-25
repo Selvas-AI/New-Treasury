@@ -8,6 +8,8 @@ import { usePolicyParams, usePolicyParamsReadMap, type PolicyParamReader } from 
 import { usePolicyDashboards, type PolicyRealData } from '../hooks/usePolicyDashboard'
 import { useCompanies } from '../hooks/useCompanies'
 import { checkLiquidity, checkFx, checkLoan, checkConcentration, checkDecisionRule, CONCENTRATION_LIMIT } from '../lib/policyChecks'
+import { readBasketSnapshot } from '../lib/fxRegimeSnapshot'
+import { bizDaysBetween, todayStr } from '../lib/bizDay'
 import { getLatestBonds } from '../hooks/useInvestments'
 import FxPolicyTab from '../components/policy/FxPolicyTab'
 import FvplRiskTab from '../components/policy/FvplRiskTab'
@@ -707,7 +709,13 @@ function DecisionRuleProgress({
   decision, params, data, canEdit, onMarkComplete,
 }: { decision: PolicyDecision; params: PolicyParamReader; data: PolicyRealData; canEdit: boolean; onMarkComplete: () => void }) {
   if (!decision.linked_metric || !decision.target_operator || decision.target_value == null) return null
-  const r = checkDecisionRule(decision.linked_metric, decision.target_operator, decision.target_value, data, params)
+  // ⚠ fx_regime_gap 은 판정 스냅샷이 있어야 계산된다. 과거엔 이 화면만 스냅샷을 넘기지 않아
+  //   리짐 목표 규칙이 **항상 '달성'**으로 보였다(2026-11-25 전수조사 중 발견).
+  //   대시보드와 같은 바구니 스냅샷 1건을 쓴다 — 오래된 판정은 근거로 쓰지 않는다.
+  const basketSnap = decision.linked_metric === 'fx_regime_gap'
+    ? readBasketSnapshot(params, todayStr(), bizDaysBetween) : null
+  const r = checkDecisionRule(decision.linked_metric, decision.target_operator, decision.target_value, data, params,
+    basketSnap && basketSnap.fresh ? [basketSnap] : [])
   const cond = decision.target_operator === 'lte' ? `${decision.target_value} 이하` : `${decision.target_value} 이상`
   const achieved = !r.violated
 

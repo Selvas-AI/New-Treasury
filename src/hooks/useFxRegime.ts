@@ -89,10 +89,8 @@ export function useFxRegime(
   const inputs = useFxTreasuryInputs(source, company, currency, treasuryValues, params)
 
   // ── 판정 입력 ──────────────────────────────────────────────────────
-  const series: RegimeSeriesPoint[] = useMemo(
-    () => hist.data.map(p => ({ date: p.date, rate: p.rate })),
-    [hist.data],
-  )
+  // ⚠ 정규화된 시계열(원/1외화)을 쓴다 — JPY 원값(원/100엔)을 넣으면 장부·시세와 100배 어긋난다(F-02).
+  const series: RegimeSeriesPoint[] = hist.series
   const latestRate = series[series.length - 1]?.rate ?? 0
 
   // 결제 버퍼는 **외화 원금**으로 보관한다 — 실제 채무는 "250만불"이지 "X원"이 아니다.

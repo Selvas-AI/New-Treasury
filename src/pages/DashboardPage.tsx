@@ -9,8 +9,7 @@ import { usePolicyParams } from '../hooks/usePolicyParams'
 import { usePolicyDecisionsByCompany } from '../hooks/usePolicyDecisions'
 import { useFxTradeHistory } from '../hooks/useFxTradeHistory'
 import { checkDecisionRule, checkFx } from '../lib/policyChecks'
-import { readAllRegimeSnapshots, pendingDays } from '../lib/fxRegimeSnapshot'
-import { REGIME_CURRENCIES } from '../lib/fxRegimeInputs'
+import { readBasketSnapshot, pendingDays, SNAPSHOT_STALE_BIZDAYS } from '../lib/fxRegimeSnapshot'
 import { orderTypeLabel } from '../lib/fxOrderType'
 import { bizDaysBetween, todayStr } from '../lib/bizDay'
 import { makeIssueKey } from '../hooks/useIssues'
@@ -45,36 +44,54 @@ export default function DashboardPage() {
   // ── 리짐 권고 미이행 (세션26차 Phase 4) ────────────────────────────
   // ⚠ 여기서 엔진을 돌리지 않는다. 실무 화면(/fx-regime)이 판정할 때 남긴 스냅샷만 읽는다
   //   — 대시보드는 전 사용자가 여는 화면이라 환율 이력 전체 조회를 감당할 수 없다.
+  // ⭐ 바구니 스냅샷 1건만 읽는다(2026-11-25 전수조사 F-05). 과거엔 통화별 스냅샷을 모두 읽어
+  //   "USD 35.9억 미이행"과 "EUR 17.2억 미이행"을 별개 의무처럼 띄웠다 — 둘 다 바구니 전체 금액이다.
+  const basketSnap = useMemo(
+    () => readBasketSnapshot(policyParams, todayStr(), bizDaysBetween),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [policyParams.data],
+  )
+  // 의결 규칙(fx_regime_gap)도 같은 1건으로 판정한다 — 신선하지 않으면 판정 근거로 쓰지 않는다
   const regimeSnapshots = useMemo(
-    () => readAllRegimeSnapshots(policyParams, REGIME_CURRENCIES),
-    [policyParams],
+    () => (basketSnap && basketSnap.fresh ? [basketSnap] : []),
+    [basketSnap],
   )
   const regimeIssues = useMemo<IssueItem[]>(() => {
     const today = todayStr()
-    const result: IssueItem[] = []
-    for (const snap of regimeSnapshots) {
-      if (snap.suggestKRW <= 0) continue
-      const key = makeIssueKey('fx_regime', `${company ?? ''}_${snap.currency}`)
-      const thread = db.issues.threadOf(key)
-      const lastStatus = thread[thread.length - 1]?.status ?? 'open'
-      if (lastStatus === 'done') continue
-      const days = pendingDays(snap, today, bizDaysBetween)
-      // 당일 발생한 권고까지 경보로 올리면 노이즈가 된다 — 하루는 집행 시간을 준다.
-      if (days == null || days < 1) continue
-      const gap = snap.targetPct != null && snap.currentPct != null
-        ? (snap.currentPct - snap.targetPct).toFixed(1) : '—'
-      result.push({
+    const snap = basketSnap
+    if (!snap) return []
+    const key = makeIssueKey('fx_regime', `${company ?? ''}_basket`)
+    const thread = db.issues.threadOf(key)
+    const lastStatus = thread[thread.length - 1]?.status ?? 'open'
+    if (lastStatus === 'done') return []
+
+    // ⚠ 오래된 판정으로 미이행 경보를 올리지 않는다 — 경과일만 늘어나는 유령 경보가 된다.
+    //   대신 "판정을 갱신하라"를 띄운다(실무 화면을 열면 스냅샷이 갱신된다).
+    if (!snap.fresh) {
+      if (snap.suggestKRW <= 0) return []
+      return [{
         key,
-        title: `리짐 권고 미이행 ${days}영업일차: ${snap.currency}`,
-        desc: `목표 ${snap.targetPct ?? '—'}% 대비 현재 ${snap.currentPct ?? '—'}% (초과 ${gap}%p) · `
-          + `권고 매도 ${fmtKRW(snap.suggestKRW)} · ${snap.since} 발생 · 판정일 ${snap.asOf}`,
+        title: `리짐 판정 갱신 필요 — 마지막 판정 ${snap.asOf} (${snap.ageBizDays ?? '—'}영업일 전)`,
+        desc: `${SNAPSHOT_STALE_BIZDAYS}영업일이 넘은 판정이라 미이행 여부를 알 수 없습니다. FX 리짐 전략 화면을 열면 갱신됩니다.`,
         status: lastStatus,
         commentCount: thread.length,
-      })
+      }]
     }
-    return result
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [regimeSnapshots, company, db.issues])
+    if (snap.suggestKRW <= 0) return []
+    const days = pendingDays(snap, today, bizDaysBetween)
+    // 당일 발생한 권고까지 경보로 올리면 노이즈가 된다 — 하루는 집행 시간을 준다.
+    if (days == null || days < 1) return []
+    const gap = snap.targetPct != null && snap.currentPct != null
+      ? (snap.currentPct - snap.targetPct).toFixed(1) : '—'
+    return [{
+      key,
+      title: `리짐 권고 미이행 ${days}영업일차 — 외화 바구니${snap.lead ? `(대표 ${snap.lead})` : ''}`,
+      desc: `목표 ${snap.targetPct ?? '—'}% 대비 현재 ${snap.currentPct ?? '—'}% (초과 ${gap}%p) · `
+        + `권고 매도 ${fmtKRW(snap.suggestKRW)}(통화별 배분은 리짐 화면) · ${snap.since} 발생 · 판정일 ${snap.asOf}`,
+      status: lastStatus,
+      commentCount: thread.length,
+    }]
+  }, [basketSnap, company, db.issues])
 
   const policyIssues = useMemo<IssueItem[]>(() => {
     const today = new Date().toISOString().slice(0, 10)

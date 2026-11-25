@@ -13,7 +13,7 @@
 import { useMemo, useState } from 'react'
 import InfoTip from '../common/InfoTip'
 import {
-  ALL_REGIME_CODES, targetParamKey, PROTOCOL_PARAM_KEYS, anchorParamKey,
+  ALL_REGIME_CODES, targetParamKey, PROTOCOL_PARAM_KEYS, anchorParamKey, roundRate, rateDigits,
   regimeLabel, DEFAULT_TARGETS, DEFAULT_PROTOCOL,
   findConsolidationZones, levelTargetParamKey, classifyLevel,
   ALL_LEVEL_GRADES, ALL_TREND_GROUPS, LEVEL_LABEL, DEFAULT_LEVEL_TARGETS,
@@ -320,7 +320,7 @@ function AnchorPanel({ protocol, series, currency, canEdit, onSave, onSaved, set
   async function pick(value: number) {
     setBusy(true); setErr(null)
     // ⚠ 통화별 키로 저장한다. 구 키(fx_level_anchor_krw)는 USD 폴백으로만 읽고 쓰지 않는다.
-    const e1 = await onSave(anchorParamKey(currency), Math.round(value * 10) / 10)
+    const e1 = await onSave(anchorParamKey(currency), roundRate(value))   // JPY 는 3자리(F-02)
     const e2 = e1 ? null : await onSave(PROTOCOL_PARAM_KEYS.useLevelAxis, 1)
     setBusy(false)
     if (e1 || e2) setErr(`앵커 저장 실패: ${e1 ?? e2}`)
@@ -478,7 +478,7 @@ function AnchorPanel({ protocol, series, currency, canEdit, onSave, onSaved, set
                           }`}>{i + 1}순위</span>
                           {z.from} ~ {z.to}
                         </td>
-                        <td className="py-1.5 text-right font-semibold">{z.mean.toFixed(1)}</td>
+                        <td className="py-1.5 text-right font-semibold">{z.mean.toFixed(rateDigits(z.mean))}</td>
                         <td className="py-1.5 text-right">{(z.rangePct * 100).toFixed(2)}%</td>
                         <td className="py-1.5 text-right">{z.er.toFixed(1)}</td>
                         <td className={`py-1.5 text-right font-semibold ${GRADE_TONE[grade]}`}>

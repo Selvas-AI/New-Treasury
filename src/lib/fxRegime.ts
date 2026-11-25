@@ -537,6 +537,21 @@ export const DEFAULT_LEVEL_THRESHOLDS: LevelThresholds = {
   vl: -0.08,
 }
 
+/**
+ * 환율 값의 유효 자릿수 — 원/1외화 기준.
+ *
+ * ⚠ JPY 는 1엔당 약 9.5원이라 소수점 1자리로 반올림하면 9.47 → 9.5 로 0.3% 가 틀어진다.
+ *   수준 판정 임계가 ±3% 이므로 무시할 수 없다(2026-11-25 F-02 정규화와 함께 발견).
+ *   100원 이상(USD·EUR·GBP)은 1자리, 그 미만(JPY·CNY)은 3자리.
+ */
+export function rateDigits(rate: number): number {
+  return Math.abs(rate) >= 100 ? 1 : 3
+}
+export function roundRate(rate: number): number {
+  const f = 10 ** rateDigits(rate)
+  return Math.round(rate * f) / f
+}
+
 /** 현재가와 앵커로 수준 등급 산출 */
 export function classifyLevel(
   rate: number,

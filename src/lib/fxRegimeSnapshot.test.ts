@@ -136,3 +136,39 @@ describe('fxRegimeSnapshot', () => {
       '2026-08-14', bd)).toBe(3)
   })
 })
+
+// ── 바구니 스냅샷 1건 + 신선도 (2026-11-25 전수조사 F-05) ─────────────────────
+import { readBasketSnapshot, BASKET_SNAPSHOT_CURRENCY } from './fxRegimeSnapshot'
+
+describe('readBasketSnapshot — 바구니 1건 + 신선도', () => {
+  const store = (asOf: string | null, extra: Record<string, number | string> = {}) => {
+    const num: Record<string, number> = {}
+    const txt: Record<string, string> = {}
+    const c = BASKET_SNAPSHOT_CURRENCY
+    if (asOf) txt[REGIME_SNAPSHOT_KEYS.asOf(c)] = asOf
+    num[REGIME_SNAPSHOT_KEYS.suggestKRW(c)] = 3_000_000_000
+    txt[REGIME_SNAPSHOT_KEYS.lead(c)] = 'USD'
+    for (const [k, v] of Object.entries(extra)) (typeof v === 'number' ? num : txt)[k] = v as never
+    return { get: (k: string) => num[k] ?? null, getText: (k: string) => txt[k] ?? null }
+  }
+  const days = (a: string, b: string) => Math.round((Date.parse(b) - Date.parse(a)) / 86_400_000)
+
+  it('기록이 없으면 null', () => {
+    expect(readBasketSnapshot(store(null), '2026-11-25', days)).toBeNull()
+  })
+  it('대표 통화를 함께 읽는다', () => {
+    expect(readBasketSnapshot(store('2026-11-24'), '2026-11-25', days)?.lead).toBe('USD')
+  })
+  it('10영업일 이내면 fresh', () => {
+    expect(readBasketSnapshot(store('2026-11-20'), '2026-11-25', days)?.fresh).toBe(true)
+  })
+  it('10영업일을 넘기면 fresh=false — 미이행 경보 대신 "판정 갱신 필요"', () => {
+    const s = readBasketSnapshot(store('2026-10-01'), '2026-11-25', days)
+    expect(s?.fresh).toBe(false)
+    expect(s?.ageBizDays).toBeGreaterThan(10)
+  })
+  it('구 통화별 키(USD)는 읽지 않는다', () => {
+    const legacy = { get: () => null, getText: (k: string) => (k === REGIME_SNAPSHOT_KEYS.asOf('usd') ? '2026-11-24' : null) }
+    expect(readBasketSnapshot(legacy, '2026-11-25', days)).toBeNull()
+  })
+})

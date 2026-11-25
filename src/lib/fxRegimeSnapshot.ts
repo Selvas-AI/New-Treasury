@@ -29,7 +29,22 @@ export const REGIME_SNAPSHOT_KEYS = {
   since:      (cur: string) => `fx_regime_snap_since_${cur.toLowerCase()}`,
   /** 판정 기준일 (param_text, YYYY-MM-DD) — 스냅샷 신선도 */
   asOf:       (cur: string) => `fx_regime_snap_asof_${cur.toLowerCase()}`,
+  /** 바구니 대표 통화 (param_text) — 바구니 스냅샷 전용. 대표 전환 히스테리시스에도 쓴다 */
+  lead:       (cur: string) => `fx_regime_snap_lead_${cur.toLowerCase()}`,
 } as const
+
+/**
+ * ⭐ 바구니 스냅샷의 "통화" 자리 값 (2026-11-25 전수조사 F-05).
+ *
+ * 외화 비중·목표·조치는 바구니 하나의 결정이다. 과거엔 통화 탭마다 그 통화의 판정을
+ * 통화 키로 기록해, 대시보드·자금일보가 "USD 35.9억 미이행"과 "EUR 17.2억 미이행"을
+ * **별개 의무처럼 둘 다** 띄웠다(둘 다 바구니 전체 금액이라 같은 의무를 두 번 센 것).
+ * 이제 스냅샷은 이 키 하나로만 기록·조회한다. 구 통화별 키는 읽지 않는다.
+ */
+export const BASKET_SNAPSHOT_CURRENCY = 'basket'
+
+/** 이 영업일 수보다 오래된 판정 스냅샷은 경보 대상이 아니라 "판정 오래됨"이다 */
+export const SNAPSHOT_STALE_BIZDAYS = 10
 
 export interface RegimeSnapshot {
   currency:   string
@@ -39,6 +54,8 @@ export interface RegimeSnapshot {
   suggestKRW: number
   since:      string | null
   asOf:       string | null
+  /** 바구니 스냅샷의 대표 통화. 통화별(구) 스냅샷이면 null */
+  lead?:      string | null
 }
 
 interface SnapshotReader {
@@ -56,7 +73,27 @@ export function readRegimeSnapshot(params: SnapshotReader, currency: string): Re
     suggestKRW: params.get(REGIME_SNAPSHOT_KEYS.suggestKRW(currency)) ?? 0,
     since:      params.getText(REGIME_SNAPSHOT_KEYS.since(currency)),
     asOf,
+    lead:       params.getText(REGIME_SNAPSHOT_KEYS.lead(currency)),
   }
+}
+
+/**
+ * 바구니 스냅샷 + 신선도.
+ *
+ * ⚠ 스냅샷은 실무 화면을 누군가 열어야만 갱신된다. 아무도 안 열면 몇 주 전 판정이
+ *   "미이행 N영업일차"로 계속 경보를 올린다(경과일만 늘어남). 판정일이
+ *   SNAPSHOT_STALE_BIZDAYS 를 넘기면 fresh=false — 소비처는 미이행 경보 대신
+ *   "판정이 오래됐다 — 화면을 열어 갱신하라"를 띄운다.
+ */
+export function readBasketSnapshot(
+  params: SnapshotReader,
+  today: string,
+  bizDaysBetweenFn: (a: string, b: string) => number,
+): (RegimeSnapshot & { fresh: boolean; ageBizDays: number | null }) | null {
+  const snap = readRegimeSnapshot(params, BASKET_SNAPSHOT_CURRENCY)
+  if (!snap) return null
+  const age = snap.asOf ? (snap.asOf >= today ? 0 : bizDaysBetweenFn(snap.asOf, today)) : null
+  return { ...snap, ageBizDays: age, fresh: age != null && age <= SNAPSHOT_STALE_BIZDAYS }
 }
 
 export function readAllRegimeSnapshots(params: SnapshotReader, currencies: readonly string[]): RegimeSnapshot[] {
@@ -121,7 +158,9 @@ export interface RegimeSnapshotHistoryEntry extends RegimeSnapshotReason {
 export async function syncRegimeSnapshot(
   params: SnapshotWriter,
   currency: string,
-  next: { targetPct: number | null; currentPct: number | null; suggestKRW: number; asOf: string } & RegimeSnapshotReason,
+  next: { targetPct: number | null; currentPct: number | null; suggestKRW: number; asOf: string;
+          /** 바구니 스냅샷의 대표 통화 */
+          lead?: string | null } & RegimeSnapshotReason,
   today: string,
   updatedBy: string,
   recordHistory?: (entry: RegimeSnapshotHistoryEntry) => Promise<void>,
@@ -136,6 +175,7 @@ export async function syncRegimeSnapshot(
     && prev.suggestKRW === suggest
     && prev.targetPct === next.targetPct
     && prev.currentPct === next.currentPct
+    && (next.lead === undefined || (prev.lead ?? null) === (next.lead ?? null))
   if (unchanged) return 0
 
   let nextSince: string | null
@@ -149,6 +189,9 @@ export async function syncRegimeSnapshot(
     params.set(REGIME_SNAPSHOT_KEYS.suggestKRW(currency), suggest,         null, updatedBy),
     params.set(REGIME_SNAPSHOT_KEYS.asOf(currency),       null,            next.asOf, updatedBy),
   ]
+  if (next.lead !== undefined) {
+    writes.push(params.set(REGIME_SNAPSHOT_KEYS.lead(currency), null, next.lead ?? null, updatedBy))
+  }
 
   if (suggest > 0 && prevSuggest === 0) {
     writes.push(params.set(REGIME_SNAPSHOT_KEYS.since(currency), null, today, updatedBy))

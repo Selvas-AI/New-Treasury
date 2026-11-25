@@ -376,8 +376,21 @@ export function useFxHistory(currency: string, opts: UseFxHistoryOptions = {}) {
 
   const latest = data.length ? data[data.length - 1] : null
 
+  /**
+   * ⭐ 판정·계산용 시계열 — **1외화당 원화로 정규화**된 값 (2026-11-25 전수조사 F-02).
+   *
+   * ECOS 는 JPY 를 "원/100엔"(≈950)으로 고시하고 DB 도 그대로 보존한다(unit_basis=100).
+   * 그런데 장부(FIFO)·시장환율·바구니 환산은 전부 원/1엔(≈9.5)이라, 원값을 엔진에 넣으면
+   * 손익·결제버퍼·지시 금액이 100배 어긋났다. 엔진·차트·앵커에는 반드시 이 값을 쓴다.
+   * `data`(원값)는 DB·수집 현황 표시용으로만 남긴다.
+   */
+  const series = useMemo(
+    () => data.map(p => ({ date: p.date, rate: normalizedRate(p) })),
+    [data],
+  )
+
   return useMemo(
-    () => ({ data, latest, loading, error, reload: load }),
-    [data, latest, loading, error, load],
+    () => ({ data, series, latest, loading, error, reload: load }),
+    [data, series, latest, loading, error, load],
   )
 }

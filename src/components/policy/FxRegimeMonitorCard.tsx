@@ -15,6 +15,7 @@
  */
 import { Link } from 'react-router-dom'
 import { useFxRegime } from '../../hooks/useFxRegime'
+import { useFxBasketDecision } from '../../hooks/useFxBasketDecision'
 import { useFxTradeHistory } from '../../hooks/useFxTradeHistory'
 import { CLAMP_LABEL, TREND_LABEL, VOL_LABEL, type TrendCode, type VolCode } from '../../lib/fxRegime'
 import { bizDaysBetween, todayStr } from '../../lib/bizDay'
@@ -69,17 +70,24 @@ export default function FxRegimeMonitorCard({ company, currency }: {
   currency: string
 }) {
   // ⚠ autoSync=false — 실무 화면이 이미 보충한다. 여기서 켜면 같은 ECOS 호출이 중복된다.
-  const { signal, inputs, availableFx, fxLots, hist, latestRate } =
+  const { signal, inputs, availableFx, fxLots, hist, latestRate, policyData, params } =
     useFxRegime(company, currency, 'live', false)
+  // ⭐ 바구니 결론 — FX 리짐 전략 조치 카드와 **같은 판정**(2026-11-25 전수조사 F-05).
+  //   과거엔 이 카드가 통화별 판정만 보여줘, 정책회의가 보는 목표와 실무자가 보는 목표가 달랐다.
+  //   아래 통화별 섹션은 분석용이다.
+  const basket = useFxBasketDecision(company, { policyData, params })
   const trades = useFxTradeHistory(company)
 
   const pending = trades.data.filter(t => t.status !== '완료' && t.status !== '취소')
   const today = todayStr()
 
-  const suggestedKRW = signal?.decision.actionRequired && signal.decision.suggestedTradeKRW < 0
-    ? -signal.decision.suggestedTradeKRW : 0
-  const suggestedFx = latestRate > 0 ? suggestedKRW / latestRate : 0
-  const shortFall = suggestedFx - availableFx   // 양수 = 재고 부족으로 전량 이행 불가
+  // ⚠ 통화별 신호의 suggestedTradeKRW 는 언제나 **바구니 전체 금액**이다. 그걸 이 통화
+  //   수량으로 환산해 보여주면 "EUR 로 17.2억 팔아라"처럼 읽힌다(2026-11-04 사고와 같은 혼란).
+  //   이 통화가 실제로 맡을 몫은 바구니 배분표의 행이다.
+  const myShare = basket.allocation.find(a => a.code === currency) ?? null
+  const suggestedKRW = myShare?.krwAmount ?? 0
+  const suggestedFx = myShare?.nativeAmount ?? (latestRate > 0 ? suggestedKRW / latestRate : 0)
+  const shortFall = suggestedFx - availableFx   // 양수 = 재고 부족으로 이 통화 몫 전량 이행 불가
 
   const lossCap = inputs.quarterLossCapKRW
   const lossUsed = inputs.realizedLossThisQuarterKRW
@@ -104,12 +112,45 @@ export default function FxRegimeMonitorCard({ company, currency }: {
   const trend = signal.regime.code.split('-')[0] as TrendCode
   const vol   = signal.regime.code.split('-')[1] as VolCode
 
+  const bv = basket.verdict
+  const bs = basket.signal
+
   return (
     <div className="space-y-4">
+      {/* ── 바구니 결론 (실무 화면 조치 카드와 같은 판정) ─────────────── */}
+      {bv && bs && (
+        <div className={CARD}>
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-sm font-bold text-gray-800 dark:text-slate-100">🧺 외화 바구니 결론</h3>
+            <span className="text-[11px] text-gray-500 dark:text-slate-400">
+              기준일 {bs.asOf} · 판정 기준 {basket.leadCode}
+              {basket.leadShare != null && `(비중 ${basket.leadShare.toFixed(1)}%)`}
+              {' '}· 통화 탭과 무관
+            </span>
+          </div>
+          <p className={`mt-2 text-base font-bold ${
+            bv.tone === 'act' ? 'text-red-700 dark:text-red-300'
+              : bv.tone === 'warn' ? 'text-amber-700 dark:text-amber-300'
+              : 'text-gray-900 dark:text-slate-100'}`}>
+            {bv.headline}
+          </p>
+          <div className="mt-1 flex flex-wrap gap-x-5 gap-y-1 text-xs tabular-nums text-gray-600 dark:text-slate-300">
+            <span>목표 <b>{pct(bv.targetRatio)}</b></span>
+            <span>현재 <b>{pct(bv.currentRatio)}</b></span>
+            {bv.orderKRW ? <span>조치 <b>{fmtKRW(bv.orderKRW)}</b></span> : null}
+          </div>
+          {basket.allocation.length > 0 && (
+            <p className="mt-1 text-[11px] text-gray-500 dark:text-slate-400">
+              통화별 배분: {basket.allocation.map(a => `${a.code} ${fmtKRW(a.krwAmount)}`).join(' · ')}
+            </p>
+          )}
+        </div>
+      )}
+
       {/* ── 국면 · 목표 vs 현재 ─────────────────────────────────── */}
       <div className={CARD}>
         <div className="flex flex-wrap items-center gap-2">
-          <h3 className="text-sm font-bold text-gray-800 dark:text-slate-100">🧭 FX 리짐 이행 현황</h3>
+          <h3 className="text-sm font-bold text-gray-800 dark:text-slate-100">🧭 통화별 분석 — {currency}</h3>
           <span className="text-[11px] text-gray-500 dark:text-slate-400">
             {currency} · 기준일 {signal.asOf} · 종가 {signal.indicators.close.toLocaleString()}원
           </span>
@@ -172,10 +213,13 @@ export default function FxRegimeMonitorCard({ company, currency }: {
       {/* ── 권고 · 재고 · 손실한도 ──────────────────────────────── */}
       <div className="grid gap-3 sm:grid-cols-3">
         <div className={CARD}>
-          <p className="text-[11px] text-gray-500 dark:text-slate-400">권고 조치</p>
+          <p className="text-[11px] text-gray-500 dark:text-slate-400">이 통화 몫 (바구니 배분)</p>
           <p className={`mt-1 text-base font-bold ${
-            signal.decision.actionRequired ? 'text-blue-600 dark:text-blue-400' : 'text-gray-600 dark:text-slate-300'
-          }`}>{signal.decision.action}</p>
+            suggestedKRW > 0 ? 'text-blue-600 dark:text-blue-400' : 'text-gray-600 dark:text-slate-300'
+          }`}>{suggestedKRW > 0 ? `${currency} 매도 배분` : '배분 없음'}</p>
+          <p className="text-[11px] text-gray-400 dark:text-slate-500">
+            이 통화 단독 판정(참고): {signal.decision.action}
+          </p>
           {suggestedKRW > 0 && (
             <p className="mt-1 text-sm text-gray-700 dark:text-slate-200">
               {fmtKRW(suggestedKRW)}
@@ -200,7 +244,7 @@ export default function FxRegimeMonitorCard({ company, currency }: {
           </p>
           {suggestedFx > 0 && shortFall > 0 && (
             <p className="mt-2 rounded bg-amber-50 px-2 py-1 text-[11px] text-amber-800 dark:bg-amber-900/25 dark:text-amber-300">
-              ⚠ 재고 부족 — 권고액 중 {currency} {Math.round(shortFall).toLocaleString()} 은
+              ⚠ 재고 부족 — 이 통화 몫 중 {currency} {Math.round(shortFall).toLocaleString()} 은
               만기 전 정기예금에 묶여 이번에 집행할 수 없습니다. <strong>실무 미이행이 아닙니다.</strong>
             </p>
           )}

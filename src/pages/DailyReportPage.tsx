@@ -27,8 +27,7 @@ import { useCompanies } from '../hooks/useCompanies'
 import { usePageCompany } from '../hooks/usePageCompany'
 import { usePolicyDecisionsByCompany } from '../hooks/usePolicyDecisions'
 import { usePolicyParams } from '../hooks/usePolicyParams'
-import { readAllRegimeSnapshots, pendingDays } from '../lib/fxRegimeSnapshot'
-import { REGIME_CURRENCIES } from '../lib/fxRegimeInputs'
+import { readBasketSnapshot, pendingDays } from '../lib/fxRegimeSnapshot'
 import { orderTypeLabel } from '../lib/fxOrderType'
 import { useFxTradeHistory } from '../hooks/useFxTradeHistory'
 import { useFxLedgerReconciliation } from '../hooks/useFxLedgerReconciliation'
@@ -302,34 +301,23 @@ function PendingDecisionsBanner({ company }: { company: string }) {
 function PendingRegimeBanner({ company }: { company: string }) {
   const params = usePolicyParams(company || null)
   const today = todayStr()
-  const pending = readAllRegimeSnapshots(params, REGIME_CURRENCIES)
-    .map(s => ({ snap: s, days: pendingDays(s, today, bizDaysBetween) }))
-    .filter(x => x.days != null && x.days >= 1)
-  if (pending.length === 0) return null
+  // ⭐ 바구니 스냅샷 1건 — 통화별로 띄우면 같은 의무를 통화 수만큼 센다(F-05).
+  //   오래된 판정(10영업일 초과)은 미이행으로 단정하지 않는다.
+  const snap = readBasketSnapshot(params, today, bizDaysBetween)
+  if (!snap || !snap.fresh || snap.suggestKRW <= 0) return null
+  const days = pendingDays(snap, today, bizDaysBetween)
+  if (days == null || days < 1) return null
 
   return (
     <div className="no-print mx-6 mt-3 px-4 py-2.5 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg shrink-0">
-      <p className="text-xs font-semibold text-amber-800 dark:text-amber-300 mb-1.5">
-        🧭 환율 국면 권고 미이행 {pending.length}건 — 환전 또는 매각 지시 등록이 필요합니다
+      <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">
+        🧭 환율 국면 권고 미이행 — 외화 바구니{snap.lead ? `(대표 ${snap.lead})` : ''} 권고 매도 {fmtKRW(snap.suggestKRW)}
       </p>
-      <ul className="space-y-1">
-        {pending.map(({ snap, days }) => (
-          <li key={snap.currency} className="text-xs text-amber-800 dark:text-amber-300 flex items-start gap-1.5">
-            <span className="shrink-0">·</span>
-            <span>
-              <span className="font-medium">{snap.currency} 권고 매도 {fmtKRW(snap.suggestKRW)}</span>
-              <span className="text-amber-600 dark:text-amber-400">
-                {' '}— {days}영업일 경과 ({snap.since} 발생, 판정일 {snap.asOf})
-              </span>
-              {snap.targetPct != null && snap.currentPct != null && (
-                <span className="text-amber-600 dark:text-amber-400">
-                  {' '}· 목표 {snap.targetPct}% / 현재 {snap.currentPct}%
-                </span>
-              )}
-            </span>
-          </li>
-        ))}
-      </ul>
+      <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
+        {days}영업일 경과 ({snap.since} 발생, 판정일 {snap.asOf})
+        {snap.targetPct != null && snap.currentPct != null && <> · 목표 {snap.targetPct}% / 현재 {snap.currentPct}%</>}
+        {' '}· 통화별 배분은 FX 리짐 전략 화면에서 확인·등록합니다.
+      </p>
     </div>
   )
 }
