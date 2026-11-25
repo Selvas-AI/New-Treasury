@@ -26,6 +26,11 @@ export interface ReportItem {
   linked_id:    string | null
   memo:         string | null
   account_type: string | null   // krw_demand | krw_govt | krw_mmda | fx_usd | ...
+  /**
+   * 외화 항목의 적용 환율(원/1외화). 있으면 외화거래명세 원장에 항목 단위로 반영된다.
+   * docs/db/fx_report_item_ledger.sql 적용 전에는 없다.
+   */
+  fx_rate?:     number | null
 }
 
 /**

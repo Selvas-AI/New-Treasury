@@ -8,7 +8,7 @@
  *   draft/submitted → daily.confirmed=false (임시 반영, 대시보드 표시)
  *   approved        → daily.confirmed=true  (공식 확정)
  */
-import { useEffect, useState, useMemo, useRef, Fragment } from 'react'
+import { useEffect, useState, useMemo, useRef, useCallback, Fragment } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { supabase } from '../lib/supabase'
@@ -37,6 +37,9 @@ import { bizDaysBetween } from '../lib/bizDay'
 import FxRateNotice from '../components/common/FxRateNotice'
 import { fmtKRW, fmtNumber } from '../lib/format'
 import { notifyApprovalTurn } from '../lib/approvalNotify'
+import { useToast } from '../contexts/ToastProvider'
+import { useReportItemLedger } from '../hooks/useReportItemLedger'
+import { isLedgerCategory } from '../lib/fxReportItemLedger'
 import {
   groupByStage, evaluateApproveGate, autoApproveStepsOnSubmit,
   isFinalApproval, pendingInStage, describeFlow,
@@ -501,6 +504,61 @@ export default function DailyReportPage() {
   const ac      = useApprovalConfig(resolvedCompany)
   const summary = useDailyReportSummary()
   const itemHook = useDailyReportItems()
+
+  // ── 외화 항목 ↔ 외화거래명세(원장) 항목 단위 반영 (2026-11-25) ─────────────
+  //   같은 외화 거래를 자금일보와 외화거래명세에 두 번 입력하던 것을 없앤다.
+  //   항목에 환율이 있으면 그 항목 그대로 원장에 반영하고, 고치거나 지우면 원장도 따라간다.
+  //   ⚠ 사용자 입력 경로(onAdd/onUpdate/onRemove)만 동기화한다 — 평가손익 자동기재는
+  //     원장 대상이 아니라(lib/fxReportItemLedger) 아래 래퍼를 거치지 않는다.
+  const toast = useToast()
+  const fxItemIds = useMemo(
+    () => itemHook.items.filter(i => isLedgerCategory(i)).map(i => i.id),
+    [itemHook.items])
+  const ledger = useReportItemLedger(fxItemIds)
+  const ledgerBy = user?.label ?? user?.code ?? 'unknown'
+
+  /** 원장 반영 결과를 알린다 — 실패해도 자금일보 항목 저장은 유지된다 */
+  const reportLedgerResult = useCallback((err: string | null, okMsg: string | null) => {
+    if (err) toast.error(`외화거래명세 반영: ${err}`, 7000)
+    else if (okMsg) toast.success(okMsg)
+  }, [toast])
+
+  const addItemWithLedger = useCallback(async (input: Parameters<typeof itemHook.addItem>[1]) => {
+    // ensureReport 는 아래에 선언된 함수 선언문이라 호이스팅된다(호출 시점에는 정의돼 있다)
+    const rid = dr.report?.id ?? await ensureReport()
+    if (!rid) return null
+    const id = await itemHook.addItem(rid, input)
+    if (id && isLedgerCategory(input) && input.fx_rate != null && input.fx_rate > 0) {
+      const err = await ledger.sync(id, reportDate, ledgerBy)
+      reportLedgerResult(err, `외화거래명세에 반영했습니다 (${input.currency} · 거래일 ${reportDate})`)
+    }
+    return id
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dr.report?.id, itemHook, ledger, reportDate, ledgerBy, reportLedgerResult])
+
+  const updateItemWithLedger = useCallback(async (id: string, patch: Parameters<typeof itemHook.updateItem>[1]) => {
+    const before = itemHook.items.find(i => i.id === id)
+    const ok = await itemHook.updateItem(id, patch)
+    if (!ok || !before) return
+    const after = { ...before, ...patch }
+    // 반영 대상이었거나 반영 대상이 된 항목만 — 금액·환율·통화·카테고리가 바뀌면 원장도 다시 맞춘다
+    if (isLedgerCategory(before) || isLedgerCategory(after)) {
+      const touched = ['amount', 'fx_rate', 'currency', 'category', 'direction'].some(k => k in patch)
+      if (!touched && !ledger.reflected.has(id)) return
+      const err = await ledger.sync(id, reportDate, ledgerBy)
+      reportLedgerResult(err, after.fx_rate ? '외화거래명세도 함께 수정했습니다' : null)
+    }
+  }, [itemHook, ledger, reportDate, ledgerBy, reportLedgerResult])
+
+  const removeItemWithLedger = useCallback(async (id: string) => {
+    // ⚠ 원장 반영을 먼저 되돌린다. 되돌리지 못하면(이미 처분된 유입 등) 항목을 지우지 않는다 —
+    //   항목만 사라지고 원장에 유입이 남으면 두 장부가 조용히 갈라진다.
+    if (ledger.reflected.has(id)) {
+      const err = await ledger.sync(id, reportDate, ledgerBy, true)
+      if (err) { reportLedgerResult(err, null); return }
+    }
+    await itemHook.removeItem(id)
+  }, [itemHook, ledger, reportDate, ledgerBy, reportLedgerResult])
 
   // 법인/날짜 변경 시 일보 조회
   // 리포트·daily 조회는 작성일(selectedDate) 기준:
@@ -1314,13 +1372,10 @@ export default function DailyReportPage() {
                   onPrefillConsumed={() => dir === 'in' ? setPrefillIn(null) : setPrefillOut(null)}
                   toKRW={summary.toKRW}
                   onEnsureReport={ensureReport}
-                  onAdd={async (input) => {
-                    const rid = dr.report?.id ?? await ensureReport()
-                    if (!rid) return null
-                    return itemHook.addItem(rid, input)
-                  }}
-                  onUpdate={itemHook.updateItem}
-                  onRemove={itemHook.removeItem}
+                  onAdd={addItemWithLedger}
+                  onUpdate={updateItemWithLedger}
+                  onRemove={removeItemWithLedger}
+                  ledgerReflected={ledger.reflected}
                   onFetchThreads={itemHook.fetchThreads}
                   onAddThread={itemHook.addThread}
                   onSourceChanged={() => void summary.fetch(resolvedCompany, selectedDate)}

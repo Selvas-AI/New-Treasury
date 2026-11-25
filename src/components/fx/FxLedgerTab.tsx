@@ -27,6 +27,8 @@ function lotState(lot: FxLot): LotState {
 const SOURCE_LABEL: Record<string, string> = {
   fx_trade_history:   '매각 체결',
   daily_report_item:  '자금일보 반영',
+  // 2026-11-25 — 자금일보 항목에 환율을 넣으면 항목 그대로 반영된다. 수정·취소는 자금일보에서 한다.
+  report_item:        '자금일보 항목',
   manual:             '수동 유출',
   transfer:           '계좌 대체',
   interest:           '이자 수취',
@@ -475,9 +477,12 @@ export function FxLedgerTab({
               className="rounded border px-2 py-1 text-xs dark:bg-slate-800" />
           </label>
           <div className="mb-3 text-[11px] text-gray-500 dark:text-slate-400">
-            <strong>거래일 기준</strong>으로 표시합니다. 원장에 이미 기록된 그날 거래(매각 체결·수동 유출 등)는
-            자동으로 차감되므로, 여기 남는 것은 <strong>원장이 모르는 증감</strong>뿐입니다.
-            적용 환율만 입력하면 유입/FIFO 소진으로 반영됩니다. 개시 로트가 이미 흡수한 과거 날짜는 "무시"로 뺄 수 있습니다.
+            <strong>💱 자금일보 항목에 환율을 넣으면 여기서 다시 입력할 필요가 없습니다</strong> — 그 항목이 그대로
+            원장에 반영되고, 아래 목록에서도 자동으로 빠집니다.
+            <br />
+            이 목록은 <strong>잔액 차이 기준</strong>(그날 마감잔액 − 전일 마감잔액)이라 항목 금액과 다를 수 있습니다.
+            원장에 이미 기록된 그날 거래(매각 체결·자금일보 항목 반영 등)를 차감하고 남는 <strong>원장이 모르는 증감</strong>만
+            보여줍니다. 개시 로트가 이미 흡수한 과거 날짜는 "무시"로 뺄 수 있습니다.
           </div>
           {reconcile.loading ? (
             <div className="text-xs text-gray-500">조회 중…</div>
@@ -491,8 +496,11 @@ export function FxLedgerTab({
                       : 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300'}`}>
                       {item.direction === 'in' ? '유입' : '유출'}
                     </span>
-                    <span className="text-gray-600 dark:text-slate-300" title={`자금현황 ${item.date} 행 · 거래일 ${item.txnDate}`}>
-                      {item.txnDate}
+                    {/* ⚠ 거래일만 보여주면 "11/24 에는 그런 입력이 없다"로 읽힌다 — 그 거래는
+                        다음 영업일(11/25) 자금일보에 기재되기 때문이다. 둘을 함께 적는다(2026-11-25 리포트). */}
+                    <span className="text-gray-600 dark:text-slate-300" title={`거래일 ${item.txnDate} · ${item.date} 자금일보에 기재된 잔액 기준`}>
+                      거래일 {item.txnDate}
+                      <span className="ml-1 text-[10px] text-gray-400 dark:text-slate-500">({item.date} 자금일보)</span>
                     </span>
                     <span className="ml-auto font-medium tabular-nums">
                       {fmtNumber(item.amount, currency === 'JPY' ? 0 : 2)}
