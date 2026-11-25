@@ -76,6 +76,7 @@
 | 환율 시계열 단위 | `useFxHistory().series` (원/1외화 정규화) | 엔진에 `data`(JPY 원/100엔 원값) 넣기 |
 | 자금일보 ↔ 원장 대사 | `lib/fxReconcile.computeReconcilePending` (운전 계좌유형 순증감 · 구간 매칭) | 원장 전체(정기예금 포함)와 운전자금 잔액 비교, 계좌 대체를 통째로 제외 |
 | 분기 기실현 손실 | `lib/fxQuarterLoss` + `useQuarterRealizedLoss` (원장·이번 분기·매각만) | 분기 구분 없는 수동 값(`fx_ops_loss_used`) |
+| 국면 확정(히스테리시스) · 백테스트 규칙 | `fxRegime.confirmRegime`(전진식, 창 30일) · `runBacktest` 기본 = 실전 리밸런싱 밴드 + 분기 손실 한도 | 직전 N일 전원 일치 방식 · 밴드 무시 백테스트(비교용 `ignoreRebalanceBand` 로만) |
 | **자금일보 외화 항목 → 원장** | `sync_report_item_ledger` RPC + `lib/fxReportItemLedger`(제외 카테고리 규칙, SQL 과 동일) · 페이지의 `addItemWithLedger`/`updateItemWithLedger`/`removeItemWithLedger` | 항목을 원장에 따로 다시 입력, 항목만 지우고 원장 반영을 남기기(삭제 전 반드시 되돌림) |
 | 밴드 초과분 산출 | `lib/fxBandExceed.ts` | σ×Z 한도 모델을 실무 화면에 복제 |
 | 매각 지시 payload | `buildThresholdOrderPayload` / `registerRegimeOrder` | 화면마다 propose 인자 직접 조립 |

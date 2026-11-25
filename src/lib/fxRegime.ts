@@ -385,31 +385,42 @@ export function classifyRegime(
  *    근거 문서가 MSM 을 도입하는 주된 이유도 결국 이 문제이며,
  *    ER + 칼만 + 히스테리시스 조합으로 실질 목적은 달성된다.
  *
+ * ⭐ 전진형 상태 기계 (2026-11-25 전수조사 F-09)
+ *   과거 구현은 최근 창 안에서 "확정 런"을 거꾸로 찾고, 못 찾으면 **가장 최근 원시 판정**을
+ *   돌려줬다. 그래서 판정이 매일 바뀌는 — 히스테리시스가 가장 필요한 — 구간에서 오히려
+ *   꺼졌다. 또 이전 국면을 유지할 때도 confirmedDays 에 **새 판정의 연속일**을 담아
+ *   화면의 "N일째 유지 중"이 틀렸다.
+ *   → 앞에서부터 훑으며 확정 국면을 유지하고, 새 판정이 confirmDays 연속일 때만 바꾼다.
+ *
  * @param rawCodes 과거~현재 순서의 원시 판정 배열
- * @returns 확정 국면과 현재 판정이 며칠째 유지됐는지
+ * @returns code=확정 국면, confirmedDays=그 국면이 확정된 뒤 경과일(창 시작이면 창 길이),
+ *          pendingCode/pendingStreak=전환 대기 중인 판정과 연속일
  */
 export function confirmRegime(
   rawCodes: RegimeCode[],
   confirmDays = 2,
-): { code: RegimeCode; confirmedDays: number } {
-  if (!rawCodes.length) return { code: '3-B', confirmedDays: 0 }
+): { code: RegimeCode; confirmedDays: number; pendingCode: RegimeCode | null; pendingStreak: number } {
+  if (!rawCodes.length) return { code: '3-B', confirmedDays: 0, pendingCode: null, pendingStreak: 0 }
 
-  const last = rawCodes[rawCodes.length - 1]
-  let streak = 1
-  for (let i = rawCodes.length - 2; i >= 0 && rawCodes[i] === last; i--) streak++
-
-  if (streak >= confirmDays) return { code: last, confirmedDays: streak }
-
-  // 아직 확정 전 — 직전에 확정돼 있던 국면을 유지한다
-  for (let i = rawCodes.length - 1 - streak; i >= 0; i--) {
-    const cand = rawCodes[i]
-    let s = 1
-    let j = i - 1
-    while (j >= 0 && rawCodes[j] === cand) { s++; j-- }
-    if (s >= confirmDays) return { code: cand, confirmedDays: streak }
-    i = j + 1
+  let confirmed = rawCodes[0]
+  let confirmedSince = 0
+  let cand = rawCodes[0]
+  let candStart = 0
+  for (let i = 1; i < rawCodes.length; i++) {
+    if (rawCodes[i] !== cand) { cand = rawCodes[i]; candStart = i }
+    if (cand !== confirmed && i - candStart + 1 >= Math.max(1, confirmDays)) {
+      confirmed = cand
+      confirmedSince = candStart
+    }
   }
-  return { code: last, confirmedDays: streak }
+  const last = rawCodes.length - 1
+  const pending = cand !== confirmed
+  return {
+    code: confirmed,
+    confirmedDays: last - confirmedSince + 1,
+    pendingCode: pending ? cand : null,
+    pendingStreak: pending ? last - candStart + 1 : 0,
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -967,7 +978,11 @@ export interface FxRegimeSignal {
     code:          RegimeCode
     label:         string
     rawCode:       RegimeCode
+    /** 확정 국면이 유지된 일수(판정 창 안에서) */
     confirmedDays: number
+    /** 전환 대기 중인 판정 — 아직 confirmDays 를 채우지 못함. 없으면 null */
+    pendingCode?:  RegimeCode | null
+    pendingStreak?: number
   }
   /** 수준 축. 앵커 미설정이거나 Level 축 비활성이면 null */
   level: {
@@ -1014,6 +1029,12 @@ export function evaluateRegime(
   ctx: TreasuryContext,
   protocol: PolicyProtocol = DEFAULT_PROTOCOL,
   currency = 'USD',
+  /**
+   * 원시 판정 캐시 — 키: 판정에 쓴 시계열 길이. **백테스트 전용 성능 장치**다.
+   * 원시 판정은 그 길이의 앞부분과 프로토콜에만 의존하므로, 같은 실행 안에서 재사용해도
+   * 결과가 같다(판정 경로는 하나 — 분기하지 않는다). 프로토콜이 다르면 캐시를 새로 만들 것.
+   */
+  rawCodeCache?: Map<number, RegimeCode>,
 ): FxRegimeSignal | null {
   if (series.length < 30) return null   // 최소 표본 — 이하면 판정 자체가 무의미
 
@@ -1022,16 +1043,23 @@ export function evaluateRegime(
   if (!ind) return null
 
   // 히스테리시스용 최근 원시 판정 이력.
-  // 전 구간을 다시 계산하면 O(n²)이라, 확정에 필요한 최소 구간만 되짚는다.
-  const need = Math.max(protocol.confirmDays * 3, 6)
+  // ⚠ 창이 짧으면(과거 6일) 흔들리는 구간에서 "직전 확정 국면"을 찾지 못한다(F-09).
+  //   전진형 확정은 창 시작을 출발점으로 삼으므로 충분히 길게 본다.
+  const need = Math.max(protocol.confirmDays * 3, 30)
   const rawCodes: RegimeCode[] = []
   for (let back = Math.min(need, series.length - 30); back >= 0; back--) {
-    const sub = closes.slice(0, closes.length - back)
-    const si = computeIndicators(sub, protocol.kalmanQ, protocol.kalmanR)
-    if (si) rawCodes.push(classifyRegime(si, protocol.thresholds))
+    const len = closes.length - back
+    const cached = rawCodeCache?.get(len)
+    if (cached) { rawCodes.push(cached); continue }
+    const si = back === 0 ? ind : computeIndicators(closes.slice(0, len), protocol.kalmanQ, protocol.kalmanR)
+    if (si) {
+      const rc = classifyRegime(si, protocol.thresholds)
+      rawCodeCache?.set(len, rc)
+      rawCodes.push(rc)
+    }
   }
   const rawCode = rawCodes.length ? rawCodes[rawCodes.length - 1] : classifyRegime(ind, protocol.thresholds)
-  const { code, confirmedDays } = confirmRegime(rawCodes, protocol.confirmDays)
+  const { code, confirmedDays, pendingCode, pendingStreak } = confirmRegime(rawCodes, protocol.confirmDays)
 
   // ── 수준(Level) 판정 → 목표 비율 ─────────────────────────────────
   // Level 이 방향을, Trend 가 속도를 정한다. 앵커가 없으면 구 국면 매핑으로 폴백.
@@ -1079,7 +1107,7 @@ export function evaluateRegime(
     asOf:     series[series.length - 1].date,
     currency,
     indicators: ind,
-    regime: { code, label: regimeLabel(code), rawCode, confirmedDays },
+    regime: { code, label: regimeLabel(code), rawCode, confirmedDays, pendingCode, pendingStreak },
     level: levelBlock,
     decision: {
       rawTargetRatio:     applied.rawTarget,

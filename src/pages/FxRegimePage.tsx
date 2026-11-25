@@ -988,6 +988,8 @@ export default function FxRegimePage() {
           actualTrades={actualTradeHistory.data}
           initialLots={fxLots.lots}
           currency={currency}
+          // 실전은 바구니 전체 한도지만 백테스트는 통화 하나만 돌리므로 그 통화가 한도를 다 쓴다고 본다(근사)
+          quarterLossCapKRW={treasuryInputs.quarterLossCapKRW}
         />
       )}
 

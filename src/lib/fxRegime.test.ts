@@ -72,3 +72,52 @@ describe('protocolFromParams — 앵커가 없으면 수준 축이 꺼진다', (
     expect(p.useLevelAxis).toBe(false)
   })
 })
+
+// ── 히스테리시스 — 전진형 확정 (2026-11-25 전수조사 F-09) ─────────────────────
+import { confirmRegime, evaluateRegime as evalRegime, DEFAULT_PROTOCOL as DP, type RegimeCode } from './fxRegime'
+
+describe('confirmRegime — 흔들릴 때도 직전 확정 국면을 유지한다', () => {
+  const c = (xs: string[]) => xs as RegimeCode[]
+
+  it('하루만 바뀌면 유지, 2일 연속이면 확정 (기존 동작 유지)', () => {
+    expect(confirmRegime(c(['3-B', '3-B', '3-B', '1-B']), 2).code).toBe('3-B')
+    const r = confirmRegime(c(['3-B', '3-B', '3-B', '1-B', '1-B']), 2)
+    expect(r.code).toBe('1-B')
+    expect(r.confirmedDays).toBe(2)
+  })
+
+  it('매일 오락가락하면 직전 확정 국면을 유지한다 (과거: 최근 원시 판정을 그대로 썼다)', () => {
+    const r = confirmRegime(c(['1-B', '1-B', '1-B', '2-B', '1-B', '2-B', '1-B', '2-B']), 2)
+    expect(r.code).toBe('1-B')
+    expect(r.pendingCode).toBe('2-B')
+    expect(r.pendingStreak).toBe(1)
+  })
+
+  it('이전 국면을 유지하는 동안 "N일째"는 그 국면의 일수다 (과거: 새 판정의 연속일 1)', () => {
+    const r = confirmRegime(c(['4-B', '4-B', '4-B', '4-B', '4-B', '2-A']), 2)
+    expect(r.code).toBe('4-B')
+    expect(r.confirmedDays).toBe(6)   // 1 이 아니다
+  })
+
+  it('confirmDays=3 이면 3일 연속이어야 바뀐다', () => {
+    expect(confirmRegime(c(['3-B', '3-B', '5-A', '5-A']), 3).code).toBe('3-B')
+    expect(confirmRegime(c(['3-B', '3-B', '5-A', '5-A', '5-A']), 3).code).toBe('5-A')
+  })
+})
+
+describe('evaluateRegime — 원시 판정 캐시(백테스트 성능)는 결과를 바꾸지 않는다', () => {
+  it('캐시 유무와 무관하게 같은 판정', () => {
+    const s = Array.from({ length: 320 }, (_, i) => ({
+      date: `2025-${String(1 + Math.floor(i / 28) % 12).padStart(2, '0')}-${String(1 + (i % 28)).padStart(2, '0')}`,
+      rate: 1400 + Math.sin(i / 7) * 15 + i * 0.2,
+    }))
+    const ctx = { totalFundKRW: 1e10, fxHoldingKRW: 3e9, fxPayableKRW: 0, policyMaxRatio: null, policyMinRatio: null }
+    const cache = new Map<number, RegimeCode>()
+    for (let n = 200; n <= 320; n += 5) {
+      const a = evalRegime(s.slice(0, n), ctx, DP)
+      const b = evalRegime(s.slice(0, n), ctx, DP, 'USD', cache)
+      expect(b?.regime.code).toBe(a?.regime.code)
+      expect(b?.decision.appliedTargetRatio).toBe(a?.decision.appliedTargetRatio)
+    }
+  })
+})

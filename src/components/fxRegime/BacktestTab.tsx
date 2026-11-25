@@ -45,6 +45,8 @@ export interface BacktestTabProps {
   actualTrades?: FxTradeRecord[]
   initialLots?: FxLot[]
   currency: string
+  /** 분기 손실 실현 한도(원, 0=미설정) — 실전과 같은 제약을 백테스트에도 건다(F-07) */
+  quarterLossCapKRW?: number
 }
 
 interface Preset { label: string; from: string; hint: string }
@@ -68,7 +70,7 @@ export default function BacktestTab({
   series, protocol, initialTotalKRW, initialFxHolding, monthlyInflowFx,
   fxPayableFx, policyMinRatio, policyMaxRatio,
   avgAcquisitionRate, maxExposureKRW,
-  actualTrades = [], initialLots = [], currency,
+  actualTrades = [], initialLots = [], currency, quarterLossCapKRW = 0,
 }: BacktestTabProps) {
 
   const presets = useMemo(() => buildPresets(series), [series])
@@ -84,6 +86,8 @@ export default function BacktestTab({
   const [volatilityInput, setVolatilityInput] = useState(8)
   const [rerollSeed, setRerollSeed] = useState(0)
   const [mcRuns, setMcRuns] = useState(15)
+  /** 리밸런싱 기준 민감도 — 5회 실행이라 버튼으로만 돌린다 */
+  const [bandSweep, setBandSweep] = useState<{ key: string; rows: { band: number; r: BacktestResult }[] } | null>(null)
   const [mcProgress, setMcProgress] = useState(0)
   const [mc, setMc] = useState<MonteCarloResult | null>(null)
   const [mcLoading, setMcLoading] = useState(false)
@@ -101,6 +105,7 @@ export default function BacktestTab({
     policyMaxRatio: ignoreBand ? null : policyMaxRatio,
     checkEveryDays: checkDays,
     costBps,
+    quarterLossCapKRW,
   }
 
   const result: BacktestResult = useMemo(
@@ -108,8 +113,29 @@ export default function BacktestTab({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [series, startDate, initialTotalKRW, initialFxHolding, monthlyInflowFx, fxPayableFx,
      policyMinRatio, policyMaxRatio, protocol, costBps, checkDays, ignoreBand,
-     avgAcquisitionRate, maxExposureKRW],
+     avgAcquisitionRate, maxExposureKRW, quarterLossCapKRW],
   )
+
+  // ⭐ 비교 — 리밸런싱 기준을 무시하고 점검일마다 초과분을 다 판 경우(2026-11-25 이전 백테스트 방식)
+  const resultNoBand: BacktestResult = useMemo(
+    () => runBacktest({ ...common, protocol, avgAcquisitionRate, maxExposureKRW, ignoreRebalanceBand: true }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [series, startDate, initialTotalKRW, initialFxHolding, monthlyInflowFx, fxPayableFx,
+     policyMinRatio, policyMaxRatio, protocol, costBps, checkDays, ignoreBand,
+     avgAcquisitionRate, maxExposureKRW, quarterLossCapKRW],
+  )
+
+  // 민감도 결과는 조건이 바뀌면 무효 — 키로 비교해 화면에서 숨긴다
+  const sweepKey = [startDate, initialTotalKRW, initialFxHolding, monthlyInflowFx, fxPayableFx, policyMinRatio,
+    policyMaxRatio, JSON.stringify(protocol), costBps, checkDays, ignoreBand, avgAcquisitionRate,
+    maxExposureKRW, quarterLossCapKRW, series.length, series.at(-1)?.date].join('|')
+  function runBandSweep() {
+    const rows = [0.01, 0.02, 0.03, 0.04, 0.05].map(band => ({
+      band,
+      r: runBacktest({ ...common, protocol: { ...protocol, rebalanceBandPct: band }, avgAcquisitionRate, maxExposureKRW }),
+    }))
+    setBandSweep({ key: sweepKey, rows })
+  }
 
   const chart = useMemo(() => {
     if (!result.points.length) return []
@@ -155,12 +181,12 @@ export default function BacktestTab({
     policyMinRatio: ignoreBand ? null : policyMinRatio,
     policyMaxRatio: ignoreBand ? null : policyMaxRatio,
     protocol, checkEveryDays: checkDays, costBps, avgAcquisitionRate, initialLots, maxExposureKRW,
-    randomize, volatilityPct,
+    quarterLossCapKRW, randomize, volatilityPct,
     // eslint-disable-next-line react-hooks/exhaustive-deps -- rerollSeed 는 참조하지 않지만 "다시 뽑기" 클릭 시 재계산을 강제하기 위한 트리거
   }), [series, projectionMonths, projectionScenario, annualMovePct, initialTotalKRW,
     initialFxHolding, monthlyInflowFx, fxPayableFx, ignoreBand, policyMinRatio,
     policyMaxRatio, protocol, checkDays, costBps, avgAcquisitionRate, initialLots, maxExposureKRW,
-    randomize, volatilityPct, rerollSeed])
+    quarterLossCapKRW, randomize, volatilityPct, rerollSeed])
 
   const projectionChart = useMemo(() => projection.result.points.map(p => ({
     date: p.date,
@@ -182,7 +208,7 @@ export default function BacktestTab({
     setMcLoading(false)
   }, [series, projectionMonths, projectionScenario, annualMovePct,
     initialTotalKRW, initialFxHolding, monthlyInflowFx, fxPayableFx, ignoreBand, policyMinRatio,
-    policyMaxRatio, protocol, checkDays, costBps, avgAcquisitionRate, initialLots, maxExposureKRW, volatilityPct])
+    policyMaxRatio, protocol, checkDays, costBps, avgAcquisitionRate, initialLots, maxExposureKRW, quarterLossCapKRW, volatilityPct])
 
   // 탭을 떠날 때도 실행 중인 워커가 계속 백그라운드에서 도는 일이 없도록 정리한다
   useEffect(() => stopMcWorker, [])
@@ -208,7 +234,7 @@ export default function BacktestTab({
       policyMinRatio: ignoreBand ? null : policyMinRatio,
       policyMaxRatio: ignoreBand ? null : policyMaxRatio,
       protocol, checkEveryDays: checkDays, costBps, avgAcquisitionRate, initialLots, maxExposureKRW,
-      volatilityPct,
+      quarterLossCapKRW, volatilityPct,
     }
 
     worker.onmessage = (e: MessageEvent<MonteCarloWorkerMessage>) => {
@@ -655,7 +681,8 @@ export default function BacktestTab({
                     <td className="py-1.5 text-right text-gray-400">—</td><td className="py-1.5 text-right text-gray-400">—</td>
                     <td className="py-1.5 text-right">{actual.rows.length}회</td>
                   </tr>}
-                  <Row name="FX 리짐 전략" caption="같은 가정에서 국면별 타이밍대로 팔았다면" r={result} strong />
+                  <Row name="FX 리짐 전략" caption={`실전 규칙 — 목표와 ${(protocol.rebalanceBandPct * 100).toFixed(0)}%p 이상 벌어질 때만 매도${quarterLossCapKRW > 0 ? ' · 분기 손실 한도 적용' : ''}`} r={result} strong />
+                  <Row name="└ 리밸런싱 기준 무시" caption="비교용 — 점검일마다 초과분을 전부 매도 (2026-11-25 이전 백테스트 방식)" r={resultNoBand} />
                   <tr className="border-b border-gray-100 dark:border-slate-800">
                     <td className="py-1.5">
                       <div className="text-gray-600 dark:text-slate-300">① 유입 즉시 전액 환전</div>
@@ -690,6 +717,63 @@ export default function BacktestTab({
                 표본 부족으로 건너뛴 점검 {result.skippedChecks}회
               </div>
             )}
+            {(result.heldByBandChecks > 0 || result.cappedByLossTrades > 0) && (
+              <div className="mt-1 text-[11px] text-gray-500 dark:text-slate-400">
+                {result.heldByBandChecks > 0 && <>목표보다 많았지만 차이가 기준 미만이라 보류한 점검 {result.heldByBandChecks}회</>}
+                {result.heldByBandChecks > 0 && result.cappedByLossTrades > 0 && ' · '}
+                {result.cappedByLossTrades > 0 && <>분기 손실 한도로 덜 판 거래 {result.cappedByLossTrades}회</>}
+              </div>
+            )}
+
+            {/* 리밸런싱 기준 민감도 — 3%p 가 적절한지 판단하는 근거 */}
+            <div className="mt-3 border-t border-gray-100 pt-3 dark:border-slate-800">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-semibold text-gray-700 dark:text-slate-200">리밸런싱 기준별 결과</span>
+                <InfoTip text={[
+                  '실전에서는 목표 비중과 현재 비중의 차이가 리밸런싱 기준(기본 3%p) 이상일 때만 매도 지시가 나옵니다.',
+                  '기준을 1~5%p 로 바꿔 같은 기간을 다시 돌린 결과입니다. 기준이 좁으면 자주 조금씩, 넓으면 드물게 크게 팝니다.',
+                  '평균 실현환율이 기간 평균보다 높고 거래 횟수가 감당 가능한 기준을 고르는 데 참고하세요. 기준값은 정책 설정에서 바꿉니다.',
+                ]} />
+                <button
+                  onClick={runBandSweep}
+                  className="rounded bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                >{bandSweep?.key === sweepKey ? '다시 계산' : '계산하기'}</button>
+                {bandSweep && bandSweep.key !== sweepKey && (
+                  <span className="text-[11px] text-amber-700 dark:text-amber-400">조건이 바뀌었습니다 — 다시 계산하세요</span>
+                )}
+              </div>
+              {bandSweep?.key === sweepKey && (
+                <div className="mt-2 overflow-x-auto">
+                  <table className="w-full min-w-[480px] text-xs">
+                    <thead>
+                      <tr className="border-b border-gray-200 text-left text-gray-500 dark:border-slate-700 dark:text-slate-400">
+                        <th className="py-1.5">기준</th>
+                        <th className="py-1.5 text-right">평균 실현환율</th>
+                        <th className="py-1.5 text-right">기간 평균 대비</th>
+                        <th className="py-1.5 text-right">기말 미환전</th>
+                        <th className="py-1.5 text-right">거래</th>
+                      </tr>
+                    </thead>
+                    <tbody className="tabular-nums">
+                      {bandSweep.rows.map(({ band, r }) => {
+                        const current = Math.abs(band - protocol.rebalanceBandPct) < 1e-9
+                        return (
+                          <tr key={band} className={`border-b border-gray-100 dark:border-slate-800 ${current ? 'bg-blue-50/60 font-semibold dark:bg-blue-900/10' : ''}`}>
+                            <td className="py-1.5">{(band * 100).toFixed(0)}%p{current && ' (현재)'}</td>
+                            <td className="py-1.5 text-right">{fmtRate(r.weightedAverageRate)}</td>
+                            <td className={`py-1.5 text-right ${(r.ratePremium ?? 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                              {r.ratePremium == null ? '—' : `${r.ratePremium >= 0 ? '+' : ''}${r.ratePremium.toFixed(1)}원`}
+                            </td>
+                            <td className="py-1.5 text-right">{Math.round(r.endingHoldingFx).toLocaleString()}</td>
+                            <td className="py-1.5 text-right">{r.tradeCount}회</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* 거래 로그 */}

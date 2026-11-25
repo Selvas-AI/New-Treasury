@@ -21,7 +21,7 @@ import {
   type RegimeSeriesPoint,
   type RegimeCode,
 } from './fxRegime'
-import { availableAmount, consumeFifoLots, unrealizedPnlKRW, weightedBookRate, type FxLot } from './fxLots'
+import { availableAmount, consumeFifoLots, previewFifoConsumption, unrealizedPnlKRW, weightedBookRate, type FxLot } from './fxLots'
 
 export interface BacktestInput {
   /** 오름차순 일별 환율 (원/외화 1단위) */
@@ -54,6 +54,18 @@ export interface BacktestInput {
   initialLots?: FxLot[]
   /** 최대 미환전 노출 한도 (원화). 넘으면 Level 과 무관하게 환전 */
   maxExposureKRW?: number | null
+  /**
+   * ⭐ 리밸런싱 밴드를 무시하고 점검일마다 초과분을 전부 판다(2026-11-25 이전 방식).
+   *   기본 false = **실전 규칙**: 목표와 현재의 차이가 밴드 이상일 때만 판다.
+   *   과거 백테스트는 이 규칙 없이 돌아, 실전과 다른 규칙을 검증하고 있었다(전수조사 F-07).
+   *   비교용으로만 남긴다.
+   */
+  ignoreRebalanceBand?: boolean
+  /**
+   * 분기 손실 실현 한도(원). 0/미지정 = 제약 없음. FIFO 원장이 있을 때만 적용된다.
+   * 실전과 같이 이번 분기(달력 분기) 실현손익 합계가 손실이면 그만큼 한도를 쓴 것으로 본다.
+   */
+  quarterLossCapKRW?: number
 }
 
 export interface BacktestTrade {
@@ -117,6 +129,10 @@ export interface BacktestResult {
   maxExposureKRW: number
   tradeCount: number
   skippedChecks: number
+  /** 초과 보유였지만 리밸런싱 밴드 미만이라 팔지 않은 점검 횟수 */
+  heldByBandChecks: number
+  /** 분기 손실 한도 때문에 덜 판 횟수 */
+  cappedByLossTrades: number
   /** 취득원가 대비 실현 이익 합계 (avgAcquisitionRate 지정 시) */
   realizedGainKRW: number
   /** 취득원가 대비 실현 손실 합계 (음수) */
@@ -138,6 +154,7 @@ const EMPTY: BacktestResult = {
   immediateRealizedKRW: 0, immediateWeightedAverageRate: null,
   neverEndingHoldingFx: 0, neverEndingValueKRW: 0, totalCostKRW: 0,
   maxExposureFx: 0, maxExposureKRW: 0, tradeCount: 0, skippedChecks: 0,
+  heldByBandChecks: 0, cappedByLossTrades: 0,
   realizedGainKRW: 0, realizedLossKRW: 0, belowCostTrades: 0,
   endingFifoBookRate: null, endingUnrealizedPnlKRW: null, endingTotalPnlKRW: null,
 }
@@ -148,6 +165,7 @@ export function runBacktest(input: BacktestInput): BacktestResult {
     fxPayableFx, policyMinRatio, policyMaxRatio, protocol,
     checkEveryDays = 5, costBps = 10,
     avgAcquisitionRate = null, initialLots = [], maxExposureKRW: maxExposureLimit = null,
+    ignoreRebalanceBand = false, quarterLossCapKRW = 0,
   } = input
 
   const startIdx = series.findIndex(p => p.date >= startDate)
@@ -172,6 +190,14 @@ export function runBacktest(input: BacktestInput): BacktestResult {
   let realizedGain = 0
   let realizedLoss = 0
   let belowCostTrades = 0
+  let heldByBandChecks = 0
+  let cappedByLossTrades = 0
+  // 분기 손실 한도 — 달력 분기별 실현손익 합계
+  let quarterKey = ''
+  let quarterNetPnl = 0
+  // 원시 국면 판정 캐시 — 판정 창이 30일로 길어져(F-09) 점검일마다 다시 계산하면 느리다.
+  // 같은 실행·같은 프로토콜 안에서만 재사용한다(evaluateRegime 의 rawCodeCache 주석 참조).
+  const rawCodeCache = new Map<number, RegimeCode>()
   const fifoEnabled = initialLots.length > 0 || (avgAcquisitionRate != null && avgAcquisitionRate > 0)
   let fifoLots: FxLot[] = initialLots.length > 0
     ? initialLots.map(lot => ({ ...lot }))
@@ -236,6 +262,8 @@ export function runBacktest(input: BacktestInput): BacktestResult {
           avgAcquisitionRate: fifoEnabled ? weightedBookRate(fifoLots) : avgAcquisitionRate,
         },
         protocol,
+        'USD',
+        rawCodeCache,
       )
 
       if (!sig) {
@@ -248,9 +276,29 @@ export function runBacktest(input: BacktestInput): BacktestResult {
           sig.decision.appliedTargetRatio * totalKRW / rate,
         )
         // 순유입 모델: 목표 미달이면 기다릴 뿐 매수하지 않는다.
-        const requestedSellFx = Math.max(0, holdingFx - desiredHoldingFx)
+        const excessFx = Math.max(0, holdingFx - desiredHoldingFx)
+        // ⭐ 실전 규칙 — 목표와 현재의 차이가 리밸런싱 밴드 미만이면 팔지 않는다(F-07).
+        //   (실시간 판정의 decision.actionRequired 와 같은 기준)
+        const bandAllows = ignoreRebalanceBand || sig.decision.actionRequired
+        if (!bandAllows && excessFx > 0) heldByBandChecks++
+        const requestedSellFx = bandAllows ? excessFx : 0
         // 정기예금은 만기일까지 보유액에는 포함되지만 환전 가능액에는 포함하지 않는다.
-        const sellFx = fifoEnabled ? Math.min(requestedSellFx, availableAmount(fifoLots, date)) : requestedSellFx
+        let sellFx = fifoEnabled ? Math.min(requestedSellFx, availableAmount(fifoLots, date)) : requestedSellFx
+
+        // 분기 손실 한도 — 실전과 같이 FIFO 실제 손실(총)로 본다
+        const qk = `${date.slice(0, 4)}q${Math.floor((Number(date.slice(5, 7)) - 1) / 3) + 1}`
+        if (qk !== quarterKey) { quarterKey = qk; quarterNetPnl = 0 }
+        if (fifoEnabled && quarterLossCapKRW > 0 && sellFx > 0) {
+          const remaining = Math.max(0, quarterLossCapKRW - Math.max(0, -quarterNetPnl))
+          const lossOf = (q: number) => previewFifoConsumption(fifoLots, q, rate, date)
+            .reduce((t, c) => t + Math.max(0, -c.realizedPnlKRW), 0)
+          if (lossOf(sellFx) > remaining) {
+            let lo = 0; let hi = sellFx
+            for (let k = 0; k < 40; k++) { const mid = (lo + hi) / 2; if (lossOf(mid) <= remaining) lo = mid; else hi = mid }
+            sellFx = lo
+            cappedByLossTrades++
+          }
+        }
         if (sellFx > 0) {
           const gross = sellFx * rate
           const cost = gross * costRate
@@ -269,6 +317,7 @@ export function runBacktest(input: BacktestInput): BacktestResult {
             pnl = fifo.realizedPnlKRW
             fifoConsumedRate = fifo.consumedBookRate
             fifoCumulativeRealizedPnl += fifo.realizedPnlKRW
+            quarterNetPnl += fifo.realizedPnlKRW
             if (pnl >= 0) realizedGain += pnl
             else { realizedLoss += pnl; belowCostTrades++ }
           }
@@ -324,7 +373,7 @@ export function runBacktest(input: BacktestInput): BacktestResult {
     immediateWeightedAverageRate: immediateConvertedFx > 0 ? immediateGross / immediateConvertedFx : null,
     neverEndingHoldingFx: neverHoldingFx, neverEndingValueKRW: neverHoldingFx * lastRate,
     totalCostKRW: totalCost, maxExposureFx, maxExposureKRW,
-    tradeCount: trades.length, skippedChecks: skipped,
+    tradeCount: trades.length, skippedChecks: skipped, heldByBandChecks, cappedByLossTrades,
     realizedGainKRW: realizedGain, realizedLossKRW: realizedLoss, belowCostTrades,
     endingFifoBookRate,
     endingUnrealizedPnlKRW,
