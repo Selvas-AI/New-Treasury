@@ -16,6 +16,7 @@
  *
  * 판정 경로는 useFxRegime 훅 하나로 정책 화면과 공유한다 — 화면별로 다시 계산하지 말 것.
  */
+import BasketTargetsTable from '../components/fxRegime/BasketTargetsTable'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import {
@@ -145,7 +146,7 @@ function NumField({ value, onChange, disabled, placeholder, allowEmpty = false, 
   )
 }
 
-function TreasuryInputPanel({ source, onSourceChange, inputs, currency, canEdit, basket, userLabel, company, quarterLoss }: {
+function TreasuryInputPanel({ source, onSourceChange, inputs, currency, canEdit, basket, userLabel, company, quarterLoss, valuation }: {
   source: InputSource
   onSourceChange: (source: InputSource) => void
   inputs: FxTreasuryInputAdapter
@@ -156,6 +157,8 @@ function TreasuryInputPanel({ source, onSourceChange, inputs, currency, canEdit,
   company: string
   /** 이번 분기 기실현 손실 — 원장 집계 + 보정 (F-08) */
   quarterLoss: QuarterLoss
+  /** 참고 — 보유 외화 평가손익 (D3, 한도 미포함) */
+  valuation: { code: string; rate: number; pnlKRW: number }[]
 }) {
   // 모든 탭에 공통으로 붙는 큰 입력 영역이므로 기본은 접어 결과 화면을 넓게 쓴다.
   const [open, setOpen] = useState(false)
@@ -289,6 +292,27 @@ function TreasuryInputPanel({ source, onSourceChange, inputs, currency, canEdit,
           </InputField>
         )}
       </div>
+      {/* D3(2026-11-25): 한도는 매각 실현손익만. 평가·재평가 손익은 참고로 따로 보여 준다 */}
+      {!sim && (
+        <div className="mt-2 rounded-lg border border-dashed border-gray-300 px-3 py-2 text-[11px] text-gray-600 dark:border-slate-600 dark:text-slate-300">
+          <span className="font-semibold">참고 · 분기 손실 한도 미포함</span>
+          <span className="ml-2">
+            보유 외화 평가손익{' '}
+            <b className={valuation.reduce((t, v) => t + v.pnlKRW, 0) < 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-700 dark:text-emerald-400'}>
+              {fmtKRW(valuation.reduce((t, v) => t + v.pnlKRW, 0))}
+            </b>
+            {valuation.length > 0 && <> ({valuation.map(v => `${v.code} ${fmtKRW(v.pnlKRW)}`).join(' · ')})</>}
+          </span>
+          <span className="ml-3">
+            이번 분기 재평가 대체 손익{' '}
+            <b className={quarterLoss.revalueNetKRW < 0 ? 'text-red-600 dark:text-red-400' : ''}>{fmtKRW(quarterLoss.revalueNetKRW)}</b>
+            {quarterLoss.revalueCount > 0 && ` (${quarterLoss.revalueCount}건)`}
+          </span>
+          <div className="mt-0.5 text-[10px] text-gray-500 dark:text-slate-400">
+            한도는 원화 환전(매각)으로 확정한 손실만 셉니다. 평가손익은 원장 잔여 로트 × 최근 환율, 재평가 대체 손익은 계좌 대체 시 회계정책으로 확정된 금액입니다.
+          </div>
+        </div>
+      )}
       {saveMsg && (
         <div className={`mt-2 text-[11px] ${saveMsg.startsWith('저장 실패') ? 'text-red-600 dark:text-red-400' : 'text-emerald-700 dark:text-emerald-300'}`}>
           {saveMsg}
@@ -859,6 +883,15 @@ export default function FxRegimePage() {
           basis={leadShare != null ? { code: leadCode, sharePct: leadShare } : null}
         />
       )}
+      {verdict && leadSignal && basket.currencyTargets.length > 1 && (
+        <details className="rounded-xl border border-gray-200 bg-white px-4 py-2 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+          <summary className="cursor-pointer text-xs font-medium text-gray-700 dark:text-slate-200">
+            통화별 목표 — 바구니 목표 {(leadSignal.decision.appliedTargetRatio * 100).toFixed(1)}%는 통화별 목표의 구성비 가중평균
+          </summary>
+          <BasketTargetsTable targets={basket.currencyTargets} weightedTarget={leadSignal.decision.appliedTargetRatio}
+            leadTarget={basket.leadTargetRatio} leadCode={leadCode} />
+        </details>
+      )}
 
       {/* 매각 지시 등록/이행 현황 — 조치 카드 바로 아래, 화면 최상단(세션26차 7~8일차).
           실무자가 가장 필요로 하는 행동을 탭을 열지 않아도 바로 할 수 있게 한다.
@@ -958,6 +991,7 @@ export default function FxRegimePage() {
         userLabel={user?.label ?? user?.code ?? 'unknown'}
         company={company}
         quarterLoss={quarterLoss}
+        valuation={basket.valuation}
       />
 
       {tab === 'decision' && (
@@ -990,6 +1024,7 @@ export default function FxRegimePage() {
           currency={currency}
           // 실전은 바구니 전체 한도지만 백테스트는 통화 하나만 돌리므로 그 통화가 한도를 다 쓴다고 본다(근사)
           quarterLossCapKRW={treasuryInputs.quarterLossCapKRW}
+          company={company}
         />
       )}
 

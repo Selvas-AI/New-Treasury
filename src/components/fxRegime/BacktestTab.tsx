@@ -26,6 +26,8 @@ import {
 } from '../../lib/fxProjection'
 import type { FxLot } from '../../lib/fxLots'
 import type { MonteCarloWorkerMessage, MonteCarloWorkerRequest } from '../../lib/fxMonteCarlo.worker'
+import type { BandReviewInput } from '../../lib/fxBandReview'
+import BandReviewModal from './BandReviewModal'
 
 const CARD = 'rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900'
 
@@ -47,6 +49,8 @@ export interface BacktestTabProps {
   currency: string
   /** 분기 손실 실현 한도(원, 0=미설정) — 실전과 같은 제약을 백테스트에도 건다(F-07) */
   quarterLossCapKRW?: number
+  /** 회고 리포트를 정책회의 안건으로 올릴 법인 (D5) */
+  company: string
 }
 
 interface Preset { label: string; from: string; hint: string }
@@ -70,7 +74,7 @@ export default function BacktestTab({
   series, protocol, initialTotalKRW, initialFxHolding, monthlyInflowFx,
   fxPayableFx, policyMinRatio, policyMaxRatio,
   avgAcquisitionRate, maxExposureKRW,
-  actualTrades = [], initialLots = [], currency, quarterLossCapKRW = 0,
+  actualTrades = [], initialLots = [], currency, quarterLossCapKRW = 0, company,
 }: BacktestTabProps) {
 
   const presets = useMemo(() => buildPresets(series), [series])
@@ -86,6 +90,8 @@ export default function BacktestTab({
   const [volatilityInput, setVolatilityInput] = useState(8)
   const [rerollSeed, setRerollSeed] = useState(0)
   const [mcRuns, setMcRuns] = useState(15)
+  /** 회고 리포트(D5) — 열 때의 입력을 고정해 둔다 */
+  const [reviewInput, setReviewInput] = useState<BandReviewInput | null>(null)
   /** 리밸런싱 기준 민감도 — 5회 실행이라 버튼으로만 돌린다 */
   const [bandSweep, setBandSweep] = useState<{ key: string; rows: { band: number; r: BacktestResult }[] } | null>(null)
   const [mcProgress, setMcProgress] = useState(0)
@@ -129,6 +135,23 @@ export default function BacktestTab({
   const sweepKey = [startDate, initialTotalKRW, initialFxHolding, monthlyInflowFx, fxPayableFx, policyMinRatio,
     policyMaxRatio, JSON.stringify(protocol), costBps, checkDays, ignoreBand, avgAcquisitionRate,
     maxExposureKRW, quarterLossCapKRW, series.length, series.at(-1)?.date].join('|')
+  /** 회고 리포트 — 기간은 리포트가 정하므로(최근 6개월~3년) 화면의 시작일은 쓰지 않는다 */
+  function openBandReview() {
+    const { series: s, initialTotalKRW: t, initialFxHolding: h, monthlyInflowFx: m, fxPayableFx: f,
+            policyMinRatio: mn, policyMaxRatio: mx, checkEveryDays: c, costBps: bp } = common
+    setReviewInput({
+      base: { series: s, initialTotalKRW: t, initialFxHolding: h, monthlyInflowFx: m, fxPayableFx: f,
+              policyMinRatio: mn, policyMaxRatio: mx, checkEveryDays: c, costBps: bp,
+              avgAcquisitionRate, maxExposureKRW, quarterLossCapKRW },
+      protocol,
+      currency,
+      actualSales: actualTrades
+        .filter(row => row.status === '완료' && row.direction === 'sell' && row.currency === currency &&
+          (row.completed_rate ?? row.trade_rate) != null)
+        .map(row => ({ date: row.trade_date, amountFx: row.amount_fx, rate: (row.completed_rate ?? row.trade_rate) as number })),
+    })
+  }
+
   function runBandSweep() {
     const rows = [0.01, 0.02, 0.03, 0.04, 0.05].map(band => ({
       band,
@@ -741,6 +764,11 @@ export default function BacktestTab({
                 {bandSweep && bandSweep.key !== sweepKey && (
                   <span className="text-[11px] text-amber-700 dark:text-amber-400">조건이 바뀌었습니다 — 다시 계산하세요</span>
                 )}
+                <button
+                  onClick={openBandReview}
+                  className="ml-auto rounded bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700"
+                  title="최근 6개월·1년·2년·3년 × 기준 1~5%p 회고 → 정책회의 안건 상정"
+                >📊 회고 리포트 · 정책회의 상정</button>
               </div>
               {bandSweep?.key === sweepKey && (
                 <div className="mt-2 overflow-x-auto">
@@ -845,6 +873,9 @@ export default function BacktestTab({
             이자와 실제 일별 수출대금 편차는 반영하지 않습니다.
           </div>
         </>
+      )}
+      {reviewInput && (
+        <BandReviewModal input={reviewInput} company={company} onClose={() => setReviewInput(null)} />
       )}
     </div>
   )

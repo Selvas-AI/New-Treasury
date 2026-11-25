@@ -13,7 +13,19 @@
  *   타입으로 보장된다. 통화 탭은 분석 화면(차트·근거·앵커)만 바꾼다.
  *
  * ⚠ 판정 경로는 여전히 evaluateRegime 하나다. 여기서는 입력(바구니 ctx)을 만들고
- *   결과를 묶을 뿐, 목표비중을 다시 계산하지 않는다.
+ *   결과를 묶을 뿐, 국면·목표 판정 로직을 따로 두지 않는다.
+ *
+ * ⭐ 바구니 목표 = 통화별 목표의 보유 비중 가중평균 (2026-11-25 결정 D4)
+ *   과거엔 대표 통화(보유 1위) 판정 하나가 바구니 전체 목표를 정했다 — EUR·JPY 가 강세든
+ *   약세든 USD 국면대로 같은 비율로 팔았다. 이제
+ *     · 통화마다 자기 시계열·자기 앵커로 evaluateRegime 을 돌려 목표 t_i 를 받는다(같은 바구니 ctx)
+ *     · 바구니 목표 t* = Σ w_i · t_i  (w_i = 바구니 안 원화 구성비)
+ *     · 통화별 매도 = h_i × (1 − t_i / c)  (c = 현재 비중) — 합계가 정확히 (c − t*)·T 가 된다.
+ *       자기 목표가 높은(유리한 국면) 통화는 덜 팔고, 낮은 통화는 더 판다.
+ *       t_i > c 인 통화는 0(매수하지 않음)으로 두고 나머지를 비율대로 늘려 합계를 맞춘다.
+ *   시계열이 부족한 통화는 대표 통화 목표를 대신 쓴다(화면에 "대표 통화 목표 적용"으로 표시).
+ *   앵커가 없는 통화는 수준 축 없이 추세만으로 판정된다(protocolFromParams 규칙).
+ *   리밸런싱 기준(3%p)·대표 통화(문구·차트)는 그대로다.
  */
 import {
   evaluateRegime, protocolFromParams,
@@ -22,7 +34,7 @@ import {
 import { buildVerdict, type Verdict } from './fxVerdict'
 import { allocateAcrossBasket, type FxAllocationRow, type FxBandExceedResult } from './fxBandExceed'
 import { bepStats } from './fxPnl'
-import { availableAmount, previewFifoConsumption, type FxLot } from './fxLots'
+import { availableAmount, previewFifoConsumption, unrealizedPnlKRW, type FxLot } from './fxLots'
 import { bizDaysBetween } from './bizDay'
 import type { FxCode } from './treasuryCalc'
 
@@ -116,6 +128,24 @@ export interface BasketBudget {
   scale: number
 }
 
+/** 통화별 목표와 매도 몫 (D4) */
+export interface BasketCurrencyTarget {
+  code: FxCode
+  /** 바구니 안 원화 구성비(%) */
+  sharePct: number
+  holdingKRW: number
+  /** 이 통화 자체 판정. 시계열 부족이면 null */
+  signal: FxRegimeSignal | null
+  /** 이 통화의 목표 비중(제약 적용 후, 0~1) */
+  targetRatio: number
+  /** own = 자기 판정, lead = 시계열 부족으로 대표 통화 목표를 대신 씀 */
+  source: 'own' | 'lead'
+  /** 앵커 설정 여부 — 없으면 추세만 반영 */
+  anchorSet: boolean
+  /** 리짐 권고 총액 중 이 통화 몫(원, 예산 적용 전) */
+  sellKRW: number
+}
+
 export interface BasketDecision {
   leadCode: FxCode
   leadShare: number | null
@@ -136,6 +166,15 @@ export interface BasketDecision {
   regimeAllocation: FxAllocationRow[]
   /** 스냅샷 기록용 — 리짐 권고 총액(예산 적용 전) */
   regimeSuggestKRW: number
+  /** 통화별 목표·매도 몫 (D4). 판정이 없으면 빈 배열 */
+  currencyTargets: BasketCurrencyTarget[]
+  /** 대표 통화 단독 목표 — 가중평균과 비교 표시용 */
+  leadTargetRatio: number | null
+  /**
+   * 참고 — 지금 보유 외화의 평가손익(원장 로트 × 최근 환율). 분기 손실 한도에는 넣지 않는다(D3).
+   * 원장 로트가 없는 통화는 빠진다.
+   */
+  valuation: { code: string; rate: number; pnlKRW: number }[]
 }
 
 /** 마지막 시계열 값 → 시장환율 → 바구니 내재환율 순으로 원/1외화 환율을 고른다 */
@@ -178,16 +217,26 @@ export function buildBasketDecision(input: BasketDecisionInput): BasketDecision 
     ...(input.ctxOverride ?? {}),
   }
 
+  const valuation = Object.entries(input.currencies)
+    .filter(([, c]) => (c.fifoLots?.length ?? 0) > 0)
+    .map(([code, c]) => { const r = rateOf(code, input); return { code, rate: r, pnlKRW: r > 0 ? unrealizedPnlKRW(c.fifoLots!, r) : 0 } })
+    .filter(v => v.rate > 0)
+
   const series = lead?.series ?? []
-  const signal = series.length >= MIN_SERIES
-    ? evaluateRegime(series, ctx, protocolFromParams(input.get, leadCode), leadCode)
+  const leadProtocol = protocolFromParams(input.get, leadCode)
+  const leadSignal = series.length >= MIN_SERIES
+    ? evaluateRegime(series, ctx, leadProtocol, leadCode)
     : null
 
   const empty = (s: FxRegimeSignal | null): BasketDecision => ({
     leadCode, leadShare, signal: s, ctx, staleDays: null, budget: null, verdict: null,
     allocation: [], regimeExecKRW: 0, regimeAllocation: [], regimeSuggestKRW: 0,
+    currencyTargets: [], leadTargetRatio: s?.decision.appliedTargetRatio ?? null, valuation,
   })
-  if (!signal) return empty(null)
+  if (!leadSignal) return empty(null)
+
+  // ── 통화별 목표 → 바구니 가중평균 목표 (D4) ──
+  const { targets: currencyTargets, signal } = weightBasketTargets(input, ctx, leadCode, leadSignal, leadProtocol.rebalanceBandPct)
 
   const staleDays = signal.asOf >= input.today ? 0 : bizDaysBetween(signal.asOf, input.today)
 
@@ -204,7 +253,19 @@ export function buildBasketDecision(input: BasketDecisionInput): BasketDecision 
   const regimeSuggestKRW = signal.decision.actionRequired && signal.decision.suggestedTradeKRW < 0
     ? -signal.decision.suggestedTradeKRW : 0
 
-  const saleRows = (totalKRW: number) => allocateAcrossBasket(totalKRW, input.basket)
+  // 리짐 매도는 통화별 몫(D4)대로, 몫이 없으면(매도 권고 없음) 구성비대로 나눈다
+  const regimeWeights = currencyTargets.filter(t => t.sellKRW > 0)
+  const regimeWeightSum = regimeWeights.reduce((t, r) => t + r.sellKRW, 0)
+  const splitKRW = (totalKRW: number): FxAllocationRow[] => {
+    if (regimeWeightSum <= 0) return allocateAcrossBasket(totalKRW, input.basket)
+    return regimeWeights.map(w => {
+      const b = input.basket[w.code]
+      const r = b && b.nativeAmount > 0 ? b.krwAmount / b.nativeAmount : 0
+      const krwAmount = totalKRW * (w.sellKRW / regimeWeightSum)
+      return { code: w.code, sharePct: w.sharePct, krwAmount, nativeAmount: r > 0 ? krwAmount / r : null }
+    }).sort((a, b) => b.krwAmount - a.krwAmount)
+  }
+  const saleRows = (totalKRW: number) => splitKRW(totalKRW)
     .filter(a => a.nativeAmount != null && a.nativeAmount > 0)
     .map(a => {
       const lots = input.currencies[a.code]?.fifoLots ?? []
@@ -270,7 +331,12 @@ export function buildBasketDecision(input: BasketDecisionInput): BasketDecision 
     rebalanceBandPct: protocolFromParams(input.get, leadCode).rebalanceBandPct,
   })
 
-  const allocation = verdict.orderKRW ? allocateAcrossBasket(verdict.orderKRW, input.basket) : []
+  // 조치 금액의 통화별 배분 — 밴드 복귀 의무가 더 크면 그 지시(한도초과)와 같은 구성비 안분,
+  // 리짐 권고가 결정한 금액이면 통화별 목표 몫(D4)대로 — 아래 매각 지시 등록 표와 같은 비율
+  const bandDriven = band.over && band.excessKRW >= allowedKRW
+  const allocation = verdict.orderKRW
+    ? (bandDriven ? allocateAcrossBasket(verdict.orderKRW, input.basket) : splitKRW(verdict.orderKRW))
+    : []
   // 판정 이력이 오래됐으면(blocked) 리짐 몫은 0 — 오래된 데이터로 지시를 만들지 않는다
   const regimeExecKRW = verdict.kind === 'blocked' ? 0 : allowedKRW
   // 리짐 몫의 통화별 배분 = 가용재고로 자른 수량 × 손실 한도 비율 — 등록 지시와 1:1 로 맞는다
@@ -285,5 +351,76 @@ export function buildBasketDecision(input: BasketDecisionInput): BasketDecision 
     leadCode, leadShare, signal, ctx, staleDays, budget, verdict,
     allocation, regimeExecKRW, regimeAllocation,
     regimeSuggestKRW: verdict.kind === 'blocked' ? 0 : regimeSuggestKRW,
+    currencyTargets, leadTargetRatio: leadSignal.decision.appliedTargetRatio, valuation,
   }
+}
+
+/**
+ * 통화별 판정 → 바구니 목표 가중평균 → 통화별 매도 몫 (D4).
+ * 반환 signal 은 대표 통화 판정에 **바구니 목표를 덮어쓴** 것 — 문구·스냅샷·경보가 모두 같은 목표를 본다.
+ */
+export function weightBasketTargets(
+  input: BasketDecisionInput,
+  ctx: TreasuryContext,
+  leadCode: FxCode,
+  leadSignal: FxRegimeSignal,
+  rebalanceBandPct: number,
+): { targets: BasketCurrencyTarget[]; signal: FxRegimeSignal } {
+  const rows = Object.entries(input.basket).filter(([, v]) => v.krwAmount > 0)
+  const basketKRW = rows.reduce((t, [, v]) => t + v.krwAmount, 0)
+  const leadTarget = leadSignal.decision.appliedTargetRatio
+  if (basketKRW <= 0 || ctx.totalFundKRW <= 0) return { targets: [], signal: leadSignal }
+
+  const targets: BasketCurrencyTarget[] = rows.map(([code, v]): BasketCurrencyTarget => {
+    const s = input.currencies[code]?.series ?? []
+    const own = code === leadCode
+      ? leadSignal
+      : s.length >= MIN_SERIES ? evaluateRegime(s, ctx, protocolFromParams(input.get, code), code) : null
+    return {
+      code: code as FxCode,
+      sharePct: (v.krwAmount / basketKRW) * 100,
+      holdingKRW: v.krwAmount,
+      signal: own,
+      targetRatio: own ? own.decision.appliedTargetRatio : leadTarget,
+      source: own ? 'own' : 'lead',
+      anchorSet: own?.level != null,
+      sellKRW: 0,
+    }
+  }).sort((a, b) => b.holdingKRW - a.holdingKRW)
+
+  const T = ctx.totalFundKRW
+  const current = ctx.fxHoldingKRW / T
+  const weighted = targets.reduce((t, r) => t + (r.sharePct / 100) * r.targetRatio, 0)
+  const rawWeighted = targets.reduce((t, r) =>
+    t + (r.sharePct / 100) * (r.signal?.decision.rawTargetRatio ?? leadSignal.decision.rawTargetRatio), 0)
+  const gap = weighted - current
+  const actionRequired = Math.abs(gap) >= rebalanceBandPct
+  const tradeKRW = gap * T
+
+  // 통화별 몫: h_i(1 − t_i/c) — 음수(자기 목표가 현재보다 높음)는 0, 나머지를 비율대로 맞춘다
+  if (actionRequired && tradeKRW < 0 && current > 0) {
+    const raw = targets.map(r => Math.max(0, r.holdingKRW * (1 - r.targetRatio / current)))
+    const sum = raw.reduce((t, v) => t + v, 0)
+    const need = -tradeKRW
+    targets.forEach((r, i) => { r.sellKRW = sum > 0 ? raw[i] * (need / sum) : 0 })
+  }
+
+  const action = !actionRequired ? '조치 불필요 — 리밸런싱 밴드 이내'
+    : tradeKRW < 0 ? '외화 매도 권고'
+    : '외화 보유 확대 권고 (순유입 구조에서는 환전 지연을 의미)'
+  const signal: FxRegimeSignal = {
+    ...leadSignal,
+    decision: {
+      ...leadSignal.decision,
+      rawTargetRatio: rawWeighted,
+      appliedTargetRatio: weighted,
+      currentRatio: current,
+      suggestedTradeKRW: tradeKRW,
+      actionRequired,
+      action,
+      // 예상 손익은 통화별 FIFO 미리보기(pnlForKRW)로 낸다 — 대표 통화 평균원가 근사는 쓰지 않는다
+      expectedRealizedPnlKRW: null,
+    },
+  }
+  return { targets, signal }
 }

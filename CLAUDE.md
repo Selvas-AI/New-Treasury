@@ -76,6 +76,9 @@
 | 환율 시계열 단위 | `useFxHistory().series` (원/1외화 정규화) | 엔진에 `data`(JPY 원/100엔 원값) 넣기 |
 | 자금일보 ↔ 원장 대사 | `lib/fxReconcile.computeReconcilePending` (운전 계좌유형 순증감 · 구간 매칭) | 원장 전체(정기예금 포함)와 운전자금 잔액 비교, 계좌 대체를 통째로 제외 |
 | 분기 기실현 손실 | `lib/fxQuarterLoss` + `useQuarterRealizedLoss` (원장·이번 분기·매각만) | 분기 구분 없는 수동 값(`fx_ops_loss_used`) |
+| **바구니 목표**(D4) | `fxBasketDecision.weightBasketTargets` — 통화별 목표의 보유 비중 가중평균, 통화별 매도 몫 h_i(1−t_i/c) | 대표 통화 판정 하나로 바구니 목표 결정, 구성비만으로 리짐 매도 안분 |
+| 리밸런싱 기준 회고 → 정책회의 안건(D5) | `lib/fxBandReview`(+worker) → `BandReviewModal` → `policy_decisions`(대기) · `/policy?tab=decisions&meeting=` | 평균 실현환율만으로 기준 비교(총가치로 비교), 안건 수기 작성 |
+| 분기 한도 밖 손익 표시(D3) | `useQuarterRealizedLoss.revalueNetKRW` · `BasketDecision.valuation` | 평가·재평가 손익을 한도에 합산 |
 | 국면 확정(히스테리시스) · 백테스트 규칙 | `fxRegime.confirmRegime`(전진식, 창 30일) · `runBacktest` 기본 = 실전 리밸런싱 밴드 + 분기 손실 한도 | 직전 N일 전원 일치 방식 · 밴드 무시 백테스트(비교용 `ignoreRebalanceBand` 로만) |
 | **자금일보 외화 항목 → 원장** | `sync_report_item_ledger` RPC + `lib/fxReportItemLedger`(제외 카테고리 규칙, SQL 과 동일) · 페이지의 `addItemWithLedger`/`updateItemWithLedger`/`removeItemWithLedger` | 항목을 원장에 따로 다시 입력, 항목만 지우고 원장 반영을 남기기(삭제 전 반드시 되돌림) |
 | 밴드 초과분 산출 | `lib/fxBandExceed.ts` | σ×Z 한도 모델을 실무 화면에 복제 |

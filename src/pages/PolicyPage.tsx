@@ -1010,7 +1010,10 @@ export default function PolicyPage() {
 
   // ── 회의·의결 훅 ──────────────────────────────────────────────────────
   const meetings = usePolicyMeetings()
-  const [selectedMeetingId, setSelectedMeetingId] = useState<string | null>(null)
+  // ?meeting=<id> — 다른 화면(FX 회고 리포트 안건 상정 등)에서 방금 등록한 회의로 바로 연다
+  const [selectedMeetingId, setSelectedMeetingId] = useState<string | null>(
+    () => new URLSearchParams(window.location.search).get('meeting'),
+  )
   const activeMeetingId = selectedMeetingId ?? meetings.data[0]?.id ?? null
   const activeMeeting   = meetings.data.find(m => m.id === activeMeetingId)
 

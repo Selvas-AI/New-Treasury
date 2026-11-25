@@ -188,3 +188,57 @@ describe('바구니 예산 — 분기 손실 한도는 FIFO 실제 손실로 (F-
     expect(r.budget!.scale).toBe(1)
   })
 })
+
+describe('바구니 목표 = 통화별 목표의 보유 비중 가중평균 (D4)', () => {
+  it('바구니 목표는 Σ 구성비 × 통화별 목표', () => {
+    const r = buildBasketDecision(input())
+    const weighted = r.currencyTargets.reduce((t, c) => t + (c.sharePct / 100) * c.targetRatio, 0)
+    expect(r.signal!.decision.appliedTargetRatio).toBeCloseTo(weighted, 10)
+    expect(r.currencyTargets.map(c => c.code)).toEqual(['USD', 'EUR', 'JPY'])
+  })
+
+  it('시계열이 부족한 통화는 대표 통화 목표를 대신 쓴다', () => {
+    const r = buildBasketDecision(input({
+      currencies: {
+        USD: { series: series(1400), lots: null, payableFx: 0 },
+        EUR: { series: series(1500, 10), lots: null, payableFx: 0 },
+      },
+    }))
+    const eur = r.currencyTargets.find(c => c.code === 'EUR')!
+    expect(eur.source).toBe('lead')
+    expect(eur.targetRatio).toBe(r.leadTargetRatio)
+  })
+
+  it('통화별 매도 몫 합계 = 리짐 권고 총액, 자기 목표가 높은 통화는 덜 판다', () => {
+    // EUR 만 강한 상승 추세 → EUR 목표가 USD 보다 높게 나오도록.
+    // 정책 밴드에 눌리지 않게 밴드를 넓히고, 현재 비중을 높여(약 81%) 매도가 나오게 한다
+    const wide: Record<string, number> = { fx_target_min: 1, fx_target_max: 95 }
+    const r = buildBasketDecision(input({
+      get: k => wide[k] ?? null,
+      denominatorKRW: 34_000_000_000,
+      currencies: {
+        USD: { series: series(1400, 300, -0.0004), lots: null, payableFx: 0 },
+        EUR: { series: series(1500, 300, 0.001), lots: null, payableFx: 0 },
+        JPY: { series: series(9.5), lots: null, payableFx: 0 },
+      },
+    }))
+    const sum = r.currencyTargets.reduce((t, c) => t + c.sellKRW, 0)
+    expect(sum).toBeCloseTo(-r.signal!.decision.suggestedTradeKRW, -2)
+    for (const c of r.currencyTargets) expect(c.sellKRW).toBeGreaterThanOrEqual(0)
+    const usd = r.currencyTargets.find(c => c.code === 'USD')!
+    const eur = r.currencyTargets.find(c => c.code === 'EUR')!
+    expect(eur.targetRatio).toBeGreaterThan(usd.targetRatio)
+    // 보유액 대비 매도 비율이 EUR 쪽이 더 낮다
+    expect(eur.sellKRW / eur.holdingKRW).toBeLessThan(usd.sellKRW / usd.holdingKRW)
+  })
+
+  it('리짐 지시 배분(regimeAllocation)은 통화별 몫 비율을 따른다', () => {
+    const r = buildBasketDecision(sellInput())
+    expect(r.regimeExecKRW).toBeGreaterThan(0)
+    const total = r.currencyTargets.reduce((t, c) => t + c.sellKRW, 0)
+    for (const a of r.regimeAllocation) {
+      const c = r.currencyTargets.find(x => x.code === a.code)!
+      expect(a.krwAmount / r.regimeExecKRW).toBeCloseTo(c.sellKRW / total, 6)
+    }
+  })
+})

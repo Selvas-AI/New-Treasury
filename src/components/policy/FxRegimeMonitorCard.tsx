@@ -13,6 +13,7 @@
  *   4. 미완료 매각 지시 D-day
  *   5. 분기 손실실현 한도 소진율
  */
+import BasketTargetsTable from '../fxRegime/BasketTargetsTable'
 import { Link } from 'react-router-dom'
 import { useFxRegime } from '../../hooks/useFxRegime'
 import { useFxBasketDecision } from '../../hooks/useFxBasketDecision'
@@ -144,6 +145,16 @@ export default function FxRegimeMonitorCard({ company, currency }: {
               통화별 배분: {basket.allocation.map(a => `${a.code} ${fmtKRW(a.krwAmount)}`).join(' · ')}
             </p>
           )}
+          <p className="mt-1 text-[11px] text-gray-500 dark:text-slate-400">
+            이번 분기 매각 실현손실 {fmtKRW(quarterLoss.totalKRW)}(한도 반영)
+            {' '}· 참고: 보유 평가손익 {fmtKRW(basket.valuation.reduce((t, v) => t + v.pnlKRW, 0))}
+            {' '}· 재평가 대체 손익 {fmtKRW(quarterLoss.revalueNetKRW)}(한도 미포함)
+          </p>
+          <details className="mt-2">
+            <summary className="cursor-pointer text-[11px] font-medium text-blue-700 dark:text-blue-300">통화별 목표 보기</summary>
+            <BasketTargetsTable targets={basket.currencyTargets} weightedTarget={bs.decision.appliedTargetRatio}
+              leadTarget={basket.leadTargetRatio} leadCode={basket.leadCode} />
+          </details>
         </div>
       )}
 
