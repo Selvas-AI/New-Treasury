@@ -17,7 +17,6 @@
 import { useMemo, useState } from 'react'
 import { NumInput } from '../common/NumInput'
 import { FX_OPS_PARAM_KEYS, REGIME_CURRENCIES, regimeOpsFallback } from '../../lib/fxRegimeInputs'
-import { fmtKRW } from '../../lib/format'
 import type { DerivedOps } from '../../lib/cashflowFxDerive'
 import type { Company } from '../../types'
 
@@ -280,8 +279,8 @@ export default function FxRegimeOpsCard({
         정책 밴드는 <strong>전사 외화 바구니 ÷ 총자금</strong> 기준이며, 리짐 목표 비중이 이 밴드를
         넘을 수 없습니다(충돌 시 정책이 이깁니다). 아래 한도 계산기의 권고 밴드를 참고안으로
         쓰되, 확정값은 이 칸에 직접 입력합니다.
-        {' '}이번 분기 <strong>기실현 손실</strong>은 실무가 기록하는 사실 항목이라 여기서 편집하지 않습니다
-        (현재 {fmtKRW(params.get(FX_OPS_PARAM_KEYS.lossUsed) ?? 0)}).
+        {' '}이번 분기 <strong>기실현 손실</strong>은 외화거래명세 체결 실현손익에서 <strong>분기별로 자동 계산</strong>됩니다
+        (원장에 없는 손실만 FX 리짐 전략 화면에서 보정 입력).
       </p>
 
       {bandInvalid && (

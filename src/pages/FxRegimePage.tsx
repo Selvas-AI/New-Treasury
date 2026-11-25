@@ -26,6 +26,7 @@ import { useAuth } from '../hooks/useAuth'
 import { usePageCompany } from '../hooks/usePageCompany'
 import { useFxTradeHistory } from '../hooks/useFxTradeHistory'
 import { useFxRegime } from '../hooks/useFxRegime'
+import type { QuarterLoss } from '../hooks/useQuarterRealizedLoss'
 import {
   backfillFxHistory, syncLatestFxHistory, fetchFxHistoryCoverage, type FxHistoryCoverage,
   type BackfillProgress,
@@ -144,7 +145,7 @@ function NumField({ value, onChange, disabled, placeholder, allowEmpty = false, 
   )
 }
 
-function TreasuryInputPanel({ source, onSourceChange, inputs, currency, canEdit, basket, userLabel, company }: {
+function TreasuryInputPanel({ source, onSourceChange, inputs, currency, canEdit, basket, userLabel, company, quarterLoss }: {
   source: InputSource
   onSourceChange: (source: InputSource) => void
   inputs: FxTreasuryInputAdapter
@@ -153,6 +154,8 @@ function TreasuryInputPanel({ source, onSourceChange, inputs, currency, canEdit,
   basket: { code: string; nativeAmount: number; krwAmount: number }[]
   userLabel: string
   company: string
+  /** 이번 분기 기실현 손실 — 원장 집계 + 보정 (F-08) */
+  quarterLoss: QuarterLoss
 }) {
   // 모든 탭에 공통으로 붙는 큰 입력 영역이므로 기본은 접어 결과 화면을 넓게 쓴다.
   const [open, setOpen] = useState(false)
@@ -168,9 +171,10 @@ function TreasuryInputPanel({ source, onSourceChange, inputs, currency, canEdit,
   /** 정책 소유 필드 — 실데이터 모드에서는 잠긴다. 시뮬레이션에서만 값을 바꿔볼 수 있다. */
   const locked = !sim
 
+  // 원장 외 손실 보정(이번 분기) — 기실현 손실 자체는 원장에서 계산된다(F-08)
   async function saveLoss(v: number | null) {
-    if (v == null || v === inputs.realizedLossThisQuarterKRW) return
-    const err = await inputs.saveOpsInput({ realizedLossThisQuarterKRW: v }, userLabel)
+    if (v == null || v === quarterLoss.adjustKRW) return
+    const err = await inputs.saveLossAdjust(quarterLoss.quarterKey, v, userLabel)
     setSaveMsg(err ? `저장 실패: ${err}` : '저장되었습니다')
     if (err) setLossDraft(null)
   }
@@ -260,17 +264,30 @@ function TreasuryInputPanel({ source, onSourceChange, inputs, currency, canEdit,
           <NumField value={inputs.quarterLossCapKRW} disabled={locked}
             onChange={v => setNumber('quarterLossCapKRW', v)} />
         </InputField>
-        <InputField label="이번 분기 실현 손실" unit="원" owner="ops">
-          <NumField
-            value={lossDraft ?? inputs.realizedLossThisQuarterKRW}
-            disabled={sim ? false : !canEdit}
-            onChange={v => {
-              if (sim) { setNumber('realizedLossThisQuarterKRW', v); return }
-              setLossDraft(v ?? 0); setSaveMsg(null)
-            }}
-            onCommit={sim ? undefined : v => void saveLoss(v)}
-          />
+        {/* ⚠ 기실현 손실은 원장(체결 실현손익)에서 **이번 분기만** 계산한다(F-08).
+            과거엔 분기 구분 없는 수동 값이라 지난 분기 손실이 이번 분기 한도를 계속 깎았다. */}
+        <InputField label={`이번 분기 실현 손실 (${quarterLoss.quarterKey.toUpperCase()})`} unit="원" owner="treasury">
+          <NumField value={sim ? inputs.realizedLossThisQuarterKRW : quarterLoss.totalKRW} disabled={!sim}
+            onChange={v => { if (sim) setNumber('realizedLossThisQuarterKRW', v) }} />
+          {!sim && (
+            <div className="mt-0.5 text-[10px] text-gray-500 dark:text-slate-400">
+              원장 집계 {fmtKRW(quarterLoss.ledgerKRW)} + 보정 {fmtKRW(quarterLoss.adjustKRW)}
+            </div>
+          )}
         </InputField>
+        {!sim && (
+          <InputField label="원장 외 손실 보정 (이번 분기)" unit="원" owner="ops">
+            <NumField
+              value={lossDraft ?? quarterLoss.adjustKRW}
+              disabled={!canEdit}
+              onChange={v => { setLossDraft(v ?? 0); setSaveMsg(null) }}
+              onCommit={v => void saveLoss(v)}
+            />
+            <div className="mt-0.5 text-[10px] text-gray-500 dark:text-slate-400">
+              외화거래명세에 기록되지 않은 손실만 입력합니다. 분기가 바뀌면 자동으로 0 에서 시작합니다.
+            </div>
+          </InputField>
+        )}
       </div>
       {saveMsg && (
         <div className={`mt-2 text-[11px] ${saveMsg.startsWith('저장 실패') ? 'text-red-600 dark:text-red-400' : 'text-emerald-700 dark:text-emerald-300'}`}>
@@ -421,7 +438,7 @@ export default function FxRegimePage() {
   const {
     hist, inputs: treasuryInputs, series, protocol, ctx, signal,
     fxPayableFx, fxPayableKRW, availableFx, basket: portfolioBasket, fxLots, params,
-    policyData,
+    policyData, quarterLoss,
   } = useFxRegime(company, currency, inputSource, true)
 
   /**
@@ -437,7 +454,7 @@ export default function FxRegimePage() {
     totalFundKRW: ctx.totalFundKRW, fxHoldingKRW: ctx.fxHoldingKRW,
     policyMaxRatio: ctx.policyMaxRatio, policyMinRatio: ctx.policyMinRatio,
   } : null, [inputSource, ctx.totalFundKRW, ctx.fxHoldingKRW, ctx.policyMaxRatio, ctx.policyMinRatio])
-  const basket = useFxBasketDecision(company, { policyData, params, ctxOverride: simCtx })
+  const basket = useFxBasketDecision(company, { policyData, params, ctxOverride: simCtx, realizedLossKRW: quarterLoss.totalKRW })
   const leadCode   = basket.leadCode
   const leadShare  = basket.leadShare
   const leadSignal = basket.signal
@@ -940,6 +957,7 @@ export default function FxRegimePage() {
         basket={portfolioBasket}
         userLabel={user?.label ?? user?.code ?? 'unknown'}
         company={company}
+        quarterLoss={quarterLoss}
       />
 
       {tab === 'decision' && (

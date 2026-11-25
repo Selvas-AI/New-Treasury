@@ -70,12 +70,12 @@ export default function FxRegimeMonitorCard({ company, currency }: {
   currency: string
 }) {
   // ⚠ autoSync=false — 실무 화면이 이미 보충한다. 여기서 켜면 같은 ECOS 호출이 중복된다.
-  const { signal, inputs, availableFx, fxLots, hist, latestRate, policyData, params } =
+  const { signal, inputs, availableFx, fxLots, hist, latestRate, policyData, params, quarterLoss } =
     useFxRegime(company, currency, 'live', false)
   // ⭐ 바구니 결론 — FX 리짐 전략 조치 카드와 **같은 판정**(2026-11-25 전수조사 F-05).
   //   과거엔 이 카드가 통화별 판정만 보여줘, 정책회의가 보는 목표와 실무자가 보는 목표가 달랐다.
   //   아래 통화별 섹션은 분석용이다.
-  const basket = useFxBasketDecision(company, { policyData, params })
+  const basket = useFxBasketDecision(company, { policyData, params, realizedLossKRW: quarterLoss.totalKRW })
   const trades = useFxTradeHistory(company)
 
   const pending = trades.data.filter(t => t.status !== '완료' && t.status !== '취소')

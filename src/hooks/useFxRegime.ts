@@ -17,6 +17,7 @@ import { usePolicyParams } from './usePolicyParams'
 import { usePolicyDashboard } from './usePolicyDashboard'
 import { useFxLots } from './useFxLots'
 import { useFxHistory } from './useFxHistory'
+import { useQuarterRealizedLoss, type QuarterLoss } from './useQuarterRealizedLoss'
 import {
   evaluateRegime, protocolFromParams,
   type RegimeSeriesPoint, type TreasuryContext, type FxRegimeSignal,
@@ -51,6 +52,8 @@ export interface FxRegimeBundle {
   validPolicyBand: boolean
   /** 전사 외화 바구니 (통화별 원금·원화환산) */
   basket: { code: string; nativeAmount: number; krwAmount: number }[]
+  /** 이번 분기 기실현 손실 — 원장 집계 + 보정 (F-08) */
+  quarterLoss: QuarterLoss
 }
 
 /**
@@ -78,13 +81,19 @@ export function useFxRegime(
       .filter(i => i.available === '가용' && i.currency === currency)
       .reduce((sum, i) => sum + (i.amount || 0), 0)
 
+  // 이번 분기 기실현 손실 — 원장 집계 + 원장 외 보정 (F-08). 수동 단일값을 대체한다.
+  const quarterLoss = useQuarterRealizedLoss(company, params)
+
   const treasuryValues = useMemo<Partial<FxTreasuryInputs>>(() => ({
     totalFundKRW:          policyData.fxPolicyDenominator,
     fxHoldingFx:           fxLots.totalAmount > 0 ? fxLots.totalAmount : treasuryNativeHolding,
     portfolioFxHoldingKRW: policyData.fxPortfolioHoldings,
-    avgAcquisitionRate:    fxLots.bookRate ?? 0,
+    // F-18: 판정용 장부환율은 **지금 팔 수 있는 로트**의 가중평균 — 잠긴 정기예금 제외
+    avgAcquisitionRate:    fxLots.availableBookRate ?? fxLots.bookRate ?? 0,
+    realizedLossThisQuarterKRW: quarterLoss.totalKRW,
   }), [policyData.fxPolicyDenominator, policyData.fxPortfolioHoldings,
-       treasuryNativeHolding, fxLots.totalAmount, fxLots.bookRate])
+       treasuryNativeHolding, fxLots.totalAmount, fxLots.bookRate, fxLots.availableBookRate,
+       quarterLoss.totalKRW])
 
   const inputs = useFxTreasuryInputs(source, company, currency, treasuryValues, params)
 
@@ -146,6 +155,6 @@ export function useFxRegime(
   return {
     params, policyData, fxLots, hist, inputs,
     series, protocol, ctx, signal,
-    latestRate, fxPayableFx, fxPayableKRW, availableFx, validPolicyBand, basket,
+    latestRate, fxPayableFx, fxPayableKRW, availableFx, validPolicyBand, basket, quarterLoss,
   }
 }

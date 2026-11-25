@@ -74,6 +74,8 @@
 | **판정 스냅샷** | `fx_regime_snap_*_basket` **1건** + `readBasketSnapshot`(신선도) | 통화별 스냅샷 기록·조회(같은 의무를 통화 수만큼 셌다) |
 | 리짐 매각 지시 payload | `lib/fxRegimeOrder.ts` `buildRegimeOrderPayloads` (배분표대로 통화별) | 바구니 총액을 한 통화로 등록 |
 | 환율 시계열 단위 | `useFxHistory().series` (원/1외화 정규화) | 엔진에 `data`(JPY 원/100엔 원값) 넣기 |
+| 자금일보 ↔ 원장 대사 | `lib/fxReconcile.computeReconcilePending` (운전 계좌유형 순증감 · 구간 매칭) | 원장 전체(정기예금 포함)와 운전자금 잔액 비교, 계좌 대체를 통째로 제외 |
+| 분기 기실현 손실 | `lib/fxQuarterLoss` + `useQuarterRealizedLoss` (원장·이번 분기·매각만) | 분기 구분 없는 수동 값(`fx_ops_loss_used`) |
 | **자금일보 외화 항목 → 원장** | `sync_report_item_ledger` RPC + `lib/fxReportItemLedger`(제외 카테고리 규칙, SQL 과 동일) · 페이지의 `addItemWithLedger`/`updateItemWithLedger`/`removeItemWithLedger` | 항목을 원장에 따로 다시 입력, 항목만 지우고 원장 반영을 남기기(삭제 전 반드시 되돌림) |
 | 밴드 초과분 산출 | `lib/fxBandExceed.ts` | σ×Z 한도 모델을 실무 화면에 복제 |
 | 매각 지시 payload | `buildThresholdOrderPayload` / `registerRegimeOrder` | 화면마다 propose 인자 직접 조립 |
@@ -1485,6 +1487,8 @@ baf8ef9 fix: 투자 집행 연동 저장 실패 수정 + 자산 구분(운용/�
   유니크 인덱스 2개(`equities_company_name_date_uniq` / `investments_bond_company_ticker_date_uniq`).
   **실행 완료** (2026-09-15 — 지분 73건 삭제 · 국채 0건(중복 없었음) · 남은 중복 0그룹 · 인덱스 2개 생성).
   백업 `backup.equities_dup_20260915` / `backup.investments_dup_20260915` 에 삭제분 보존.
+- **`docs/db/fx_reconcile_duplicate_audit.sql`** — 읽기 전용 점검(2026-11-25 F-03). 과거 '자금일보 미반영' 패널이
+  정기예금 만기·예치를 가짜 미반영으로 띄웠을 때 '반영'을 눌러 생긴 이중 계상·이중 소진 **의심** 목록. 자동 수정 없음.
 - **`docs/db/fx_report_item_ledger.sql`** ⭐⭐ — 자금일보 외화 항목 → 외화거래명세 **항목 단위 자동 반영** (2026-11-25). **실행 필요**.
   `daily_report_items.fx_rate` + `fx_lots.source_type` 에 `report_item` + RPC `sync_report_item_ledger`(항목 1건 동기화).
   미실행 상태에서도 자금일보 저장은 정상(환율만 빠지고 안내) — 원장 반영만 꺼져 있다.

@@ -21,7 +21,8 @@ import {
 } from './fxRegime'
 import { buildVerdict, type Verdict } from './fxVerdict'
 import { allocateAcrossBasket, type FxAllocationRow, type FxBandExceedResult } from './fxBandExceed'
-import { lossBudget, bepStats, type LossBudget } from './fxPnl'
+import { bepStats } from './fxPnl'
+import { availableAmount, previewFifoConsumption, type FxLot } from './fxLots'
 import { bizDaysBetween } from './bizDay'
 import type { FxCode } from './treasuryCalc'
 
@@ -63,7 +64,11 @@ export interface BasketCurrencyInput {
   /** 정규화된 환율 시계열(원/1외화) — useFxHistory().series */
   series: RegimeSeriesPoint[]
   /** FIFO 원장 요약. 로트가 없으면 null */
-  lots: { totalAmount: number; availableAmount: number; bookRate: number | null } | null
+  lots: { totalAmount: number; availableAmount: number; bookRate: number | null
+          /** 지금 팔 수 있는 로트의 가중평균 장부환율 (F-18) */
+          availableBookRate?: number | null } | null
+  /** FIFO 로트 원본 — 바구니 매도의 통화별 실현손익 미리보기(F-15)·손실 한도(F-08)에 쓴다 */
+  fifoLots?: FxLot[]
   /** 향후 결제 버퍼 (외화 원금) */
   payableFx: number
 }
@@ -83,17 +88,32 @@ export interface BasketDecisionInput {
   realizedLossKRW: number
   /** 직전 대표 통화 (스냅샷) — 대표 전환 히스테리시스 */
   prevLead: string | null
+  /** FIFO 계좌유형 소진 우선순위 (parseAccountPriority) — 서버 RPC 와 같은 순서로 미리본다 */
+  accountPriority?: Record<string, number>
   today: string
   /** 시뮬레이션 모드에서만 — 실험값으로 ctx 를 덮어쓴다 */
   ctxOverride?: Partial<TreasuryContext> | null
 }
 
 export interface BasketBudget {
+  /** 대표 통화 종가 — verdict 의 수량 환산 기준 */
   rate: number
+  /** 리짐 권고를 **통화별 가용재고 한도 안에서** 팔 수 있는 원화 (F-16) */
+  requestedKRW: number
+  /** 분기 손실 한도까지 반영한 집행 가능 원화 (F-08 · FIFO 기준) */
+  allowedKRW: number
+  /** verdict 호환용 — 대표 통화 단위로 환산한 값 */
   requestedFx: number
+  allowedFx: number
   costRate: number
   holdFx: number
-  budget: LossBudget
+  capKRW: number
+  usedKRW: number
+  remainingKRW: number
+  /** 손실 한도 때문에 줄었는가 */
+  cappedByLoss: boolean
+  /** 손실 한도를 지키며 집행한 비율 (0~1) */
+  scale: number
 }
 
 export interface BasketDecision {
@@ -153,7 +173,7 @@ export function buildBasketDecision(input: BasketDecisionInput): BasketDecision 
     policyMinRatio: bandValid ? minR : null,
     maxExposureKRW: null,
     // 엔진 내부의 예상손익·원가이하 판정은 보조 정보다 — 대표 통화 장부환율을 쓴다
-    avgAcquisitionRate: leadBook != null && leadBook > 0 ? leadBook : null,
+    avgAcquisitionRate: (lead?.lots?.availableBookRate ?? leadBook) || null,
     daysSinceLastConvert: null,
     ...(input.ctxOverride ?? {}),
   }
@@ -171,18 +191,69 @@ export function buildBasketDecision(input: BasketDecisionInput): BasketDecision 
 
   const staleDays = signal.asOf >= input.today ? 0 : bizDaysBetween(signal.asOf, input.today)
 
-  // ── 예산 — 대표 통화 기준(F-15·F-16 은 묶음 D 에서 통화별로 확장) ──
+  // ── 예산 (F-08 · F-15 · F-16 · F-18) ──
+  //   바구니 매도는 배분표대로 **여러 통화에서** 나간다. 그래서
+  //   · 매도 가능량은 통화마다 그 통화의 가용재고로 자른다(F-16) — 대표 통화 재고 하나로 자르면
+  //     정기예금 잠금 때문에 EUR 재고로 충분한데도 권고가 잘렸다. 부족분은 다른 통화로 넘기지 않는다.
+  //   · 실현손익·손실은 통화별 FIFO 미리보기로 낸다(F-15) — 대표 통화 평균원가 하나로 내면
+  //     오래된 고가 로트부터 나가는 실제 손실과 달라 분기 한도를 넘겨 집행될 수 있었다(F-08).
   const rate = signal.indicators.close
   const holdFx = lead?.lots && lead.lots.totalAmount > 0
     ? lead.lots.totalAmount : (input.basket[leadCode]?.nativeAmount ?? 0)
-  const avail = lead?.lots && lead.lots.totalAmount > 0 ? lead.lots.availableAmount : holdFx
-  const costRate = leadBook ?? 0
+  const costRate = lead?.lots?.availableBookRate ?? leadBook ?? 0
   const regimeSuggestKRW = signal.decision.actionRequired && signal.decision.suggestedTradeKRW < 0
     ? -signal.decision.suggestedTradeKRW : 0
-  const requestedFx = rate > 0 ? Math.min(regimeSuggestKRW / rate, avail) : 0
+
+  const saleRows = (totalKRW: number) => allocateAcrossBasket(totalKRW, input.basket)
+    .filter(a => a.nativeAmount != null && a.nativeAmount > 0)
+    .map(a => {
+      const lots = input.currencies[a.code]?.fifoLots ?? []
+      const avail = lots.length ? availableAmount(lots, input.today) : (input.basket[a.code]?.nativeAmount ?? 0)
+      return { code: a.code, sharePct: a.sharePct, rate: a.krwAmount / (a.nativeAmount as number),
+               want: a.nativeAmount as number, got: Math.min(a.nativeAmount as number, Math.max(0, avail)), lots }
+    })
+  /** 이 배분을 scale 만큼 팔 때의 FIFO 미리보기 — 실현손익(순)과 손실(총) */
+  const preview = (rows: ReturnType<typeof saleRows>, scale: number) => {
+    let net = 0; let loss = 0; let priced = false
+    for (const r of rows) {
+      if (!r.lots.length) continue
+      priced = true
+      for (const c of previewFifoConsumption(r.lots, r.got * scale, r.rate, input.today, input.accountPriority)) {
+        net += c.realizedPnlKRW
+        if (c.realizedPnlKRW < 0) loss -= c.realizedPnlKRW
+      }
+    }
+    return { net, loss, priced }
+  }
+
+  const rows = saleRows(regimeSuggestKRW)
+  const requestedKRW = rows.reduce((t, r) => t + r.got * r.rate, 0)
+  const capKRW = Math.max(0, input.quarterLossCapKRW)
+  const usedKRW = Math.max(0, input.realizedLossKRW)
+  const remainingKRW = Math.max(0, capKRW - usedKRW)
+  // 한도 미설정이면 제약 없음. 설정돼 있으면 손실(총)이 남은 한도를 넘지 않는 최대 비율을 찾는다
+  // (FIFO 는 오래된 로트부터 나가 손실이 수량에 대해 단조 증가한다 → 이분 탐색).
+  let scale = 1
+  if (capKRW > 0 && requestedKRW > 0 && preview(rows, 1).loss > remainingKRW) {
+    let lo = 0; let hi = 1
+    for (let i = 0; i < 40; i++) {
+      const mid = (lo + hi) / 2
+      if (preview(rows, mid).loss <= remainingKRW) lo = mid; else hi = mid
+    }
+    scale = lo
+  }
+  const allowedKRW = requestedKRW * scale
   const budget: BasketBudget = {
-    rate, requestedFx, costRate, holdFx,
-    budget: lossBudget(input.quarterLossCapKRW, input.realizedLossKRW, requestedFx, holdFx, costRate, rate),
+    rate, requestedKRW, allowedKRW,
+    requestedFx: rate > 0 ? requestedKRW / rate : 0,
+    allowedFx: rate > 0 ? allowedKRW / rate : 0,
+    costRate, holdFx, capKRW, usedKRW, remainingKRW,
+    cappedByLoss: scale < 1 - 1e-9, scale,
+  }
+  /** 바구니 원화 금액을 팔 때의 예상 실현손익 — 조치 카드 문구(F-15) */
+  const pnlForKRW = (krw: number): number | null => {
+    const p = preview(saleRows(krw), 1)
+    return p.priced ? p.net : null
   }
 
   const bep = costRate > 0 ? bepStats(series, costRate, 750) : null
@@ -190,7 +261,8 @@ export function buildBasketDecision(input: BasketDecisionInput): BasketDecision 
   const verdict = buildVerdict({
     signal, currency: leadCode,
     holdingFx: holdFx, avgCostRate: costRate,
-    allowedFx: budget.budget.allowedFx, requestedFx,
+    allowedFx: budget.allowedFx, requestedFx: budget.requestedFx,
+    pnlForKRW,
     pctDaysAboveBep: bep?.pctDaysAbove ?? null,
     bandExcessKRW: band.over ? band.excessKRW : 0,
     bandMaxPct: band.max,
@@ -200,8 +272,14 @@ export function buildBasketDecision(input: BasketDecisionInput): BasketDecision 
 
   const allocation = verdict.orderKRW ? allocateAcrossBasket(verdict.orderKRW, input.basket) : []
   // 판정 이력이 오래됐으면(blocked) 리짐 몫은 0 — 오래된 데이터로 지시를 만들지 않는다
-  const regimeExecKRW = verdict.kind === 'blocked' ? 0 : budget.budget.allowedFx * rate
-  const regimeAllocation = regimeExecKRW > 0 ? allocateAcrossBasket(regimeExecKRW, input.basket) : []
+  const regimeExecKRW = verdict.kind === 'blocked' ? 0 : allowedKRW
+  // 리짐 몫의 통화별 배분 = 가용재고로 자른 수량 × 손실 한도 비율 — 등록 지시와 1:1 로 맞는다
+  const regimeAllocation: FxAllocationRow[] = regimeExecKRW > 0
+    ? rows.filter(r => r.got * scale > 0).map(r => ({
+        code: r.code, sharePct: r.sharePct,
+        krwAmount: r.got * scale * r.rate, nativeAmount: r.got * scale,
+      }))
+    : []
 
   return {
     leadCode, leadShare, signal, ctx, staleDays, budget, verdict,

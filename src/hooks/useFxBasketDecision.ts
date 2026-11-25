@@ -22,6 +22,8 @@ import { buildBasketDecision, type BasketDecision, type BasketCurrencyInput } fr
 import { FX_OPS_PARAM_KEYS, regimeOpsFallback } from '../lib/fxRegimeInputs'
 import { REGIME_SNAPSHOT_KEYS, BASKET_SNAPSHOT_CURRENCY } from '../lib/fxRegimeSnapshot'
 import { todayStr } from '../lib/bizDay'
+import { parseAccountPriority } from '../lib/fxLots'
+import { useQuarterRealizedLoss } from './useQuarterRealizedLoss'
 import type { RegimeOrderCurrencyInfo } from '../lib/fxRegimeOrder'
 import type { TreasuryContext } from '../lib/fxRegime'
 import type { Company } from '../types'
@@ -43,11 +45,17 @@ export function useFxBasketDecision(company: Company, opts: {
   params?: Params
   /** 시뮬레이션 모드 실험값 — 조치 카드가 실험값을 따라가게 한다. 스냅샷은 쓰지 않는다 */
   ctxOverride?: Partial<TreasuryContext> | null
+  /** 이번 분기 기실현 손실(원장 집계 + 보정) — 이미 조회했으면 넘긴다(F-08) */
+  realizedLossKRW?: number
 } = {}): FxBasketDecisionResult {
   const ownPolicy = usePolicyDashboard(opts.policyData ? null : company)
   const ownParams = usePolicyParams(opts.params ? null : company)
   const policyData = opts.policyData ?? ownPolicy
   const params = opts.params ?? ownParams
+
+  // 주입받지 않았으면 직접 계산한다 — 분기 구분 없는 수동 값(구 fx_ops_loss_used)은 쓰지 않는다
+  const ownLoss = useQuarterRealizedLoss(opts.realizedLossKRW != null ? null : company, params)
+  const realizedLossKRW = opts.realizedLossKRW ?? ownLoss.totalKRW
 
   const fx = useFx()
   useEffect(() => { void fx.fetchRates() }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -58,7 +66,7 @@ export function useFxBasketDecision(company: Company, opts: {
   const lUSD = useFxLots(company, 'USD'); const lEUR = useFxLots(company, 'EUR')
   const lJPY = useFxLots(company, 'JPY'); const lGBP = useFxLots(company, 'GBP')
 
-  const loading = policyData.loading || params.loading
+  const loading = policyData.loading || params.loading || ownLoss.loading
     || hUSD.loading || hEUR.loading || hJPY.loading || hGBP.loading
     || lUSD.loading || lEUR.loading || lJPY.loading || lGBP.loading
 
@@ -77,12 +85,13 @@ export function useFxBasketDecision(company: Company, opts: {
       const payable = get(FX_OPS_PARAM_KEYS.payable(code))
       return {
         series: h.series,
-        lots: l.lots.length ? { totalAmount: l.totalAmount, availableAmount: l.availableAmount, bookRate: l.bookRate } : null,
+        lots: l.lots.length ? { totalAmount: l.totalAmount, availableAmount: l.availableAmount,
+                                bookRate: l.bookRate, availableBookRate: l.availableBookRate } : null,
+        fifoLots: l.lots,
         payableFx: payable != null && payable >= 0 ? payable : fb.fxPayableFx,
       }
     }
     const lossCap  = get(FX_OPS_PARAM_KEYS.lossCap) ?? 0
-    const lossUsed = get(FX_OPS_PARAM_KEYS.lossUsed) ?? 0
     return buildBasketDecision({
       basket: policyData.fxByCurrency,
       denominatorKRW: policyData.fxPolicyDenominator,
@@ -95,14 +104,15 @@ export function useFxBasketDecision(company: Company, opts: {
       marketRates: Object.fromEntries(fx.rates.map(r => [r.code, r.rate])),
       bandExceed: computeFxBandExceed(policyData, params),
       quarterLossCapKRW: Math.max(0, lossCap),
-      realizedLossKRW: Math.max(0, lossUsed),
+      realizedLossKRW: Math.max(0, realizedLossKRW),
+      accountPriority: parseAccountPriority(getText('fx_fifo_account_priority')),
       prevLead: getText(REGIME_SNAPSHOT_KEYS.lead(BASKET_SNAPSHOT_CURRENCY)),
       today,
       ctxOverride: opts.ctxOverride ?? null,
     })
     // params 는 메모이즈되지 않은 객체라 deps 로 쓰면 매 렌더 재계산된다 — 대신 data 를 쓴다
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [company, policyData, params.data, fx.rates, today, opts.ctxOverride,
+  }, [company, policyData, params.data, fx.rates, today, opts.ctxOverride, realizedLossKRW,
       hUSD.series, hEUR.series, hJPY.series, hGBP.series,
       lUSD.lots, lEUR.lots, lJPY.lots, lGBP.lots,
       lUSD.totalAmount, lEUR.totalAmount, lJPY.totalAmount, lGBP.totalAmount])

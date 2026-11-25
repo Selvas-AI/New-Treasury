@@ -58,6 +58,12 @@ export interface VerdictInput {
   currency: string
   /** 리밸런싱 밴드(0~1). 목표와 현재의 차이가 이 미만이면 거래하지 않는다 */
   rebalanceBandPct?: number
+  /**
+   * 바구니 원화 금액을 팔 때의 **예상 실현손익**(원) — 통화별 배분 × 통화별 FIFO (F-15).
+   * ⚠ 주면 이 값을 쓴다. 없으면 대표 통화 장부환율 하나로 근사한다(과거 방식 — 배분표대로
+   *   EUR·JPY 도 팔리므로 실제와 다르다).
+   */
+  pnlForKRW?: (krw: number) => number | null
   /** 보유 외화 (외화 단위) */
   holdingFx: number
   /** 평균 취득환율 (0 = 미설정) */
@@ -116,6 +122,7 @@ export function buildVerdict(input: VerdictInput): Verdict {
     allowedFx, requestedFx, pctDaysAboveBep,
     bandExcessKRW, bandMaxPct, asOfStaleDays,
     rebalanceBandPct = 0.03,
+    pnlForKRW,
   } = input
 
   const rate = signal.indicators.close
@@ -193,8 +200,8 @@ export function buildVerdict(input: VerdictInput): Verdict {
 
     // 실현손익
     let pnlNote: string | null = null
-    if (avgCostRate > 0) {
-      const pnl = execFx * (rate - avgCostRate)
+    const pnl = pnlForKRW ? pnlForKRW(execKRW) : avgCostRate > 0 ? execFx * (rate - avgCostRate) : null
+    if (pnl != null) {
       pnlNote = pnl < 0
         ? `이 환전으로 ${eok(Math.abs(pnl))}의 환차손이 확정되지만, ` +
           `**팔지 않아도 같은 금액이 이미 평가손실로 잡혀 있습니다.**`

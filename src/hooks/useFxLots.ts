@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { todayStr } from '../lib/bizDay'
 import { restInsert, restSelect, restRpc } from '../lib/supabase'
-import { availableAmount, expectedTermInterestFx, weightedBookRate, remainingAmount, type FxLot } from '../lib/fxLots'
+import { availableAmount, expectedTermInterestFx, weightedBookRate, remainingAmount, isLotAvailable, type FxLot } from '../lib/fxLots'
 import { inventoryMatchKey, type InventoryCsvRow } from '../lib/fxCsvImport'
 
 /** 로트 memo 에 박아 둔 `import-key:` 회수 */
@@ -446,7 +446,10 @@ export function useFxLots(company: string, currency: string) {
     availableAmount: availableAmount(lots, today), lockedAmount: remainingAmount(lots)-availableAmount(lots, today),
     expectedInterestFx: lots.reduce((sum, lot) => sum + expectedTermInterestFx(lot, transferDates), 0),
     transferDates,
-    bookRate: weightedBookRate(lots) }),
+    bookRate: weightedBookRate(lots),
+    // F-18: 지금 팔 수 있는 로트(정기예금 만기 전 제외)의 가중평균 장부환율 — 판정·손익 추정용.
+    //   bookRate(전체 잔존)는 잠긴 정기예금까지 섞여 실제 매도 대상의 원가와 다르다.
+    availableBookRate: weightedBookRate(lots.filter(l => isLotAvailable(l, today))) }),
   [lots, loading, error, refetch, addOpeningLot, importOpeningLots, updateLot, deleteLot,
    planLotRepair, applyLotRepair, reconcileDailyInflow, reconcileDailyOutflow, addManualOutflow,
    transferLots, reverseTransfer, settleTermDeposit, linkLotsToInvestment, reverseConsumption, today, transferDates])

@@ -76,7 +76,8 @@ const FIELD_OWNER: Record<FxInputField, FieldOwner> = {
   policyMinRatio:             'policy',
   policyMaxRatio:             'policy',
   maxExposureKRW:             'policy',
-  realizedLossThisQuarterKRW: 'ops',
+  // 원장에서 계산(F-08) — 보정만 실무가 입력한다(saveLossAdjust)
+  realizedLossThisQuarterKRW: 'treasury',
 }
 
 export function ownerOf(field: FxInputField): FieldOwner {
@@ -91,8 +92,13 @@ export const FX_OPS_PARAM_KEYS = {
   payable:       (currency: string) => `fx_ops_payable_${currency.toLowerCase()}`,
   /** 분기 손실 실현 한도 (원) */
   lossCap:  'fx_ops_loss_cap',
-  /** 이번 분기 기실현 손실 (원) */
+  /**
+   * @deprecated 분기 구분 없는 수동 입력(2026-11-25 이전). 3분기 값이 4분기 한도를 계속 깎았다.
+   *   이제 기실현 손실은 원장에서 분기별로 계산한다(lib/fxQuarterLoss). 읽지 않는다.
+   */
   lossUsed: 'fx_ops_loss_used',
+  /** 원장 외 손실 보정 — **분기별** 키 (예: fx_ops_loss_adjust_2026q4) */
+  lossAdjust: (quarterKey: string) => `fx_ops_loss_adjust_${quarterKey}`,
   /** 정책 밴드 — 기존 FX 정책 탭과 공유. **% 단위** */
   bandMin: 'fx_target_min',
   bandMax: 'fx_target_max',
@@ -114,11 +120,11 @@ export interface FxTreasuryInputAdapter extends FxTreasuryInputs {
   resetSimulation: () => void
   /** 시뮬레이션에서 실제로 바꾼 값이 있는가 (배너 표시용) */
   simulationDirty: boolean
-  /** 실무 입력(사실 기록) 저장 — policy_params 에 영속한다. */
-  saveOpsInput: (
-    patch: Partial<Pick<FxTreasuryInputs, 'realizedLossThisQuarterKRW'>>,
-    updatedBy: string,
-  ) => Promise<string | null>
+  /**
+   * 원장 외 손실 보정(이번 분기) 저장 — policy_params 분기별 키에 영속한다.
+   * ⚠ 기실현 손실 자체는 원장에서 계산한다. 이 값은 원장에 없는 손실만.
+   */
+  saveLossAdjust: (quarterKey: string, valueKRW: number, updatedBy: string) => Promise<string | null>
   ownerOf: (field: FxInputField) => FieldOwner
 }
 
@@ -190,7 +196,9 @@ export function useFxTreasuryInputs(
   const fxPayableFx = finiteOr(
     params.get(FX_OPS_PARAM_KEYS.payable(currency)), fallback.fxPayableFx)
   const quarterLossCapKRW = finiteOr(params.get(FX_OPS_PARAM_KEYS.lossCap), 0)
-  const realizedLossThisQuarterKRW = finiteOr(params.get(FX_OPS_PARAM_KEYS.lossUsed), 0)
+  // ⚠ 원장에서 계산한 분기 손실(useQuarterRealizedLoss)을 조회값으로 받는다(F-08).
+  //   주입되지 않으면 0 — 구 수동 키(lossUsed)는 분기 구분이 없어 더 이상 읽지 않는다.
+  const realizedLossThisQuarterKRW = finiteOr(treasuryValues.realizedLossThisQuarterKRW, 0)
   const policyMinRatio = pctToRatio(params.get(FX_OPS_PARAM_KEYS.bandMin))
   const policyMaxRatio = pctToRatio(params.get(FX_OPS_PARAM_KEYS.bandMax))
 
@@ -202,15 +210,12 @@ export function useFxTreasuryInputs(
 
   const resetSimulation = useCallback(() => setDraft(null), [])
 
-  const saveOpsInput = useCallback(async (
-    patch: Partial<Pick<FxTreasuryInputs, 'realizedLossThisQuarterKRW'>>,
-    updatedBy: string,
+  const saveLossAdjust = useCallback(async (
+    quarterKey: string, valueKRW: number, updatedBy: string,
   ): Promise<string | null> => {
     const set = paramsRef.current.set
     if (!set) return '저장할 수 없는 컨텍스트입니다.'
-    if (patch.realizedLossThisQuarterKRW == null) return null
-    return set(FX_OPS_PARAM_KEYS.lossUsed,
-      Math.max(0, patch.realizedLossThisQuarterKRW), null, updatedBy)
+    return set(FX_OPS_PARAM_KEYS.lossAdjust(quarterKey), Math.max(0, valueKRW), null, updatedBy)
   }, [])
 
   return useMemo(() => {
@@ -228,11 +233,11 @@ export function useFxTreasuryInputs(
       updateInputs,
       resetSimulation,
       simulationDirty: source === 'simulation' && draft != null && Object.keys(draft).length > 0,
-      saveOpsInput,
+      saveLossAdjust,
       ownerOf,
     }
   }, [totalFundKRW, fxHoldingFx, portfolioFxHoldingKRW, avgAcquisitionRate,
       monthlyInflowFx, fxPayableFx, quarterLossCapKRW, realizedLossThisQuarterKRW,
       policyMinRatio, policyMaxRatio, source, draft,
-      updateInputs, resetSimulation, saveOpsInput])
+      updateInputs, resetSimulation, saveLossAdjust])
 }

@@ -43,7 +43,8 @@ function input(over: Partial<BasketDecisionInput> = {}): BasketDecisionInput {
     quarterLossCapKRW: 0,
     realizedLossKRW: 0,
     prevLead: null,
-    today: '2025-12-31',
+    // 시계열 마지막 날 — 이보다 늦으면 '판정 이력 오래됨(blocked)'으로 리짐 몫이 0 이 된다
+    today: series(1400).at(-1)!.date,
     ...over,
   }
 }
@@ -118,5 +119,72 @@ describe('normalizedRate — JPY 단위 정규화 (F-02)', () => {
   })
   it('단위가 1이면 그대로', () => {
     expect(normalizedRate({ date: '2026-11-24', rate: 1400, unitBasis: 1 })).toBe(1400)
+  })
+})
+
+// ── 예산 — 통화별 재고·FIFO 손실 한도 (F-08 · F-15 · F-16) ─────────────────
+import type { FxLot } from './fxLots'
+
+const mkLot = (id: string, currency: string, amount: number, acqRate: number, acquired = '2025-01-01',
+               accountType: FxLot['accountType'] = 'demand_deposit', maturity: string | null = null): FxLot => ({
+  id, company: 'c', currency, acquiredDate: acquired, originalAmount: amount, remainingAmount: amount,
+  acqRate, accountType, annualInterestRate: 0, maturityDate: maturity, sourceType: 'opening',
+})
+
+/** 리짐이 반드시 매도를 권고하도록 목표를 아주 낮게 둔 입력 */
+function sellInput(over: Partial<BasketDecisionInput> = {}): BasketDecisionInput {
+  const base = input(over)
+  const params: Record<string, number> = { fx_target_min: 1, fx_target_max: 5 }
+  return { ...base, get: k => params[k] ?? base.get(k), ...over }
+}
+
+describe('바구니 예산 — 통화별 재고 한도 (F-16)', () => {
+  it('대표 통화 재고가 잠겨 있어도 다른 통화 몫은 그대로 집행 가능하다', () => {
+    const usdLocked = [mkLot('u', 'USD', 16_000_000, 1300, '2025-01-01', 'term_deposit', '2099-01-01')]
+    const eurFree   = [mkLot('e', 'EUR', 3_400_000, 1450)]
+    const r = buildBasketDecision(sellInput({
+      currencies: {
+        USD: { series: series(1400), lots: { totalAmount: 16e6, availableAmount: 0, bookRate: 1300 }, payableFx: 0, fifoLots: usdLocked },
+        EUR: { series: series(1500), lots: { totalAmount: 3.4e6, availableAmount: 3.4e6, bookRate: 1450 }, payableFx: 0, fifoLots: eurFree },
+      },
+    }))
+    expect(r.budget).not.toBeNull()
+    // USD 몫은 0, EUR 몫만 — 과거엔 대표(USD) 재고 0 으로 전체가 0 이 됐다
+    expect(r.budget!.requestedKRW).toBeGreaterThan(0)
+    const codes = r.regimeAllocation.map(a => a.code)
+    expect(codes).not.toContain('USD')   // 잠긴 대표 통화 몫은 0
+    expect(codes).toContain('EUR')       // 다른 통화 몫은 그대로 — 대표 재고로 전체를 자르지 않는다
+  })
+})
+
+describe('바구니 예산 — 분기 손실 한도는 FIFO 실제 손실로 (F-08)', () => {
+  it('오래된 고가 로트부터 나가 손실이 크면, 평균원가로 볼 때보다 적게만 집행한다', () => {
+    // USD: 오래된 1,600원 로트 4M + 최근 1,200원 로트 12M → 평균 1,300원, 시장 1,400원
+    //  평균원가로 보면 이익이지만 FIFO 는 1,600원부터 나가 손실이 난다
+    const usd = [mkLot('old', 'USD', 4_000_000, 1600, '2024-01-01'), mkLot('new', 'USD', 12_000_000, 1200, '2025-06-01')]
+    const params: Record<string, number> = { fx_target_min: 1, fx_target_max: 5, fx_ops_loss_cap: 100_000_000 }
+    const r = buildBasketDecision(sellInput({
+      get: k => params[k] ?? null,
+      quarterLossCapKRW: 100_000_000,
+      realizedLossKRW: 0,
+      currencies: { USD: { series: series(1400), lots: { totalAmount: 16e6, availableAmount: 16e6, bookRate: 1300 }, payableFx: 0, fifoLots: usd } },
+      basket: { USD: { nativeAmount: 16_000_000, krwAmount: 22_400_000_000 } },
+      holdingsKRW: 22_400_000_000,
+    }))
+    expect(r.budget!.cappedByLoss).toBe(true)
+    // 1,600원 로트를 팔면 1달러당 200원 손실 → 1억 한도면 50만 달러 안팎까지만
+    expect(r.budget!.allowedKRW).toBeLessThan(1_000_000 * 1400)
+    expect(r.budget!.allowedKRW).toBeGreaterThan(0)
+  })
+
+  it('한도 미설정이면 제약 없음', () => {
+    const usd = [mkLot('old', 'USD', 16_000_000, 1600)]
+    const r = buildBasketDecision(sellInput({
+      currencies: { USD: { series: series(1400), lots: { totalAmount: 16e6, availableAmount: 16e6, bookRate: 1600 }, payableFx: 0, fifoLots: usd } },
+      basket: { USD: { nativeAmount: 16_000_000, krwAmount: 22_400_000_000 } },
+      holdingsKRW: 22_400_000_000,
+    }))
+    expect(r.budget!.cappedByLoss).toBe(false)
+    expect(r.budget!.scale).toBe(1)
   })
 })
