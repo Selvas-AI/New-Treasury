@@ -30,13 +30,15 @@ export interface ItemInput {
   sort_order?:  number
   /** 외화 항목의 적용 환율 — 원장 항목 단위 반영(fx_report_item_ledger.sql) */
   fx_rate?:     number | null
+  /** 외화 원장 계좌유형(보통예금/MMDA) — fx_report_item_account.sql */
+  fx_account_type?: 'demand_deposit' | 'mmda' | null
 }
 
 /**
  * fx_rate 컬럼이 아직 없는 DB(SQL 미적용)에서 저장이 통째로 실패하지 않게 한다.
  * ⚠ 자금일보 저장이 막히면 업무가 멈춘다 — 환율만 빼고 저장하고, 그 사실을 알린다.
  */
-const isFxRateColumnMissing = (msg: string | undefined) => !!msg && /fx_rate/i.test(msg)
+const isFxRateColumnMissing = (msg: string | undefined) => !!msg && /fx_rate|fx_account_type/i.test(msg)
 
 export function useDailyReportItems() {
   const [items,   setItems]   = useState<ReportItem[]>([])
@@ -79,14 +81,21 @@ export function useDailyReportItems() {
       linked_id:    input.linked_id ?? null,
       sort_order:   input.sort_order ?? maxOrder,
       ...(input.fx_rate != null ? { fx_rate: input.fx_rate } : {}),
+      ...(input.fx_account_type != null ? { fx_account_type: input.fx_account_type } : {}),
     }
     let { error: e } = await restInsert('daily_report_items', row)
-    if (e && isFxRateColumnMissing(e.message) && 'fx_rate' in row) {
-      const { fx_rate: _drop, ...rest } = row as typeof row & { fx_rate?: number }
+    if (e && isFxRateColumnMissing(e.message) && ('fx_rate' in row || 'fx_account_type' in row)) {
+      // 계좌유형 컬럼만 없으면(fx_report_item_account.sql 미적용) 계좌유형만 빼고 다시 시도한다
+      const accountOnly = /fx_account_type/i.test(e.message ?? '')
+      const { fx_rate: _drop, fx_account_type: _drop2, ...base } = row as typeof row & { fx_rate?: number; fx_account_type?: string }
+      void _drop2
+      const rest = accountOnly && _drop != null ? { ...base, fx_rate: _drop } : base
       void _drop
       ;({ error: e } = await restInsert('daily_report_items', rest))
       if (!e) {
-        setError('환율은 저장되지 않았습니다 — 외화거래명세 자동 반영은 docs/db/fx_report_item_ledger.sql 실행 후 동작합니다.')
+        setError(accountOnly
+          ? '외화 계좌구분은 저장되지 않았습니다 — docs/db/fx_report_item_account.sql 실행 후 동작합니다(원장에는 기존 방식으로 반영).'
+          : '환율은 저장되지 않았습니다 — 외화거래명세 자동 반영은 docs/db/fx_report_item_ledger.sql 실행 후 동작합니다.')
         setItems(prev => [...prev, rest as ReportItem])
         return id
       }
@@ -101,7 +110,9 @@ export function useDailyReportItems() {
     const { error: e } = await restUpdate('daily_report_items', { ...patch, updated_at: new Date().toISOString() }, { id })
     if (e) {
       setError(isFxRateColumnMissing(e.message)
-        ? '환율을 저장할 수 없습니다 — docs/db/fx_report_item_ledger.sql 실행이 필요합니다.'
+        ? (/fx_account_type/i.test(e.message ?? '')
+            ? '외화 계좌구분을 저장할 수 없습니다 — docs/db/fx_report_item_account.sql 실행이 필요합니다.'
+            : '환율을 저장할 수 없습니다 — docs/db/fx_report_item_ledger.sql 실행이 필요합니다.')
         : String(e.message))
       return false
     }

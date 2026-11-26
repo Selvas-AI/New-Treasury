@@ -2,7 +2,9 @@ import { describe, it, expect } from 'vitest'
 import {
   isLedgerCategory, reportItemLedgerState, isLedgerRpcMissing,
   NON_LEDGER_CATEGORIES, DUPLICATE_RISK_HINT,
+  previewReportItemOutflow, reportItemRateLabel, isReportItemFxAccount,
 } from './fxReportItemLedger'
+import type { FxLot } from './fxLots'
 
 /**
  * 자금일보 외화 항목 → 외화거래명세 반영 규칙.
@@ -56,5 +58,58 @@ describe('isLedgerRpcMissing — SQL 미적용 안내', () => {
   })
   it('잔액 부족 같은 실제 오류는 그대로 보여준다', () => {
     expect(isLedgerRpcMissing('FIFO 잔액 부족: 1000')).toBe(false)
+  })
+})
+
+// ── 계좌구분 (2026-11-26) ───────────────────────────────────────────────
+
+const lot = (id: string, acct: FxLot['accountType'], amount: number, rate: number, acquired: string): FxLot => ({
+  id, company: 'c', currency: 'USD', acquiredDate: acquired, originalAmount: amount, remainingAmount: amount,
+  acqRate: rate, accountType: acct, annualInterestRate: 0, maturityDate: null, sourceType: 'opening',
+})
+
+describe('previewReportItemOutflow — 계좌별 선입선출 미리보기', () => {
+  const lots = [
+    lot('d1', 'demand_deposit', 1000, 1300, '2026-01-01'),
+    lot('m1', 'mmda', 500, 1400, '2025-12-01'),   // 더 오래됐지만 MMDA
+    lot('m2', 'mmda', 500, 1350, '2026-02-01'),
+  ]
+
+  it('선택한 계좌 로트만 소진한다 — 다른 계좌의 더 오래된 로트를 건드리지 않는다', () => {
+    const p = previewReportItemOutflow(lots, 'demand_deposit', 400, '2026-11-25', 1450)
+    expect(p.bookRate).toBe(1300)
+    expect(p.available).toBe(1000)
+    expect(p.pnlKRW).toBeCloseTo(400 * 150)
+  })
+
+  it('MMDA 는 MMDA 안에서 취득일 순 — 장부환율은 소진 로트의 수량가중', () => {
+    const p = previewReportItemOutflow(lots, 'mmda', 700, '2026-11-25', null)
+    expect(p.bookRate).toBeCloseTo((500 * 1400 + 200 * 1350) / 700)
+    expect(p.pnlKRW).toBeNull()   // 적용환율 미입력
+    expect(p.shortfall).toBe(0)
+  })
+
+  it('잔액이 부족하면 부족분을 알린다 (계좌 대체 미기록의 전형)', () => {
+    const p = previewReportItemOutflow(lots, 'mmda', 1200, '2026-11-25', 1400)
+    expect(p.available).toBe(1000)
+    expect(p.shortfall).toBe(200)
+  })
+
+  it('거래일에 아직 장부에 없던 로트는 쓰지 않는다 (서버 available_from 규칙과 동일)', () => {
+    const p = previewReportItemOutflow(lots, 'mmda', 600, '2026-01-15', 1400)
+    expect(p.available).toBe(500)
+    expect(p.shortfall).toBe(100)
+  })
+})
+
+describe('계좌구분 보조 규칙', () => {
+  it('환율 이름 — 입금은 장부환율, 출금은 적용환율', () => {
+    expect(reportItemRateLabel('in')).toBe('장부환율')
+    expect(reportItemRateLabel('out')).toBe('적용환율')
+  })
+  it('허용 계좌유형은 보통예금·MMDA 뿐 (정기예금은 운용자금 처리 경로)', () => {
+    expect(isReportItemFxAccount('mmda')).toBe(true)
+    expect(isReportItemFxAccount('term_deposit')).toBe(false)
+    expect(isReportItemFxAccount(null)).toBe(false)
   })
 })

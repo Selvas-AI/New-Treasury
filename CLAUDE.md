@@ -81,6 +81,7 @@
 | 분기 한도 밖 손익 표시(D3) | `useQuarterRealizedLoss.revalueNetKRW` · `BasketDecision.valuation` | 평가·재평가 손익을 한도에 합산 |
 | 국면 확정(히스테리시스) · 백테스트 규칙 | `fxRegime.confirmRegime`(전진식, 창 30일) · `runBacktest` 기본 = 실전 리밸런싱 밴드 + 분기 손실 한도 | 직전 N일 전원 일치 방식 · 밴드 무시 백테스트(비교용 `ignoreRebalanceBand` 로만) |
 | **자금일보 외화 항목 → 원장** | `sync_report_item_ledger` RPC + `lib/fxReportItemLedger`(제외 카테고리 규칙, SQL 과 동일) · 페이지의 `addItemWithLedger`/`updateItemWithLedger`/`removeItemWithLedger` | 항목을 원장에 따로 다시 입력, 항목만 지우고 원장 반영을 남기기(삭제 전 반드시 되돌림) |
+| 자금일보 외화 항목 계좌구분(2026-11-26) | `daily_report_items.fx_account_type` + RPC `p_account_type` 전달 · 미리보기 `lib/fxReportItemLedger.previewReportItemOutflow` | 출금 장부환율 수기 입력(원장 FIFO 로트가 정본), 계좌 미지정 신규 반영 |
 | 밴드 초과분 산출 | `lib/fxBandExceed.ts` | σ×Z 한도 모델을 실무 화면에 복제 |
 | 매각 지시 payload | `buildThresholdOrderPayload` / `registerRegimeOrder` | 화면마다 propose 인자 직접 조립 |
 | **체결(집행)·취소** | **외화거래명세 › 외화매도이력 한 곳** | 다른 화면에 체결 모달 복제 |
@@ -1493,7 +1494,8 @@ baf8ef9 fix: 투자 집행 연동 저장 실패 수정 + 자산 구분(운용/�
   백업 `backup.equities_dup_20260915` / `backup.investments_dup_20260915` 에 삭제분 보존.
 - **`docs/db/fx_reconcile_duplicate_audit.sql`** — 읽기 전용 점검(2026-11-25 F-03). 과거 '자금일보 미반영' 패널이
   정기예금 만기·예치를 가짜 미반영으로 띄웠을 때 '반영'을 눌러 생긴 이중 계상·이중 소진 **의심** 목록. 자동 수정 없음.
-- **`docs/db/fx_report_item_ledger.sql`** ⭐⭐ — 자금일보 외화 항목 → 외화거래명세 **항목 단위 자동 반영** (2026-11-25). **실행 필요**.
+- **`docs/db/fx_report_item_ledger.sql`** ⭐⭐ — 자금일보 외화 항목 → 외화거래명세 **항목 단위 자동 반영** (2026-11-25). 실행 완료(2026-11-25).
+- **`docs/db/fx_report_item_account.sql`** ⭐ — 자금일보 외화 항목 **계좌구분(보통예금/MMDA)** → 입금은 그 계좌 로트, 출금은 그 계좌에서만 FIFO (2026-11-26). 기존 항목(계좌 null)은 기존 방식 유지. **실행 필요**.
   `daily_report_items.fx_rate` + `fx_lots.source_type` 에 `report_item` + RPC `sync_report_item_ledger`(항목 1건 동기화).
   미실행 상태에서도 자금일보 저장은 정상(환율만 빠지고 안내) — 원장 반영만 꺼져 있다.
 - **`docs/db/fx_jpy_unit_normalize.sql`** ⭐ — FX 전수조사 묶음 C (2026-11-25). **실행 필요**.

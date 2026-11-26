@@ -31,6 +31,11 @@ export interface ReportItem {
    * docs/db/fx_report_item_ledger.sql 적용 전에는 없다.
    */
   fx_rate?:     number | null
+  /**
+   * 외화 항목의 원장 계좌유형(보통예금/MMDA) — 입금은 이 계좌 로트로, 출금은 이 계좌에서만 소진.
+   * null = 기존 방식. docs/db/fx_report_item_account.sql 적용 전에는 없다.
+   */
+  fx_account_type?: 'demand_deposit' | 'mmda' | null
 }
 
 /**

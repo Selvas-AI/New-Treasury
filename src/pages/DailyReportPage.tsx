@@ -39,7 +39,7 @@ import { fmtKRW, fmtNumber } from '../lib/format'
 import { notifyApprovalTurn } from '../lib/approvalNotify'
 import { useToast } from '../contexts/ToastProvider'
 import { useReportItemLedger } from '../hooks/useReportItemLedger'
-import { isLedgerCategory } from '../lib/fxReportItemLedger'
+import { isLedgerCategory, REPORT_ITEM_FX_ACCOUNT_LABEL } from '../lib/fxReportItemLedger'
 import {
   groupByStage, evaluateApproveGate, autoApproveStepsOnSubmit,
   isFinalApproval, pendingInStage, describeFlow,
@@ -530,7 +530,8 @@ export default function DailyReportPage() {
     const id = await itemHook.addItem(rid, input)
     if (id && isLedgerCategory(input) && input.fx_rate != null && input.fx_rate > 0) {
       const err = await ledger.sync(id, reportDate, ledgerBy)
-      reportLedgerResult(err, `외화거래명세에 반영했습니다 (${input.currency} · 거래일 ${reportDate})`)
+      const acct = input.fx_account_type ? ` · ${REPORT_ITEM_FX_ACCOUNT_LABEL[input.fx_account_type]}` : ''
+      reportLedgerResult(err, `외화거래명세에 반영했습니다 (${input.currency}${acct} · 거래일 ${reportDate})`)
     }
     return id
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -543,7 +544,8 @@ export default function DailyReportPage() {
     const after = { ...before, ...patch }
     // 반영 대상이었거나 반영 대상이 된 항목만 — 금액·환율·통화·카테고리가 바뀌면 원장도 다시 맞춘다
     if (isLedgerCategory(before) || isLedgerCategory(after)) {
-      const touched = ['amount', 'fx_rate', 'currency', 'category', 'direction'].some(k => k in patch)
+      // fx_account_type — 계좌구분을 바꾸면 이전 계좌 반영을 되돌리고 새 계좌로 다시 반영한다
+      const touched = ['amount', 'fx_rate', 'fx_account_type', 'currency', 'category', 'direction'].some(k => k in patch)
       if (!touched && !ledger.reflected.has(id)) return
       const err = await ledger.sync(id, reportDate, ledgerBy)
       reportLedgerResult(err, after.fx_rate ? '외화거래명세도 함께 수정했습니다' : null)

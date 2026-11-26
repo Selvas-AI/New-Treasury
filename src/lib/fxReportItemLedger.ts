@@ -11,6 +11,7 @@
  *   **반드시 같아야 한다.** 화면이 "반영됨"이라 말하는데 서버가 건너뛰면(또는 그 반대)
  *   원장과 자금일보가 조용히 갈라진다. 한쪽을 바꾸면 다른 쪽도 바꿀 것.
  */
+import { availableAmount, previewFifoConsumption, type FxLot } from './fxLots'
 
 /**
  * 원장에 반영하지 않는 카테고리와 이유.
@@ -58,4 +59,64 @@ export function reportItemLedgerState(
 export function isLedgerRpcMissing(message: string | null | undefined): boolean {
   if (!message) return false
   return /sync_report_item_ledger|Could not find the function|PGRST202/i.test(message)
+}
+
+// ── 계좌구분 (2026-11-26 · docs/db/fx_report_item_account.sql) ──────────────
+//   입금 → 고른 계좌유형의 로트(장부환율 = 입력 환율)
+//   출금 → 고른 계좌유형의 로트만 FIFO 소진. 장부환율은 원장 로트가 정하고,
+//          입력 환율은 적용환율(결제일 환율) — 환차손익 = 금액 × (적용 − 장부)
+//   미지정(기존 항목) → 기존 방식(입금 보통예금 · 출금 우선순위 FIFO). 신규 반영은 필수.
+
+export type ReportItemFxAccount = 'demand_deposit' | 'mmda'
+export const REPORT_ITEM_FX_ACCOUNTS: readonly ReportItemFxAccount[] = ['demand_deposit', 'mmda']
+export const REPORT_ITEM_FX_ACCOUNT_LABEL: Readonly<Record<ReportItemFxAccount, string>> = {
+  demand_deposit: '보통예금',
+  mmda: 'MMDA',
+}
+
+export function isReportItemFxAccount(v: unknown): v is ReportItemFxAccount {
+  return v === 'demand_deposit' || v === 'mmda'
+}
+
+/** 환율 입력칸 이름 — 입금은 그 환율이 장부환율, 출금은 적용(결제)환율 */
+export function reportItemRateLabel(direction: 'in' | 'out'): string {
+  return direction === 'in' ? '장부환율' : '적용환율'
+}
+
+export interface OutflowPreview {
+  /** 거래일 기준 그 계좌에서 꺼낼 수 있는 잔액 */
+  available: number
+  /** 부족분(0 이면 충분) */
+  shortfall: number
+  /** 이 출금이 소진할 로트들의 수량가중 장부환율 (소진량 0 이면 null) */
+  bookRate: number | null
+  /** 적용환율이 있으면 예상 환차손익(원) */
+  pnlKRW: number | null
+}
+
+/**
+ * 출금 항목 미리보기 — 서버 sync_report_item_ledger 와 같은 규칙:
+ * 그 계좌유형 로트 중 거래일에 이미 장부에 있던 것(isLotAvailable)을 취득일 순 FIFO 로 소진한다.
+ * ⚠ 미리보기다 — 저장 사이 다른 출금이 먼저 반영되면 실제 소진 로트가 달라질 수 있다(서버 결과가 정본).
+ */
+export function previewReportItemOutflow(
+  lots: readonly FxLot[],
+  account: ReportItemFxAccount,
+  amount: number,
+  txnDate: string,
+  applyRate: number | null,
+): OutflowPreview {
+  const pool = lots.filter(l => l.accountType === account)
+  const available = availableAmount(pool, txnDate)
+  const take = Math.max(0, Math.min(amount, available))
+  const rows = take > 0 ? previewFifoConsumption([...pool], take, applyRate ?? 1, txnDate) : []
+  const qty = rows.reduce((t, r) => t + r.amount, 0)
+  const cost = rows.reduce((t, r) => t + r.amount * r.acqRate, 0)
+  const bookRate = qty > 0 ? cost / qty : null
+  return {
+    available,
+    shortfall: Math.max(0, amount - available),
+    bookRate,
+    pnlKRW: applyRate != null && applyRate > 0 && bookRate != null ? qty * (applyRate - bookRate) : null,
+  }
 }

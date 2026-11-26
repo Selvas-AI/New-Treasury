@@ -5,6 +5,8 @@
  *   - 카테고리 / 계좌구분 / 금액 / 통화 / 메모 입력
  *   - 🔄 자동생성 항목(지분 평가손익) 표시 및 수정
  *   - Δ 셀 클릭 → prefill prop으로 자동 입력 열기
+ *   - 💱 외화 항목: 외화계좌(보통예금/MMDA) + 환율 → 외화거래명세 원장 반영 (2026-11-26)
+ *       입금 환율 = 장부환율, 출금 환율 = 적용환율(장부환율은 그 계좌 FIFO 로트가 정한다 — 미리보기 표시)
  */
 import { useState, useRef, useEffect } from 'react'
 import ThreadPopup from './ThreadPopup'
@@ -18,7 +20,13 @@ import type { Company, FxCode } from '../../types'
 
 import { ACCOUNT_LABELS, defaultAccountTypeFor } from '../../lib/accountLabels'
 import { IN_CATEGORIES, OUT_CATEGORIES } from '../../lib/dailyReportCategories'
-import { isLedgerCategory, reportItemLedgerState, DUPLICATE_RISK_HINT, NON_LEDGER_CATEGORIES } from '../../lib/fxReportItemLedger'
+import {
+  isLedgerCategory, reportItemLedgerState, DUPLICATE_RISK_HINT, NON_LEDGER_CATEGORIES,
+  REPORT_ITEM_FX_ACCOUNTS, REPORT_ITEM_FX_ACCOUNT_LABEL, isReportItemFxAccount, reportItemRateLabel,
+  previewReportItemOutflow, type ReportItemFxAccount,
+} from '../../lib/fxReportItemLedger'
+import { fetchFxLots } from '../../hooks/useFxLots'
+import type { FxLot } from '../../lib/fxLots'
 
 const FX_OPTIONS: FxCode[] = ['KRW' as FxCode, 'USD', 'EUR', 'JPY', 'GBP', 'CNY']
 const DEFAULT_CURRENCY = 'KRW'
@@ -49,6 +57,8 @@ interface DraftState {
   memo:        string
   /** 외화 항목 적용 환율(원/1외화) — 입력하면 외화거래명세 원장에 항목 그대로 반영된다 */
   rateStr:     string
+  /** 외화 원장 계좌유형 — 환율을 입력하면 필수(2026-11-26) */
+  fxAcct:      ReportItemFxAccount | ''
 }
 
 type LinkedPopup = 'invest_return' | 'loan_drawdown' | 'invest_execute' | 'loan_repayment' | null
@@ -75,6 +85,8 @@ interface Props {
     linked_type?: string|null; linked_id?: string|null
     /** 외화 적용 환율 — 원장 항목 단위 반영(2026-11-25) */
     fx_rate?: number|null
+    /** 외화 원장 계좌유형(보통예금/MMDA) — 2026-11-26 */
+    fx_account_type?: ReportItemFxAccount|null
   }) => Promise<string | null>
   onUpdate:        (id: string, patch: Partial<ReportItem>) => Promise<void>
   onRemove:        (id: string) => Promise<void>
@@ -114,6 +126,33 @@ function fmtRate(r: number): string {
   return r.toLocaleString('ko-KR', { maximumFractionDigits: r < 100 ? 3 : 2 })
 }
 
+/** 출금 미리보기 한 줄 — 그 계좌 잔액·FIFO 장부환율·예상 환차손익 (모듈 레벨: 렌더 중 컴포넌트 정의 금지) */
+function OutflowPreviewLine({ lots, account, amount, currency, txnDate, rate }: {
+  lots: FxLot[] | null; account: ReportItemFxAccount; amount: number; currency: string; txnDate: string; rate: number | null
+}) {
+  if (!lots) return <p className="mt-1 text-[10px] text-gray-400">원장 잔액 확인 중…</p>
+  const label = REPORT_ITEM_FX_ACCOUNT_LABEL[account]
+  const pv = previewReportItemOutflow(lots, account, amount, txnDate, rate)
+  if (pv.shortfall > 0) {
+    return (
+      <p className="mt-1 text-[10px] text-red-600 dark:text-red-400">
+        ⚠ {currency} {label} 원장 잔액 부족 — 가능 {fmtAmt(pv.available, true) || '0'} / 출금 {fmtAmt(amount, true)} (거래일 {txnDate}).
+        {' '}은행에서 계좌를 옮겼다면 외화거래명세 › 계좌 대체를 먼저 기록하세요. 이대로 저장하면 원장에는 반영되지 않습니다.
+      </p>
+    )
+  }
+  return (
+    <p className="mt-1 text-[10px] text-indigo-700 dark:text-indigo-300">
+      💱 {label}에서 선입선출 출금 · 장부환율 ≈ <b>{pv.bookRate != null ? fmtRate(pv.bookRate) : '—'}원</b>
+      {pv.pnlKRW != null && (
+        <> · 예상 환차손익 <b className={pv.pnlKRW < 0 ? 'text-red-600 dark:text-red-400' : ''}>
+          {Math.round(pv.pnlKRW).toLocaleString('ko-KR')}원</b></>
+      )}
+      <span className="text-gray-400"> (가능 {fmtAmt(pv.available, true)} · 미리보기)</span>
+    </p>
+  )
+}
+
 export default function ItemsSection({
   direction, company, reportDate, reportId, items, threads, isReadOnly,
   authorCode, authorLabel, activeAccounts,
@@ -136,6 +175,7 @@ export default function ItemsSection({
   const [saving, setSaving]         = useState(false)
   const [linkedPopup, setLinkedPopup] = useState<LinkedPopup>(null)
   const amtRef = useRef<HTMLInputElement>(null)
+  const [fxAcctErr, setFxAcctErr] = useState(false)
 
   // ── 연동 팝업 저장 콜백 ──────────────────────────────────────
   async function handleLinkedSaved(
@@ -199,6 +239,7 @@ export default function ItemsSection({
       accountType: prefill.accountType,
       memo:        '',
       rateStr:     '',
+      fxAcct:      '',
     })
     onPrefillConsumed?.()
   }, [prefill]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -208,6 +249,9 @@ export default function ItemsSection({
     if (!draft) return
     const amount = parseAmt(draft.amtStr)
     if (amount <= 0) { amtRef.current?.focus(); return }
+    // 환율을 넣어 원장에 반영할 외화 항목은 외화계좌가 필수(2026-11-26 Q3)
+    const ledgerItem = isLedgerCategory({ currency: draft.currency, category: draft.category })
+    if (ledgerItem && parseRate(draft.rateStr) != null && !draft.fxAcct) { setFxAcctErr(true); return }
     setSaving(true)
     if (!reportId) {
       const newId = await onEnsureReport()
@@ -226,8 +270,10 @@ export default function ItemsSection({
       memo:         draft.memo || null,
       account_type: draft.accountType || null,
       fx_rate:      rate,
+      fx_account_type: ledgerItem && draft.fxAcct ? draft.fxAcct : null,
     })
     setDraft(null)
+    setFxAcctErr(false)
     setSaving(false)
   }
 
@@ -237,20 +283,54 @@ export default function ItemsSection({
   // 삭제 후 재등록하지 않고 여기서 바로 고칠 수 있게 한다.
   const [acctEditId, setAcctEditId] = useState<string | null>(null)
 
-  // ── 환율 인라인 입력 — 연동 팝업처럼 환율 없이 저장된 외화 항목도 여기서 원장에 반영한다 ──
+  // ── 환율·외화계좌 인라인 입력 — 연동 팝업처럼 환율 없이 저장된 외화 항목도 여기서 원장에 반영한다 ──
+  //   ⚠ 계좌 선택칸과 환율칸을 오가므로 blur 로 저장하지 않는다(Enter·✓ 로만 저장, Esc·✕ 취소).
   const [rateEditId, setRateEditId] = useState<string | null>(null)
   const [rateEdit, setRateEdit]     = useState('')
+  const [acctEdit, setAcctEdit]     = useState<ReportItemFxAccount | ''>('')
+  const [rateEditErr, setRateEditErr] = useState<string | null>(null)
   const tip = (t: string) => (isReadOnly ? t.replace(/ 클릭해.*$/, '') : t)
-  async function commitRate(item: ReportItem) {
-    setRateEditId(null)
-    const rate = parseRate(rateEdit)
-    if ((item.fx_rate ?? null) === rate) return
-    // 환율을 바꾸면 원화 환산도 그 환율로 — 지우면 현재 시세 환산으로 돌아간다
-    await onUpdate(item.id, {
-      fx_rate: rate,
-      amount_krw: rate != null ? Math.round(item.amount * rate) : toKRW(item.amount, item.currency),
-    })
+  function startRateEdit(item: ReportItem) {
+    setRateEditId(item.id)
+    setRateEdit(item.fx_rate != null ? String(item.fx_rate) : '')
+    setAcctEdit(isReportItemFxAccount(item.fx_account_type) ? item.fx_account_type : '')
+    setRateEditErr(null)
   }
+  async function commitRate(item: ReportItem) {
+    const rate = parseRate(rateEdit)
+    const acct = acctEdit || null
+    // 신규 반영은 계좌 필수. 계좌 없이 이미 반영된 기존 항목(Q3 — 기존 방식 유지)은 그대로 둘 수 있다.
+    const legacyKeep = !acct && item.fx_account_type == null && (ledgerReflected?.has(item.id) ?? false)
+    if (rate != null && !acct && !legacyKeep) { setRateEditErr('외화계좌(보통예금/MMDA)를 선택하세요'); return }
+    setRateEditId(null)
+    const patch: Partial<ReportItem> = {}
+    if ((item.fx_rate ?? null) !== rate) {
+      patch.fx_rate = rate
+      // 환율을 바꾸면 원화 환산도 그 환율로 — 지우면 현재 시세 환산으로 돌아간다
+      patch.amount_krw = rate != null ? Math.round(item.amount * rate) : toKRW(item.amount, item.currency)
+    }
+    if ((item.fx_account_type ?? null) !== acct) patch.fx_account_type = acct
+    if (Object.keys(patch).length === 0) return
+    await onUpdate(item.id, patch)
+  }
+
+  // ── 출금 미리보기용 원장 로트 — 외화 출금을 입력·수정 중일 때만 그 통화를 읽는다 ──
+  const rateEditItem = rateEditId ? items.find(i => i.id === rateEditId) ?? null : null
+  const previewCurrency = direction !== 'out' ? null
+    : draft && isFxCurrency(draft.currency) ? draft.currency
+    : rateEditItem && isFxCurrency(rateEditItem.currency) ? rateEditItem.currency
+    : null
+  const [previewLots, setPreviewLots] = useState<{ key: string; lots: FxLot[] } | null>(null)
+  useEffect(() => {
+    if (!previewCurrency) return
+    let alive = true
+    void fetchFxLots(company, previewCurrency).then(r => {
+      if (alive) setPreviewLots({ key: `${company}|${previewCurrency}`, lots: r.lots })
+    })
+    return () => { alive = false }
+    // ledgerReflected — 다른 항목이 반영·해제되면 잔액이 바뀌므로 다시 읽는다
+  }, [company, previewCurrency, ledgerReflected])
+  const lotsFor = (cur: string) => (previewLots?.key === `${company}|${cur}` ? previewLots.lots : null)
 
   async function commitAccount(item: ReportItem, value: string) {
     setAcctEditId(null)
@@ -423,43 +503,71 @@ export default function ItemsSection({
                   const st = reportItemLedgerState(item, ledgerReflected ?? new Set())
                   if (st === 'not_applicable') return null
                   if (rateEditId === item.id) {
+                    const legacy = item.fx_account_type == null && (ledgerReflected?.has(item.id) ?? false)
                     return (
-                      <input
-                        autoFocus
-                        type="text"
-                        inputMode="decimal"
-                        value={rateEdit}
-                        onChange={e => {
-                          const raw = e.target.value.replace(/,/g, '')
-                          if (raw !== '' && !/^\d*\.?\d{0,4}$/.test(raw)) return
-                          setRateEdit(raw)
-                        }}
-                        onBlur={() => void commitRate(item)}
-                        onKeyDown={e => {
-                          if (e.key === 'Enter') void commitRate(item)
-                          if (e.key === 'Escape') setRateEditId(null)
-                        }}
-                        placeholder={`환율 (현재 ${fmtRate(toKRW(1, item.currency)) || '—'})`}
-                        className="w-28 text-right text-[10px] px-1.5 py-0.5 rounded border border-indigo-300 dark:border-indigo-600 bg-white dark:bg-slate-700 tabular-nums focus:outline-none"
-                      />
+                      <span className="inline-flex flex-col">
+                        <span className="inline-flex items-center gap-1">
+                          <select
+                            value={acctEdit}
+                            onChange={e => { setAcctEdit(e.target.value as ReportItemFxAccount | ''); setRateEditErr(null) }}
+                            onKeyDown={e => { if (e.key === 'Escape') setRateEditId(null) }}
+                            className={`text-[10px] px-1 py-0.5 rounded border bg-white dark:bg-slate-700 focus:outline-none ${
+                              rateEditErr ? 'border-red-400' : 'border-indigo-300 dark:border-indigo-600'}`}
+                          >
+                            <option value="">{legacy ? '자동(기존 방식)' : '외화계좌'}</option>
+                            {REPORT_ITEM_FX_ACCOUNTS.map(a => <option key={a} value={a}>{REPORT_ITEM_FX_ACCOUNT_LABEL[a]}</option>)}
+                          </select>
+                          <input
+                            autoFocus
+                            type="text"
+                            inputMode="decimal"
+                            value={rateEdit}
+                            onChange={e => {
+                              const raw = e.target.value.replace(/,/g, '')
+                              if (raw !== '' && !/^\d*\.?\d{0,4}$/.test(raw)) return
+                              setRateEdit(raw)
+                            }}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') void commitRate(item)
+                              if (e.key === 'Escape') setRateEditId(null)
+                            }}
+                            placeholder={`${reportItemRateLabel(item.direction)} (현재 ${fmtRate(toKRW(1, item.currency)) || '—'})`}
+                            className="w-28 text-right text-[10px] px-1.5 py-0.5 rounded border border-indigo-300 dark:border-indigo-600 bg-white dark:bg-slate-700 tabular-nums focus:outline-none"
+                          />
+                          <button type="button" onClick={() => void commitRate(item)} title="저장 (Enter)"
+                            className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-600 text-white hover:bg-indigo-700">✓</button>
+                          <button type="button" onClick={() => setRateEditId(null)} title="취소 (Esc)"
+                            className="text-[10px] px-1 text-gray-400 hover:text-gray-600">✕</button>
+                        </span>
+                        {rateEditErr && <span className="mt-0.5 text-[10px] text-red-600 dark:text-red-400">{rateEditErr}</span>}
+                        {/* 이미 반영된 출금은 자기 소진분이 원장에 빠져 있어 미리보기가 틀린다 — 미반영일 때만 */}
+                        {item.direction === 'out' && acctEdit && !(ledgerReflected?.has(item.id) ?? false) && (
+                          <OutflowPreviewLine lots={lotsFor(item.currency)} account={acctEdit} amount={item.amount}
+                            currency={item.currency} txnDate={reportDate} rate={parseRate(rateEdit)} />
+                        )}
+                      </span>
                     )
                   }
+                  const acctName = isReportItemFxAccount(item.fx_account_type)
+                    ? REPORT_ITEM_FX_ACCOUNT_LABEL[item.fx_account_type] : null
                   const badge = st === 'reflected'
                     ? { cls: 'bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-300 dark:border-indigo-700',
-                        text: `💱 원장 반영 @${fmtRate(item.fx_rate ?? 0)}`,
-                        tip: '외화거래명세에 이 항목 그대로 반영됐습니다. 클릭해 환율을 고치면 원장도 함께 바뀝니다.' }
+                        text: `💱 원장 반영 · ${acctName ?? '자동'} @${fmtRate(item.fx_rate ?? 0)}`,
+                        tip: acctName
+                          ? `외화거래명세 ${acctName} 계좌에 이 항목 그대로 반영됐습니다. 클릭해 계좌·환율을 고치면 원장도 함께 바뀝니다.`
+                          : '외화거래명세에 기존 방식(입금 보통예금 · 출금 우선순위 선입선출)으로 반영됐습니다. 클릭해 계좌를 지정하면 그 계좌로 다시 반영합니다.' }
                     : st === 'missing_rate'
                     ? { cls: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-700',
-                        text: '💱 환율 입력 시 원장 반영',
-                        tip: '환율을 입력하면 외화거래명세에 이 항목 그대로 반영됩니다.' }
+                        text: `💱 계좌·${reportItemRateLabel(item.direction)} 입력 시 원장 반영`,
+                        tip: '외화계좌(보통예금/MMDA)와 환율을 입력하면 외화거래명세에 이 항목 그대로 반영됩니다.' }
                     : { cls: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-300 dark:border-red-700',
-                        text: `💱 원장 미반영 @${fmtRate(item.fx_rate ?? 0)}`,
-                        tip: '환율은 있지만 원장 반영에 실패했습니다(잔액 부족·권한·설정 미적용). 클릭해 다시 저장하면 재시도합니다.' }
+                        text: `💱 원장 미반영${acctName ? ` · ${acctName}` : ''} @${fmtRate(item.fx_rate ?? 0)}`,
+                        tip: '환율은 있지만 원장 반영에 실패했습니다(선택 계좌 잔액 부족 — 계좌 대체 미기록, 권한, 설정 미적용). 클릭해 다시 저장하면 재시도합니다.' }
                   return (
                     <button
                       type="button"
                       disabled={isReadOnly}
-                      onClick={() => { setRateEditId(item.id); setRateEdit(item.fx_rate != null ? String(item.fx_rate) : '') }}
+                      onClick={() => startRateEdit(item)}
                       title={tip(badge.tip)}
                       className={`text-[10px] px-1.5 py-0.5 rounded border whitespace-nowrap disabled:cursor-default ${badge.cls}`}
                     >
@@ -609,7 +717,21 @@ export default function ItemsSection({
                       {FX_OPTIONS.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
 
-                    {/* 환율 — 외화이면서 원장 반영 대상일 때만. 입력하면 외화거래명세에 항목 그대로 반영된다 */}
+                    {/* 외화계좌 — 외화이면서 원장 반영 대상일 때만. 환율을 입력하면 필수 */}
+                    {isLedgerCategory({ currency: draft.currency, category: draft.category }) && (
+                      <select
+                        value={draft.fxAcct}
+                        onChange={e => { setFxAcctErr(false); setDraft(d => d ? { ...d, fxAcct: e.target.value as ReportItemFxAccount | '' } : d) }}
+                        title="외화 원장 계좌 — 입금은 이 계좌로, 출금은 이 계좌의 잔액에서 선입선출로 빠집니다"
+                        className={`text-xs px-2 py-1.5 rounded-lg border bg-white dark:bg-slate-700 text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-400 ${
+                          fxAcctErr ? 'border-red-400 ring-1 ring-red-300' : 'border-indigo-200 dark:border-indigo-700'}`}
+                      >
+                        <option value="">외화계좌</option>
+                        {REPORT_ITEM_FX_ACCOUNTS.map(a => <option key={a} value={a}>{REPORT_ITEM_FX_ACCOUNT_LABEL[a]}</option>)}
+                      </select>
+                    )}
+
+                    {/* 환율 — 입금 = 장부환율, 출금 = 적용환율. 입력하면 외화거래명세에 항목 그대로 반영된다 */}
                     {isLedgerCategory({ currency: draft.currency, category: draft.category }) && (
                       <input
                         type="text"
@@ -624,8 +746,10 @@ export default function ItemsSection({
                           if (e.key === 'Enter') void handleAddSave()
                           if (e.key === 'Escape') setDraft(null)
                         }}
-                        placeholder={`환율 (현재 ${fmtRate(toKRW(1, draft.currency)) || '—'})`}
-                        title="적용 환율(원/1외화). 입력하면 외화거래명세에 이 항목 그대로 반영됩니다. 비우면 원장에는 반영되지 않습니다."
+                        placeholder={`${reportItemRateLabel(direction)} (현재 ${fmtRate(toKRW(1, draft.currency)) || '—'})`}
+                        title={direction === 'in'
+                          ? '장부환율(원/1외화) — 이 입금의 취득환율로 원장에 기록됩니다. 비우면 원장에는 반영되지 않습니다.'
+                          : '적용환율(원/1외화, 결제일 환율) — 장부환율은 선택 계좌의 선입선출 로트가 정하고, 차이가 환차손익이 됩니다. 비우면 원장에는 반영되지 않습니다.'}
                         className="w-36 text-xs text-right px-2 py-1.5 rounded-lg border border-indigo-200 dark:border-indigo-700 bg-white dark:bg-slate-700 text-gray-700 dark:text-gray-200 tabular-nums focus:outline-none focus:ring-1 focus:ring-indigo-400"
                       />
                     )}
@@ -664,8 +788,16 @@ export default function ItemsSection({
               <p className="mt-1.5 text-[10px] text-gray-400 dark:text-gray-600">
                 {isLinked ? '🔗 연동 팝업에서 데이터를 선택하면 자동으로 저장됩니다 · 계좌구분은 통화에 따라 자동 지정됩니다' : 'Enter 저장 · Esc 취소 · 계좌구분은 선택사항'}
                 {!isLinked && isLedgerCategory({ currency: draft.currency, category: draft.category }) &&
-                  ' · 💱 환율을 입력하면 외화거래명세에 자동 반영됩니다(같은 거래를 다시 입력할 필요 없음)'}
+                  ` · 💱 외화계좌와 ${reportItemRateLabel(direction)}을 입력하면 외화거래명세에 자동 반영됩니다(같은 거래를 다시 입력할 필요 없음)`}
               </p>
+              {fxAcctErr && (
+                <p className="mt-0.5 text-[10px] text-red-600 dark:text-red-400">외화계좌(보통예금/MMDA)를 선택하세요 — 원장에 어느 계좌로 반영할지 정해야 합니다.</p>
+              )}
+              {!isLinked && direction === 'out' && draft.fxAcct && parseAmt(draft.amtStr) > 0 &&
+                isLedgerCategory({ currency: draft.currency, category: draft.category }) && (
+                <OutflowPreviewLine lots={lotsFor(draft.currency)} account={draft.fxAcct} amount={parseAmt(draft.amtStr)}
+                  currency={draft.currency} txnDate={reportDate} rate={parseRate(draft.rateStr)} />
+              )}
               {!isLinked && isFxCurrency(draft.currency) && DUPLICATE_RISK_HINT[draft.category] && (
                 <p className="mt-0.5 text-[10px] text-amber-600 dark:text-amber-400">⚠ {DUPLICATE_RISK_HINT[draft.category]}</p>
               )}
@@ -681,7 +813,7 @@ export default function ItemsSection({
       {!isReadOnly && !draft && (
         <div className="p-3 border-t border-gray-50 dark:border-slate-700/50">
           <button
-            onClick={() => setDraft({ category: defaultCat, amtStr: '', currency: DEFAULT_CURRENCY, accountType: '', memo: '', rateStr: '' })}
+            onClick={() => { setFxAcctErr(false); setDraft({ category: defaultCat, amtStr: '', currency: DEFAULT_CURRENCY, accountType: '', memo: '', rateStr: '', fxAcct: '' }) }}
             className={`w-full py-2 border border-dashed rounded-lg text-xs font-medium transition-colors ${addBtnCls}`}
           >
             + {direction === 'in' ? '입금' : '출금'} 항목 추가
