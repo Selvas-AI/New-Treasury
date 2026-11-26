@@ -55,10 +55,17 @@ export interface ApprovalLogLite {
   created_at: string
 }
 
+/**
+ * 결재를 초기화하는 기록 — 반려, 그리고 승인 완료 후 **승인 취소**(2026-11-26).
+ * ⚠ 메일 RPC(docs/db/daily_report_approval_withdraw.sql 의 approval_notifications_pending)와 같은 목록이어야 한다.
+ */
+export const RESET_ACTIONS: ReadonlySet<string> = new Set(['reject', 'withdraw'])
+
 export function validApprovedSteps(approvals: readonly ApprovalLogLite[]): Set<number> {
   let cutoff = ''
   for (const a of approvals) {
-    if (a.action === 'reject' && a.created_at > cutoff) cutoff = a.created_at
+    // 승인 취소(withdraw, 2026-11-26)도 반려와 같다 — 취소 후 재상신하면 전원 다시 승인
+    if (RESET_ACTIONS.has(a.action) && a.created_at > cutoff) cutoff = a.created_at
   }
   const out = new Set<number>()
   for (const a of approvals) {
@@ -234,4 +241,27 @@ export function describeFlow(config: readonly ApprovalStep[]): string {
   const parallel = groups.filter(g => g.steps.length > 1).length
   const shape = groups.map(g => g.steps.length === 1 ? '1' : `${g.steps.length}(병렬)`).join(' → ')
   return parallel === 0 ? `순차 결재 · ${shape}` : `병렬 포함 · ${shape}`
+}
+
+/**
+ * 승인 취소 가능 여부 (2026-11-26 · docs/db/daily_report_approval_withdraw.sql 과 같은 규칙)
+ *   · 승인 완료 상태에서만
+ *   · master, 또는 **최종 결재 차수**의 결재자이면서 승인 권한(can_approve) 보유
+ * ⚠ 서버 RPC 가 같은 조건을 다시 확인한다 — 이 함수는 버튼 노출용이다.
+ */
+export function evaluateWithdrawGate(params: {
+  config: readonly ApprovalStep[]
+  status: string
+  userCode?: string | null
+  isMaster: boolean
+  canApproveFlag: boolean
+}): { canWithdraw: boolean; step: number | null } {
+  const { config, status, userCode, isMaster, canApproveFlag } = params
+  if (status !== 'approved') return { canWithdraw: false, step: null }
+  const groups = groupByStage(config)
+  const finalSteps = groups.length ? groups[groups.length - 1].steps : []
+  const mine = finalSteps.find(s => sameCode(s.approver_code, userCode)) ?? null
+  if (isMaster) return { canWithdraw: true, step: mine?.step ?? null }
+  if (!mine || !canApproveFlag) return { canWithdraw: false, step: null }
+  return { canWithdraw: true, step: mine.step }
 }

@@ -43,7 +43,7 @@ import { isLedgerCategory, REPORT_ITEM_FX_ACCOUNT_LABEL } from '../lib/fxReportI
 import {
   groupByStage, evaluateApproveGate, autoApproveStepsOnSubmit,
   isFinalApproval, pendingInStage, describeFlow,
-  validApprovedSteps, validApprovalOf,
+  validApprovedSteps, validApprovalOf, evaluateWithdrawGate, RESET_ACTIONS,
 } from '../lib/approvalFlow'
 import type { Company, DailyRecord, FxCode } from '../types'
 
@@ -726,6 +726,9 @@ export default function DailyReportPage() {
   useEffect(() => {
     if (summary.loading) return
     if (!canEdit()) return  // 조회-쓰기 분리: viewer 는 자동기재(DB write) 미수행
+    // ⚠ 승인 완료 일보에는 자동기재하지 않는다 — 과거엔 열기만 해도 승인된 일보의 자동항목이
+    //   바뀔 수 있었다. 서버도 막는다(daily_report_approval_withdraw.sql, 2026-11-26).
+    if (dr.report?.status === 'approved') return
     const groups = equityGroupsLatest.current
     if (groups.length === 0) return
 
@@ -830,7 +833,7 @@ export default function DailyReportPage() {
         autoRunningRef.current = false
       }
     })()
-  }, [dr.report?.id, resolvedCompany, selectedDate, summary.loading]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [dr.report?.id, dr.report?.status, resolvedCompany, selectedDate, summary.loading]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── 국채 평가손익 자동 기재 ──────────────────────────────────
   // 조건: 기초(prev) / 마감(curr) bondQty 동일 + 평가금액 변동
@@ -841,6 +844,7 @@ export default function DailyReportPage() {
   useEffect(() => {
     if (summary.loading) return
     if (!canEdit()) return  // 조회-쓰기 분리: viewer 는 자동기재(DB write) 미수행
+    if (dr.report?.status === 'approved') return   // 승인 완료 일보는 자동기재 금지(위와 같은 이유)
 
     const bondCandidates = investGroupsLatest.current.filter(g =>
       g.isBondGroup === true &&
@@ -931,10 +935,15 @@ export default function DailyReportPage() {
         autoRunningBondRef.current = false
       }
     })()
-  }, [dr.report?.id, resolvedCompany, selectedDate, summary.loading]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [dr.report?.id, dr.report?.status, resolvedCompany, selectedDate, summary.loading]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const status = dr.report?.status ?? 'draft'
-  const badge  = STATUS_LABEL[status] ?? STATUS_LABEL.draft
+  // 마지막 반려 또는 승인 취소 — 재상신 후에도 "무엇 때문에 되돌아갔는지" 를 보여줘야 한다
+  const lastReject = [...dr.approvals].reverse().find(a => RESET_ACTIONS.has(a.action)) ?? null
+  const lastIsWithdraw = lastReject?.action === 'withdraw'
+  const badge  = status === 'rejected' && lastIsWithdraw
+    ? { label: '● 승인 취소', cls: 'text-orange-700 bg-orange-50 dark:bg-orange-900/30' }
+    : (STATUS_LABEL[status] ?? STATUS_LABEL.draft)
   const isReadOnly = status === 'approved'
   const canSubmit  = status === 'draft' || status === 'rejected'
   // ⭐ 결재 진행 판정은 전부 lib/approvalFlow 를 거친다(SSOT).
@@ -946,8 +955,6 @@ export default function DailyReportPage() {
   //   (docs/db/approval_resubmit_reset.sql) — 한쪽만 고치면 재상신 후
   //   이미 승인했던 사람에게 결재 요청이 가지 않는다.
   const approvedSteps = validApprovedSteps(dr.approvals)
-  // 마지막 반려 — 재상신 후에도 "무엇 때문에 반려됐는지" 를 보여줘야 한다
-  const lastReject = [...dr.approvals].reverse().find(a => a.action === 'reject') ?? null
   const resetByReject = lastReject != null && dr.approvals.some(
     a => a.action === 'approve' && a.created_at < lastReject.created_at,
   )
@@ -964,6 +971,14 @@ export default function DailyReportPage() {
   const curStage             = gate.stage
   const canApprove           = gate.canApprove
   const approveBlockedReason = gate.reason
+  // 승인 취소 — 최종 차수 결재자·관리자(서버 RPC 가 같은 조건을 다시 확인한다)
+  const withdrawGate = evaluateWithdrawGate({
+    config: ac.config,
+    status,
+    userCode: user?.code,
+    isMaster: user?.role === 'master',
+    canApproveFlag: user?.can_approve !== false,
+  })
 
   // 상신과 동시에 자동 승인할 슬롯 — 상신자 본인이 결재자인 슬롯.
   // 같은 사람이 상신 직후 자기 단계를 한 번 더 눌러야 하는 무의미한 절차를 없앤다.
@@ -982,6 +997,7 @@ export default function DailyReportPage() {
   // ── 모달 상태 ────────────────────────────────────────────────
   const [approveModal, setApproveModal] = useState<{ comment: string } | null>(null)
   const [rejectModal,  setRejectModal]  = useState<{ comment: string } | null>(null)
+  const [withdrawModal, setWithdrawModal] = useState<{ comment: string; error: string | null } | null>(null)
   const [configModal,  setConfigModal]  = useState(false)
   const [cfgForm, setCfgForm] = useState({ step: '', stage: '', role_label: '', approver_code: '' })
   // step 은 결재자 슬롯 고유번호다 — 기존 번호를 재입력하면 그 결재자가 교체된다.
@@ -1129,6 +1145,15 @@ export default function DailyReportPage() {
     setActionBusy(false)
   }
 
+  async function handleWithdraw() {
+    if (!withdrawModal?.comment.trim()) return
+    setActionBusy(true)
+    const err = await dr.withdrawApproval(resolvedCompany, selectedDate, withdrawModal.comment.trim())
+    setActionBusy(false)
+    if (err) { setWithdrawModal(m => m ? { ...m, error: err } : m); return }
+    setWithdrawModal(null)
+  }
+
   async function handleCfgSave() {
     // 단계 미입력 = 비어 있는 슬롯 자동 배정. 기존 결재자를 건드리지 않는 기본값이다.
     // ⚠ 기존 단계 번호를 넣으면 upsert 가 그 행을 교체한다 — 같은 차수에 '추가'가 아니다.
@@ -1268,6 +1293,16 @@ export default function DailyReportPage() {
               className="text-xs px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
             >
               반려
+            </button>
+          )}
+          {withdrawGate.canWithdraw && (
+            <button
+              onClick={() => setWithdrawModal({ comment: '', error: null })}
+              disabled={actionBusy}
+              title="승인을 취소해 작성자가 수정 후 재상신할 수 있게 합니다 — 재상신하면 결재자 전원이 다시 승인합니다"
+              className="text-xs px-3 py-1.5 border border-orange-300 dark:border-orange-700 text-orange-700 dark:text-orange-300 hover:bg-orange-50 dark:hover:bg-orange-900/20 rounded-lg font-medium transition-colors disabled:opacity-50"
+            >
+              ↩ 승인 취소
             </button>
           )}
           <button
@@ -1625,13 +1660,17 @@ export default function DailyReportPage() {
 
                       {/* 반려 사유 */}
                       {lastReject?.comment && (
-                        <div className="mt-2 text-[11px] text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded px-3 py-1.5">
-                          ✗ 반려 사유: {lastReject.comment}
+                        <div className={`mt-2 text-[11px] rounded px-3 py-1.5 ${lastIsWithdraw
+                          ? 'text-orange-700 dark:text-orange-300 bg-orange-50 dark:bg-orange-900/20'
+                          : 'text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-900/20'}`}>
+                          {lastIsWithdraw
+                            ? `↩ 승인 취소 (${lastReject.actor_label ?? lastReject.actor_code}) 사유: ${lastReject.comment}`
+                            : `✗ 반려 사유: ${lastReject.comment}`}
                         </div>
                       )}
                       {resetByReject && (
                         <div className="mt-2 text-[11px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 rounded px-3 py-1.5 leading-relaxed">
-                          ↻ 반려로 결재가 <strong>초기화</strong>되었습니다 — 내용이 수정됐을 수 있어
+                          ↻ {lastIsWithdraw ? '승인 취소' : '반려'}로 결재가 <strong>초기화</strong>되었습니다 — 내용이 수정됐을 수 있어
                           이전에 승인하신 분들도 <strong>다시 승인</strong>해야 합니다. 승인 이력은 그대로 보존됩니다.
                         </div>
                       )}
@@ -1950,6 +1989,45 @@ export default function DailyReportPage() {
                 className="flex-1 text-sm py-2 bg-red-500 hover:bg-red-600 text-white rounded-xl font-medium disabled:opacity-50"
               >
                 {actionBusy ? '처리 중…' : '반려'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── 승인 취소 모달 (2026-11-26) ───────────────────────── */}
+      {withdrawModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setWithdrawModal(null)}>
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6" onClick={e => e.stopPropagation()}>
+            <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100 mb-1">승인 취소</h3>
+            <p className="text-xs text-gray-500 dark:text-slate-300 mb-2">
+              {resolvedCompany} · {selectedDate} 자금일보(보고대상일 {reportDate})의 승인을 취소합니다.
+            </p>
+            <ul className="mb-3 list-disc space-y-0.5 pl-4 text-[11px] text-gray-500 dark:text-slate-400">
+              <li>상태가 반려와 같아져 작성자가 수정할 수 있고, 공식 확정 표시가 해제됩니다.</li>
+              <li>재상신하면 <strong>결재자 전원이 다시 승인</strong>합니다(결재 요청 메일 재발송).</li>
+              <li>이전 승인·취소 기록은 결재 이력에 그대로 남습니다.</li>
+            </ul>
+            <label className="block text-xs text-gray-500 dark:text-slate-300 mb-1">취소 사유 <span className="text-red-500">*</span></label>
+            <textarea
+              value={withdrawModal.comment}
+              onChange={e => setWithdrawModal({ comment: e.target.value, error: null })}
+              placeholder="예: 외화 출금 계좌구분 정정 필요"
+              rows={3}
+              autoFocus
+              className="w-full text-sm border border-gray-200 dark:border-slate-600 rounded-xl px-3 py-2 bg-gray-50 dark:bg-slate-700 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none"
+            />
+            {withdrawModal.error && (
+              <p className="mt-2 text-xs text-red-600 dark:text-red-400">{withdrawModal.error}</p>
+            )}
+            <div className="flex gap-2 mt-4">
+              <button onClick={() => setWithdrawModal(null)} className="flex-1 text-sm py-2 border border-gray-200 dark:border-slate-600 rounded-xl text-gray-500 hover:bg-gray-50 dark:hover:bg-slate-700">닫기</button>
+              <button
+                onClick={() => void handleWithdraw()}
+                disabled={!withdrawModal.comment.trim() || actionBusy}
+                className="flex-1 text-sm py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-xl font-medium disabled:opacity-50"
+              >
+                {actionBusy ? '처리 중…' : '↩ 승인 취소'}
               </button>
             </div>
           </div>

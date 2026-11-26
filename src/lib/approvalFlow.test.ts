@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   stageOf, groupByStage, currentStage, pendingInStage, isFinalApproval,
-  evaluateApproveGate, autoApproveStepsOnSubmit, describeFlow,
+  evaluateApproveGate, autoApproveStepsOnSubmit, describeFlow, evaluateWithdrawGate,
   type ApprovalStep,
 } from './approvalFlow'
 
@@ -211,5 +211,43 @@ describe('validApprovalOf — 화면에 찍히는 도장', () => {
   it('재상신 후 승인이 여러 건이면 가장 최근 것', () => {
     const logs = [log(1, 'approve', '09:10'), log(2, 'reject', '09:20'), log(1, 'approve', '10:10')]
     expect(validApprovalOf(logs, 1)?.created_at).toContain('10:10')
+  })
+})
+
+// ── 승인 취소 (2026-11-26) ──────────────────────────────────────────────
+
+describe('validApprovedSteps — 승인 취소도 반려처럼 초기화', () => {
+  it('승인 완료 → 승인 취소 → 재상신: 이전 승인은 전부 무효', () => {
+    const logs = [
+      log(0, 'submit',   '09:00'),
+      log(1, 'approve',  '09:10'),
+      log(2, 'approve',  '09:20'),
+      log(2, 'withdraw', '10:00'),
+      log(0, 'submit',   '10:30'),
+      log(1, 'approve',  '10:40'),
+    ]
+    expect([...validApprovedSteps(logs)]).toEqual([1])
+  })
+})
+
+describe('evaluateWithdrawGate — 최종 차수 결재자·관리자만', () => {
+  const FLOW = [cfg(1, 1, 'A'), cfg(2, 1, 'B'), cfg(3, 2, 'C'), cfg(4, 2, 'D')]
+  const base = { config: FLOW, status: 'approved', isMaster: false, canApproveFlag: true }
+
+  it('최종 차수(2차)의 결재자는 누구나 취소 가능 — 병렬이면 둘 다', () => {
+    expect(evaluateWithdrawGate({ ...base, userCode: 'C' })).toEqual({ canWithdraw: true, step: 3 })
+    expect(evaluateWithdrawGate({ ...base, userCode: 'd ' }).canWithdraw).toBe(true)   // 공백·대소문자 무시
+  })
+  it('중간 차수 결재자는 불가', () => {
+    expect(evaluateWithdrawGate({ ...base, userCode: 'A' }).canWithdraw).toBe(false)
+  })
+  it('결재 권한(can_approve)이 없으면 불가', () => {
+    expect(evaluateWithdrawGate({ ...base, userCode: 'C', canApproveFlag: false }).canWithdraw).toBe(false)
+  })
+  it('관리자는 결재선 밖이어도 가능', () => {
+    expect(evaluateWithdrawGate({ ...base, userCode: 'Z', isMaster: true })).toEqual({ canWithdraw: true, step: null })
+  })
+  it('승인 완료 상태가 아니면 아무도 불가', () => {
+    expect(evaluateWithdrawGate({ ...base, status: 'submitted', userCode: 'C', isMaster: true }).canWithdraw).toBe(false)
   })
 })

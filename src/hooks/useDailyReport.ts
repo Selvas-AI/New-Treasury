@@ -5,7 +5,7 @@
  * 관련 훅: useDailyReportItems (라인 아이템), useApprovalConfig (결재선 설정)
  */
 import { useState, useCallback, useEffect } from 'react'
-import { supabase, restInsert, restUpdate, restDelete, restUpsert, withTimeout } from '../lib/supabase'
+import { supabase, restInsert, restUpdate, restDelete, restUpsert, restRpc, withTimeout } from '../lib/supabase'
 import { generateUUID } from '../lib/format'
 import type { Company } from '../types'
 
@@ -257,6 +257,27 @@ export function useDailyReport() {
     }
   }, [report])
 
+  // ── 승인 취소 (2026-11-26) ────────────────────────────────
+  // 서버 RPC 가 권한(최종 결재자·master)·상태·사유를 확인하고, 상태 되돌림·로그·confirmed 해제를
+  // 한 트랜잭션으로 처리한다(docs/db/daily_report_approval_withdraw.sql).
+  // ⚠ 승인된 일보는 서버 트리거가 직접 수정을 막으므로 클라이언트 restUpdate 로는 되돌릴 수 없다.
+  const withdrawApproval = useCallback(async (
+    company: Company, date: string, comment: string,
+  ): Promise<string | null> => {
+    if (!report?.id) return '자금일보가 없습니다'
+    setError(null)
+    const { error: err } = await restRpc('withdraw_daily_report_approval', {
+      p_report_id: report.id, p_comment: comment,
+    })
+    if (err) {
+      return /withdraw_daily_report_approval|Could not find the function|PGRST202/i.test(err.message)
+        ? '승인 취소 기능이 아직 켜지지 않았습니다(docs/db/daily_report_approval_withdraw.sql 실행 필요).'
+        : err.message
+    }
+    await fetchReport(company, date)
+    return null
+  }, [report, fetchReport])
+
   return {
     report,
     approvals,
@@ -267,6 +288,7 @@ export function useDailyReport() {
     submitReport,
     approveReport,
     rejectReport,
+    withdrawApproval,
   }
 }
 

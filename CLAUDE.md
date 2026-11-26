@@ -728,7 +728,7 @@ VITE_GAS_API_URL=https://script.google.com/macros/s/AKfycbwZ.../exec
 #### 일별 자금일보 목록 (`DailyReportListPage.tsx`)
 - 라우트: `/daily-report-list/:company?`
 - 영업일 역산 목록 (최근 30/60/90영업일), 날짜×법인 현황 표시
-- 상태 배지: 미작성 / 작성 중 / 결재 중 / 승인 완료 / 반려
+- 상태 배지: 미작성 / 작성 중 / 결재 중 / 승인 완료 / 반려 / 승인 취소(2026-11-26 — 최종 차수 결재자·master 가 승인 완료 일보를 되돌림. 결재 초기화 규칙 `approvalFlow.RESET_ACTIONS` = reject·withdraw, 메일 RPC 와 동일해야 함. 승인 완료 일보는 서버 트리거가 수정 차단 — 화면 isReadOnly 만 믿지 말 것)
 - 클릭 시 해당 날짜 자금일보 바로 열기 / 미작성일 → 작성 진입
 
 #### 조직도 관리 (`OrgChartPage.tsx`)
@@ -1496,6 +1496,7 @@ baf8ef9 fix: 투자 집행 연동 저장 실패 수정 + 자산 구분(운용/�
   정기예금 만기·예치를 가짜 미반영으로 띄웠을 때 '반영'을 눌러 생긴 이중 계상·이중 소진 **의심** 목록. 자동 수정 없음.
 - **`docs/db/fx_report_item_ledger.sql`** ⭐⭐ — 자금일보 외화 항목 → 외화거래명세 **항목 단위 자동 반영** (2026-11-25). 실행 완료(2026-11-25).
 - **`docs/db/fx_report_item_account.sql`** ⭐ — 자금일보 외화 항목 **계좌구분(보통예금/MMDA)** → 입금은 그 계좌 로트, 출금은 그 계좌에서만 FIFO (2026-11-26). 기존 항목(계좌 null)은 기존 방식 유지. **실행 필요**.
+- **`docs/db/daily_report_approval_withdraw.sql`** ⭐ — 자금일보 **승인 취소**(최종 차수 결재자·master, 사유 필수 → 상태 rejected·confirmed 해제·로그 withdraw, 재상신 시 전원 재승인) + 승인된 일보 **서버 수정 차단** 트리거(daily_report_items 전체, daily_reports 수정·삭제 — 승인 취소 RPC만 예외) + 결재 메일 '반려·취소 이후 승인만 유효' (2026-11-26). **실행 필요**.
   `daily_report_items.fx_rate` + `fx_lots.source_type` 에 `report_item` + RPC `sync_report_item_ledger`(항목 1건 동기화).
   미실행 상태에서도 자금일보 저장은 정상(환율만 빠지고 안내) — 원장 반영만 꺼져 있다.
 - **`docs/db/fx_jpy_unit_normalize.sql`** ⭐ — FX 전수조사 묶음 C (2026-11-25). **실행 필요**.
